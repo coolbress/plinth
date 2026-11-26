@@ -194,14 +194,14 @@ jobs:
         run: uv sync --locked
       # Exit 1 is findings, 2 is ruff's own error (#1099): the code goes to a
       # file for the Verdict step. On findings a second run writes them as
-      # file and line to another file, not to the log, where they would be
-      # annotations past the nine the Verdict step keeps.
+      # JSON to another file, which keeps a path whole (GitHub's format writes
+      # file= unescaped, so a comma in a file's name cut it).
       - name: ruff check
         id: check
         run: |
           rc=0; uv run ruff check . || rc=$?
           echo "$rc" > "$RUNNER_TEMP/ruff-check.rc"
-          if [ "$rc" = 1 ]; then uv run ruff check --output-format=github --exit-zero . > "$RUNNER_TEMP/ruff-check.github" || true; fi
+          if [ "$rc" = 1 ]; then uv run ruff check --output-format=json --exit-zero . > "$RUNNER_TEMP/ruff-check.json" || true; fi
           exit "$rc"
       # Its output is kept (`tee`) for the files it names; the exit code is ruff's.
       - name: ruff format --check
@@ -278,14 +278,14 @@ jobs:
             [ "$1" = failure ] || { v "$1" "$3"; return 0; }
             rm -f "$RUNNER_TEMP/found.what"
             python3 - "$6" "$RUNNER_TEMP/$7" "$RUNNER_TEMP/found.what" "$RUNNER_TEMP/found.shown" "$8" <<'PY' || true
-          import os, re, sys
+          import json, os, re, sys
           kind, log, whatf, shownf, where = sys.argv[1:6]
           try:
               lines = [l.rstrip("\r\n") for l in open(log, encoding="utf-8", errors="replace")]
           except OSError:
               lines = []
           cwd = os.getcwd(); base = os.path.realpath(os.environ.get("GITHUB_WORKSPACE") or cwd)
-          def rel(p):   # from the repository's root, as an annotation wants it; ruff's github format gives absolute paths
+          def rel(p):   # from the repository's root, as an annotation wants it; ruff's JSON gives absolute paths
               a = os.path.realpath(os.path.join(cwd, p))
               for b in (base, os.path.realpath(cwd)):   # never an absolute path: outside the root, from here
                   r = os.path.relpath(a, b)
@@ -296,16 +296,18 @@ jobs:
               s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               return s.replace(":", "%3A").replace(",", "%2C") if prop else s
           rows, after = [], False   # (file, line, col, message, code)
-          for l in lines:
-              if kind == "ruff" and (m := re.match(r"^::(?:error|warning) (.*?)::(.*)$", l)):
-                  f = re.search(r"(?:^|,)file=([^,]*)", m.group(1))
-                  if not f:
+          if kind == "ruff":   # ruff's JSON: the path whole, a comma in it included
+              try:
+                  found = json.loads("\n".join(lines) or "[]")
+              except ValueError:
+                  found = []
+              for x in found if isinstance(found, list) else []:
+                  if not isinstance(x, dict) or not x.get("filename"):
                       continue
-                  n, c = re.search(r"(?:^|,)line=(\d+)", m.group(1)), re.search(r"(?:^|,)col=(\d+)", m.group(1))
-                  msg = m.group(2).split("%0A")[0].replace("%0D", "").replace("%3A", ":").replace("%2C", ",").replace("%25", "%")
-                  msg = re.sub(r"^.*?:\d+:\d+: ", "", msg)
-                  rows.append((rel(f.group(1)), n and int(n.group(1)), c and int(c.group(1)), msg, msg.split(" ")[0].rstrip(":")))
-              elif kind == "format":
+                  at, code = x.get("location") or {}, x.get("code") or "invalid-syntax"   # a syntax error has no code before ruff 0.5
+                  rows.append((rel(x["filename"]), at.get("row"), at.get("column"), f"{code} {x.get('message') or ''}".strip(), code))
+          for l in lines:
+              if kind == "format":
                   m = (re.match(r"^Would reformat: (.+)$", l) or re.match(r"^(.+?):(\d+):\d+: unformatted: ", l)
                        or (after and re.match(r"^\s*--> (.+?):(\d+):\d+$", l)))
                   after = l.startswith("unformatted: ")   # ruff 0.9 on: its next line names the file
@@ -349,7 +351,7 @@ jobs:
           }
           v "$SYNC" "uv sync --locked"
           [ "$SYNC" != failure ] || nx "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
-          tool "$CHECK" ruff-check.rc "ruff check" "uv run ruff check ." "run uv run ruff check . here, fix what it names, and push" ruff ruff-check.github "the ruff check step's log"
+          tool "$CHECK" ruff-check.rc "ruff check" "uv run ruff check ." "run uv run ruff check . here, fix what it names, and push" ruff ruff-check.json "the ruff check step's log"
           tool "$FORMAT" ruff-format.rc "ruff format --check" "uv run ruff format --check ." "run uv run ruff format here, commit what it changes, and push" format ruff-format.log "the ruff format --check step's log"
           v "$ZIZMOR" "zizmor's audits at medium and above, offline and online, except known-vulnerable-actions"
           [ "$ZIZMOR" != failure ] || nx "run uvx zizmor@1.29.0 --min-severity medium .github/workflows/ here, fix what it names, and push"
@@ -418,14 +420,14 @@ jobs:
             [ "$1" = failure ] || { v "$1" "$3"; return 0; }
             rm -f "$RUNNER_TEMP/found.what"
             python3 - "$6" "$RUNNER_TEMP/$7" "$RUNNER_TEMP/found.what" "$RUNNER_TEMP/found.shown" "$8" <<'PY' || true
-          import os, re, sys
+          import json, os, re, sys
           kind, log, whatf, shownf, where = sys.argv[1:6]
           try:
               lines = [l.rstrip("\r\n") for l in open(log, encoding="utf-8", errors="replace")]
           except OSError:
               lines = []
           cwd = os.getcwd(); base = os.path.realpath(os.environ.get("GITHUB_WORKSPACE") or cwd)
-          def rel(p):   # from the repository's root, as an annotation wants it; ruff's github format gives absolute paths
+          def rel(p):   # from the repository's root, as an annotation wants it; ruff's JSON gives absolute paths
               a = os.path.realpath(os.path.join(cwd, p))
               for b in (base, os.path.realpath(cwd)):   # never an absolute path: outside the root, from here
                   r = os.path.relpath(a, b)
@@ -436,16 +438,18 @@ jobs:
               s = s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               return s.replace(":", "%3A").replace(",", "%2C") if prop else s
           rows, after = [], False   # (file, line, col, message, code)
-          for l in lines:
-              if kind == "ruff" and (m := re.match(r"^::(?:error|warning) (.*?)::(.*)$", l)):
-                  f = re.search(r"(?:^|,)file=([^,]*)", m.group(1))
-                  if not f:
+          if kind == "ruff":   # ruff's JSON: the path whole, a comma in it included
+              try:
+                  found = json.loads("\n".join(lines) or "[]")
+              except ValueError:
+                  found = []
+              for x in found if isinstance(found, list) else []:
+                  if not isinstance(x, dict) or not x.get("filename"):
                       continue
-                  n, c = re.search(r"(?:^|,)line=(\d+)", m.group(1)), re.search(r"(?:^|,)col=(\d+)", m.group(1))
-                  msg = m.group(2).split("%0A")[0].replace("%0D", "").replace("%3A", ":").replace("%2C", ",").replace("%25", "%")
-                  msg = re.sub(r"^.*?:\d+:\d+: ", "", msg)
-                  rows.append((rel(f.group(1)), n and int(n.group(1)), c and int(c.group(1)), msg, msg.split(" ")[0].rstrip(":")))
-              elif kind == "format":
+                  at, code = x.get("location") or {}, x.get("code") or "invalid-syntax"   # a syntax error has no code before ruff 0.5
+                  rows.append((rel(x["filename"]), at.get("row"), at.get("column"), f"{code} {x.get('message') or ''}".strip(), code))
+          for l in lines:
+              if kind == "format":
                   m = (re.match(r"^Would reformat: (.+)$", l) or re.match(r"^(.+?):(\d+):\d+: unformatted: ", l)
                        or (after and re.match(r"^\s*--> (.+?):(\d+):\d+$", l)))
                   after = l.startswith("unformatted: ")   # ruff 0.9 on: its next line names the file

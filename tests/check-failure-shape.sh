@@ -171,7 +171,7 @@ while IFS=$'\t' read -r check var sid; do
     "ci / lint" | "ci / typecheck")
       case "$var" in
         SYNC) jpre; job_verdict "$job" SYNC=failure CHECK=skipped FORMAT=skipped ZIZMOR=skipped MYPY=skipped ;;
-        CHECK) jpre ruff-check.rc 1 "$fxr/one.github" ruff-check.github; job_verdict lint CHECK=failure ;;
+        CHECK) jpre ruff-check.rc 1 "$fxr/one.json" ruff-check.json; job_verdict lint CHECK=failure ;;
         FORMAT) jpre ruff-format.rc 1 "$fxr/format.log" ruff-format.log; job_verdict lint FORMAT=failure ;;
         ZIZMOR) jpre; job_verdict lint ZIZMOR=failure ;;
         MYPY) jpre mypy.rc 1 "$fxm/one.log" mypy.log; job_verdict typecheck MYPY=failure ;;
@@ -278,13 +278,13 @@ for code in 1 124 137; do   # pytest's own codes; 124 is what timeout returns at
 done
 
 echo "-- ci / lint and ci / typecheck: the findings, named and annotated"
-jpre ruff-check.rc 1 "$fxr/one.github" ruff-check.github; job_verdict lint CHECK=failure; out="$rt/out"
+jpre ruff-check.rc 1 "$fxr/one.json" ruff-check.json; job_verdict lint CHECK=failure; out="$rt/out"
 if [ "$(grep -c '^::error file=' "$out")" = 1 ] && grep -qx '::error file=src/one.py,line=1,col=8::F401 `os` imported but unused' "$out"; then
   ok "ruff check, one finding: one annotation at its file and line, with its code"
 else bad "ruff check, one finding: want one annotation at src/one.py:1" "$(grep '^::' "$out")"; fi
 grep -qx 'failed: ruff check: 1 finding, the first F401 at src/one.py:1' "$out" && grep -qx 'next: run uv run ruff check . here, fix what it names, and push' "$out" \
   && ok "ruff check: failed: names the finding, next: is the command that shows it" || bad "ruff check's block" "$(tail -3 "$out")"
-jpre ruff-check.rc 1 "$fxr/many.github" ruff-check.github; job_verdict lint CHECK=failure; out="$rt/out"
+jpre ruff-check.rc 1 "$fxr/many.json" ruff-check.json; job_verdict lint CHECK=failure; out="$rt/out"
 if [ "$(grep -c '^::error file=src/many.py,line=[0-9]*,col=8::F401 ' "$out")" = 9 ] \
    && grep -qx "::notice::showing 9 of 12 ruff check findings; every one is in the ruff check step's log" "$out"; then ok "ruff check, twelve findings: nine annotations and one showing 9 of 12"
 else bad "ruff check, twelve findings: want nine annotations and one showing line" "$(grep '^::' "$out")"; fi
@@ -302,7 +302,7 @@ for f in format format-before-0.9; do
 done
 jpre ruff-format.rc 2; job_verdict lint FORMAT=failure
 grep -q '^failed: ruff format --check could not run (exit 2)' "$rt/out" && ok "ruff format --check exits 2: could not run" || bad "ruff format --check exits 2" "$(tail -3 "$rt/out")"
-jpre ruff-check.rc 1 "$fxr/many.github" ruff-check.github; jpre ruff-format.rc 1 "$fxr/format.log" ruff-format.log; job_verdict lint CHECK=failure FORMAT=failure
+jpre ruff-check.rc 1 "$fxr/many.json" ruff-check.json; jpre ruff-format.rc 1 "$fxr/format.log" ruff-format.log; job_verdict lint CHECK=failure FORMAT=failure
 [ "$(grep -c '^::error file=' "$rt/out")" = 9 ] && grep -qx '::notice::2 more files ruff format would change are not annotated; every one is in the ruff format --check step'"'"'s log' "$rt/out" \
   && grep -q '^failed: ruff check: 12 findings' "$rt/out" && ok "ruff check and format both fail: nine annotations in the job, the first failure in the block" \
   || bad "ruff check and format both fail" "$(grep -E '^(::|failed:)' "$rt/out")"
@@ -324,27 +324,34 @@ shape "mypy could not run" "$out" "$rc"
 jpre mypy.rc 2 "$fxm/syntax.log" mypy.log; job_verdict typecheck MYPY=failure; out="$rt/out"
 grep -qx 'failed: mypy: 1 error, the first at src/bad.py:1 \[syntax\]' "$out" && grep -q '^::error file=src/bad.py,line=1::' "$out" \
   && ok "mypy exits 2 on a syntax error: an error at its file and line, not could not run" || bad "mypy's syntax error" "$(cat "$out")"
-printf '%s\n' '::error title=ruff (invalid-syntax),file=@ROOT@/src/bad.py,line=1,col=7::src/bad.py:1:7: invalid-syntax: Expected a parameter' > "$work/syntax.github"
-jpre ruff-check.rc 1 "$work/syntax.github" ruff-check.github; job_verdict lint CHECK=failure
-grep -qx 'failed: ruff check: 1 finding, the first invalid-syntax at src/bad.py:1' "$rt/out" && ok "a rule named by its name: no colon after it in failed:" \
-  || bad "a rule named by its name" "$(tail -3 "$rt/out")"
+jpre ruff-check.rc 1 "$fxr/syntax.json" ruff-check.json; job_verdict lint CHECK=failure
+grep -qx 'failed: ruff check: 2 findings, the first invalid-syntax at src/bad.py:1' "$rt/out" && grep -q '^::error file=src/bad.py,line=1,col=7::invalid-syntax Expected' "$rt/out" \
+  && ok "a syntax error: ruff's invalid-syntax, named and annotated at its line" || bad "ruff's syntax error" "$(grep -E '^(::|failed:)' "$rt/out")"
+# A comma in a file's name (#1172's third-party review): ruff's GitHub format
+# writes it unescaped in file=; its JSON keeps the name whole.
+jpre ruff-check.rc 1 "$fxr/comma.json" ruff-check.json; job_verdict lint CHECK=failure
+grep -qx '::error file=src/a%2Cb.py,line=1,col=8::F401 `os` imported but unused' "$rt/out" && grep -qx 'failed: ruff check: 1 finding, the first F401 at src/a,b.py:1' "$rt/out" \
+  && ok "a comma in the file's name: the whole name, escaped in file=" || bad "a comma in the file's name" "$(grep -E '^(::|failed:)' "$rt/out")"
+printf 'not json\n' > "$work/broken.json"; jpre ruff-check.rc 1 "$work/broken.json" ruff-check.json; job_verdict lint CHECK=failure
+grep -qx 'failed: ruff check' "$rt/out" && ! grep -q '^::error file=' "$rt/out" && ok "output that is not JSON: plain failed: ruff check, no annotation" \
+  || bad "output that is not JSON" "$(grep -E '^(::|failed:)' "$rt/out")"
 mkdir -p "$work/ws/app"; jpre mypy.rc 1 "$fxm/one.log" mypy.log; d="$work/rt-$((n + 1))"
 (cd "$work/ws/app" && env RUNNER_TEMP="$d" GITHUB_WORKSPACE="$work/ws" GITHUB_STEP_SUMMARY="$d/summary" PLINTH_SHA="$SHA" SYNC=success MYPY=failure bash -e "$work/typecheck-verdict.sh") > "$d/out" 2>&1
 n=$((n + 1))
 grep -q '^::error file=app/src/m1.py,line=2::' "$d/out" && ok "under working-directory app, mypy's annotation file is from the repository's root" \
   || bad "mypy's annotation file ignores working-directory" "$(grep '^::' "$d/out")"
-# ruff's github format names the file by its absolute path: under
+# ruff's JSON names the file by its absolute path: under
 # working-directory app it is app/... from the root; with a workspace that
 # does not hold it (CI's own, before #1172's fix), never the absolute path.
 mkdir -p "$work/ws2/app"; d="$work/rt-$((n + 1))"; mkdir -p "$d"; : > "$d/zizmor.kva"; echo 1 > "$d/ruff-check.rc"
-sed "s#@ROOT@#$(cd "$work/ws2/app" && pwd -P)#g" "$fxr/one.github" > "$d/ruff-check.github"; grep -q "file=/" "$d/ruff-check.github" || bad "the fixture's path is not absolute"
+sed "s#@ROOT@#$(cd "$work/ws2/app" && pwd -P)#g" "$fxr/one.json" > "$d/ruff-check.json"; grep -q "\"filename\": \"/" "$d/ruff-check.json" || bad "the fixture's path is not absolute"
 (cd "$work/ws2/app" && env RUNNER_TEMP="$d" GITHUB_WORKSPACE="$work/ws2" GITHUB_STEP_SUMMARY="$d/summary" PLINTH_SHA="$SHA" \
    SYNC=success CHECK=failure FORMAT=success ZIZMOR=success bash -e "$work/lint-verdict.sh") > "$d/out" 2>&1
 n=$((n + 1))
 grep -qx '::error file=app/src/one.py,line=1,col=8::F401 `os` imported but unused' "$d/out" && grep -qx 'failed: ruff check: 1 finding, the first F401 at app/src/one.py:1' "$d/out" \
   && ok "ruff's absolute path under working-directory app: app/src/one.py from the root, in the annotation and in failed:" || bad "ruff's absolute path under app" "$(grep -E '^(::|failed:)' "$d/out")"
 d="$work/rt-$((n + 1))"; mkdir -p "$d"; : > "$d/zizmor.kva"; echo 1 > "$d/ruff-check.rc"
-sed "s#@ROOT@#$(cd "$d" && pwd -P)#g" "$fxr/one.github" > "$d/ruff-check.github"
+sed "s#@ROOT@#$(cd "$d" && pwd -P)#g" "$fxr/one.json" > "$d/ruff-check.json"
 (cd "$d" && env RUNNER_TEMP="$d" GITHUB_WORKSPACE="$work/ws2" GITHUB_STEP_SUMMARY="$d/summary" PLINTH_SHA="$SHA" \
    SYNC=success CHECK=failure FORMAT=success ZIZMOR=success bash -e "$work/lint-verdict.sh") > "$d/out" 2>&1
 n=$((n + 1))
@@ -360,7 +367,7 @@ done
 echo "-- ci / lint and ci / typecheck: the steps keep the tool's exit code"
 cat > "$work/bin/uv" <<'SH'
 #!/usr/bin/env bash
-case " $* " in *" --output-format=github "*) echo "::error title=ruff (F401),file=x.py,line=1::x.py:1:1: F401 stub"; exit 0 ;; esac
+case " $* " in *" --output-format=json "*) echo '[{"code": "F401", "filename": "x.py", "location": {"row": 1, "column": 1}, "message": "stub"}]'; exit 0 ;; esac
 echo "x.py:1: error: from the stub  [misc]"
 exit "${STUB_RC:-0}"
 SH
@@ -369,7 +376,7 @@ for s in "lint check ruff-check" "lint format ruff-format" "typecheck mypy mypy"
   for code in 0 1 2; do
     d="$work/s-$id-$code"; mkdir -p "$d"
     (cd "$d" && env PATH="$work/bin:$PATH" RUNNER_TEMP="$d" STUB_RC="$code" bash -e "$work/$id.sh") > "$d/out" 2>&1; got=$?
-    gh=0; [ "$id" != check ] || { [ -s "$d/ruff-check.github" ] && gh=1; }
+    gh=0; [ "$id" != check ] || { [ -s "$d/ruff-check.json" ] && gh=1; }
     if [ "$got" = "$code" ] && [ "$(cat "$d/$f.rc" 2>/dev/null)" = "$code" ] && { [ "$id" != check ] || [ "$gh" = "$([ "$code" = 1 ] && echo 1 || echo 0)" ]; } \
        && ! grep -q '^::error' "$d/out"; then ok "ci / $j, steps.$id: the tool exits $code, the step exits $code and records it, no annotation in its own log"
     else bad "ci / $j, steps.$id: the tool exits $code, the step exited $got" "$(cat "$d/out")"; fi
