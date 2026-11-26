@@ -115,6 +115,10 @@ $s100" "[Unreleased]: https://example.invalid/compare/v1.2.0...HEAD
 [1.0.0]: https://example.invalid/releases/tag/v1.0.0"
 g commit -qam 'chore(release): v1.2.0'
 run "release run 1 (a new, untagged section) passes" 0 'PASS'
+# The suite run on the candidate (#1134): the section says so, and the link is
+# in the release pull request's description, not in CHANGELOG.md.
+cand_body=$'Run 1; e2e green.\n\neval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-123>\n\nAssisted-by: x'
+run "release run 1 with the suite's link in the description, not the section, passes" 0 'PASS' main HEAD "$cand_body"
 
 # 4. A deliberate correction of a released section.
 fresh
