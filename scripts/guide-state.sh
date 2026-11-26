@@ -634,9 +634,27 @@ history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/
 # the next step while it fails (#1077 review). Printed after the route.
 run_ok=""; main_red=""
 run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
-      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10]] | @tsv' 2>&1)" && run_ok=yes
+      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10], ((.head_commit.message // "") | (split("\n")[0] // "") | gsub("\t"; " "))] | @tsv' 2>&1)" && run_ok=yes
+# A merge broke main (#1079): the latest completed run failed (a failure,
+# not a cancelled or timed-out run) and its head is a squash merge, its title
+# ending in (#N) as GitHub writes it, and #N is still the newest merge (else
+# main moved on, the run is an older commit's). Not when #N is itself a
+# revert (that would undo the undo), nor while a revert of #N is open (that
+# pull request is the way, routed below). The route undoes #N first.
+main_undo=""; main_undo_title=""
 if [ -n "$run_ok" ] && [ -n "$run" ]; then
   case "$(cut -f2 <<<"$run")" in success|neutral|skipped) ;; *) main_red=yes ;; esac
+  if [ "$(cut -f2 <<<"$run")" = failure ]; then
+    main_undo_title="$(cut -f4 <<<"$run")"
+    main_undo="$(sed -nE 's/.* \(#([0-9]+)\)$/\1/p' <<<"$main_undo_title")"
+    case "$main_undo_title" in 'Revert "'*|revert:*|revert\(*) main_undo="" ;; esac
+    [ -z "$main_undo" ] || [ "$(head -1 <<<"$merged" | cut -f1)" = "$main_undo" ] || main_undo=""
+    # An open revert of #N: GitHub titles it Revert "<#N's title>", with no
+    # (#N) inside the quotes (ci / pr-title refuses one there); a title that
+    # does carry (#N) counts too (#1196 review).
+    [ -z "$main_undo" ] || ! REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
+      'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { found = 1 } END { exit !found }' <<<"$prs" || main_undo=""
+  fi
 fi
 
 # The release signal (#1077): the last tag (the newest with a date, by its
@@ -1070,6 +1088,17 @@ if [ "$people_merged" -eq 0 ] && [ -z "$past_first" ]; then
   else
     say "Repository made, its first pull request open" "none: no pull request is open; open the repository's pull requests page"
   fi
+elif [ -n "$main_undo" ]; then
+  # A merge broke main (#1079): undo it first, through a pull request and the
+  # same checks, as the project's own page says; reproduce and fix after.
+  # Ahead of an open pull request's failing check: main stays broken while a
+  # fix is written. /rewind is the session's own undo and never touches main.
+  run_id_red="$(cut -f1 <<<"$run")"
+  note="main's latest CI run (run $run_id_red) failed on the merge of pull request #$main_undo (${main_undo_title% (#*}); read its log first (gh run view $run_id_red --log-failed): a failure that is not the change's own (a flaky job, an outside service) is run again, not undone; otherwise undoing it opens a revert pull request that goes through the same checks; /rewind undoes the agent's edits in a session, never a merge"
+  say "Something broke" "none: undo pull request #$main_undo first, as the project's docs/how-to/undo-a-merged-change.md says"
+  if [ "$archetype" = web ]; then restore="with the README's \"Where it runs\" and the restore you tried (step 3 of $plugin/docs/how-to/set-four-things-by-hand.md)"
+  else restore="this archetype's project has no restore steps of its own"; fi
+  echo "then also: after the undo, restore any data the change lost or changed ($restore), then reproduce and fix, and leave a short blameless note in the issue's Outcome when it lost data, needed a revert or reached users"
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
   if [ -n "$broken" ] && [ -n "$plinth_failing" ] && [ -n "$pin_behind" ]; then
@@ -1210,7 +1239,7 @@ fi
 if [ -n "$run_ok" ]; then
   if [ -z "$run" ]; then echo "main ci: none (no completed run of ci.yml on main)"
   else
-    IFS=$'\t' read -r run_id run_end run_on <<<"$run"
+    IFS=$'\t' read -r run_id run_end run_on _ <<<"$run"
     case "$run_end" in
       success|neutral|skipped) echo "main ci: pass (run $run_id, $run_on)" ;;
       *) echo "main ci: fail (run $run_id, $run_on, ${run_end:-no conclusion}): gh run view $run_id --log-failed"
