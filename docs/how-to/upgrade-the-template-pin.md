@@ -82,10 +82,14 @@ its own checks must have passed on the commit it tags.
    behind. If the new tag's `plinth_sha` default moved (the script says so
    when `copier.yml` changed), say which plinth a new project calls, but do
    not write that an update moves an existing repository's plinth pin:
-   `/plinth:template-update` keeps the pin its workflows call, so an update
-   does not undo what Dependabot set. When the tag's pin is newer, the plan
-   recommends it, `--plinth-pin tested`, and only the person's confirmation
-   applies it (#511, #519).
+   `/plinth:template-update` keeps the pin its workflows call and never
+   moves it. The order is the pin pull request first, then the update: when
+   the tag's pin is newer than the one a repository's workflows call, the
+   update's plan stops before writing anything and names the pull request
+   that raises the pin (Dependabot's, or the change to make in one), to merge
+   first; the update runs after that, with no pin choice (#511, #1183). Say
+   so in the line when the default moved: an existing repository needs its
+   pin raised before this update.
 6. Run every check in [CONTRIBUTING.md](../../CONTRIBUTING.md#run-the-checks).
    `tests/archetype-single-source.sh` reads the new tag's `copier.yml`, from
    the checkout `tests/lib/template-checkout.sh` makes. If it fails, the

@@ -18,16 +18,22 @@
 #     plinth_sha at that tag's default.
 #   2 <owner>/plinth-e2e-upgrade-<run>, public, with Actions turned off (no
 #     workflow of the rendered template runs on it), main pushed.
-#   3 template-update.sh beside this file, the one this commit ships: the
-#     plan, then --apply with --plinth-pin tested, which opens a draft pull
-#     request. A conflict is a failure: nothing here resolves one. An update
-#     over ci / diff-size's limit (exit 4) is opened with --finish
-#     --over-limit; the repository runs no check that would read its size.
+#   3 template-update.sh beside this file, the one this commit ships, in the
+#     order it asks for (#1183): the plan first, which must stop (exit 1)
+#     and name the change that raises the plinth pin to the one the target
+#     tag was tested with, since the start's pin is older; then that change,
+#     every coolbress/plinth `uses:` line moved to it, pushed to main as a
+#     merged pin pull request would leave it; then the plan again and
+#     --apply, which carries the pin the workflows now call and opens a
+#     draft pull request. A conflict is a failure: nothing here resolves
+#     one. An update over ci / diff-size's limit (exit 4) is opened with
+#     --finish --over-limit; the repository runs no check that would read
+#     its size.
 #   4 the update branch as pushed: every coolbress/plinth `uses:` line in
 #     .github/workflows (ci.yml's and label.yml's at least) and
 #     .copier-answers.yml's plinth_sha must name the plinth_sha default of
-#     this commit's template tag, the pin that tag was tested with, and
-#     _commit that tag.
+#     this commit's template tag, the pin that tag was tested with and step
+#     3 raised the workflows to, and _commit that tag.
 #   5 the repository is deleted.
 #
 # Exit 0 means the whole path happened, deletion included. A failure after
@@ -169,13 +175,29 @@ gh api -X PUT "repos/$repo/actions/permissions" -F enabled=false >/dev/null \
 git -C "$dir" remote add origin "$url.git"
 git -C "$dir" push -q -u origin main
 
-# ── 3 the update ─────────────────────────────────────────────────────────
-plan="$(cd "$dir" && "$here/template-update.sh")" || fail "the template-update plan stopped:" "$plan"
+# ── 3 the pin first, then the update ─────────────────────────────────────
+# The start's pin is older than the one the target tag was tested with: the
+# plan stops, writes nothing, and names the change (no pull request is open).
+rc=0; plan="$(cd "$dir" && "$here/template-update.sh" 2>&1)" || rc=$?
+printf '%s\n' "$plan"
+[ "$rc" = 1 ] || fail "the plan exited $rc with the plinth pin $from_pin older than $want; it must stop (exit 1) and name the pin to raise first"
+grep -q "^raise it first in one pull request of its own: every coolbress/plinth uses: line in .* to $want" <<<"$plan" \
+  || fail "the plan stopped, but did not name the change that raises the plinth pin to $want"
+[ -z "$(git -C "$dir" status --porcelain)" ] && [ "$(git -C "$dir" worktree list | grep -c .)" = 1 ] \
+  || fail "the plan stopped on the pin, but left a change or a worktree behind"
+say "upgrade: the plan stopped on the plinth pin $from_pin, older than $want, and named the change"
+# The change, as the pin pull request would merge it: every plinth uses: line.
+(cd "$dir/.github/workflows" && shopt -s nullglob && for f in *.yml *.yaml; do
+  sed -i.bak "s|\(coolbress/plinth/[^@]*\)@$from_pin|\1@$want|g" "$f" && rm "$f.bak"
+done)
+git -C "$dir" commit -q -am "chore(deps): raise the plinth pin to $want" || fail "the plinth pin raise changed nothing"
+git -C "$dir" push -q origin main
+plan="$(cd "$dir" && "$here/template-update.sh")" || fail "the template-update plan stopped after the pin was raised:" "$plan"
 printf '%s\n' "$plan"
 base="$(sed -nE 's/^ *[^ ]*template-update\.sh --apply ([0-9a-f]{40})( .*)?$/\1/p' <<<"$plan" | head -n 1)"
 [ -n "$base" ] || fail "the plan printed no --apply line"
 wt="$work/$name-template-$template_ref"; branch="chore/template-$template_ref"
-rc=0; out="$(cd "$dir" && "$here/template-update.sh" --apply "$base" --plinth-pin tested 2>&1)" || rc=$?
+rc=0; out="$(cd "$dir" && "$here/template-update.sh" --apply "$base" 2>&1)" || rc=$?
 printf '%s\n' "$out"
 # Over ci / diff-size's limit the update stays a local commit and a split is
 # proposed (exit 4, #795). The repository runs no Actions, so it is opened as
@@ -186,7 +208,7 @@ if [ "$rc" = 4 ] && grep -q '^Over the limit: ' <<<"$out"; then
   printf '%s\n' "$out"
   [ "$rc" = 0 ] || fail "template-update.sh --finish --over-limit exited $rc"
 fi
-[ "$rc" = 0 ] || fail "template-update.sh --apply --plinth-pin tested exited $rc (3 is a conflict copier left; nothing here resolves one)"
+[ "$rc" = 0 ] || fail "template-update.sh --apply exited $rc (3 is a conflict copier left; nothing here resolves one)"
 pr="$(sed -n 's/^Draft pull request: //p' <<<"$out")"
 [ -n "$pr" ] || fail "template-update.sh reported no draft pull request"
 
@@ -211,7 +233,7 @@ answers_pin="$(sed -n 's/^plinth_sha: *//p' "$wt/.copier-answers.yml")"
 answers_tag="$(sed -n 's/^_commit: *//p' "$wt/.copier-answers.yml")"
 [ "$answers_pin" = "$want" ] || bad="$bad"$'\n'"  .copier-answers.yml records plinth_sha ${answers_pin:-(none)}, not $want"
 [ "$answers_tag" = "$template_ref" ] || bad="$bad"$'\n'"  .copier-answers.yml records _commit ${answers_tag:-(none)}, not $template_ref"
-[ -z "$bad" ] || fail "the tested pin did not land on $pr:$bad"
+[ -z "$bad" ] || fail "the raised pin is not what landed on $pr:$bad"
 say "upgrade: landed on $pr: $(grep -c . <<<"$pins") plinth uses: line(s) and .copier-answers.yml name $want; _commit $template_ref"
 
 # ── 5 gone ───────────────────────────────────────────────────────────────

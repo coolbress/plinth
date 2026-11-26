@@ -78,10 +78,13 @@ today (scripts/new-project.sh's template_ref, read from that file alone).
 Behind prints the template's own changed files and a `copier update` line;
 it never runs one. --print-update-command prints that line alone, for the
 template-update skill (#232), which runs it. The line carries the plinth pin
-the workflows call today (#219); when the target tag was tested with a newer
-plinth commit, a second line carries that one, for a person to choose
-(--plinth-pin tested), after three more reads: the tag's copier.yml,
-plinth's tags and a compare of the two plinth commits (#511). Each line is
+the workflows call today (#219), and is printed only when that pin is not
+older than the one the target tag was tested with, after up to three more
+reads: the tag's copier.yml, plinth's tags and a compare of the two plinth
+commits (#511). Older, or not compared, there is no line: the pin is raised
+first, in a pull request of its own, and --print-update-command with --repo
+names an open one that changes the plinth uses: lines, one read for the open
+pull requests and one for each one's files (#1183). The line is
 printed only while the target tag still names new-project.sh's template_sha,
 the commit plinth was tested with, read with one more call: a moved tag is a
 WARN with no line, and an unread one prints the line here but not from
@@ -1165,8 +1168,10 @@ def _plinth() -> tuple[dict, ...]:
                         "movedcmd": "{line}",
                         "cmdtag": "  not verified that {target} still names {sha}, the commit plinth was tested with "
                                   "({why}); the template-update skill checks it before it runs this line:",
-                        "tested": "  the line above keeps the live pin; this one moves it to the tested pin, if you "
-                                  "choose it:"}),
+                        "raise": "  no update command until the plinth pin is raised to the one the target tag was "
+                                 "tested with:",
+                        "uncompared": "  the template-update skill stops before it runs this line until the two are "
+                                      "compared"}),
         check("FC-F02", "this installed plinth targets the newest template tag", states=("warn", "info"),
               handoff="person", docs=DRIFT_DOCS, needs=net, ci_visible=False,
               fix="update the plinth plugin, then run /plinth:template-update",
@@ -2889,22 +2894,24 @@ def moved_note(d: dict, now: str) -> str:
 
 def plinth_pin_choice(d: dict, network: bool) -> dict:
     """When the update is behind and the live pin is known: the live pin
-    against the one the target tag was tested with (#511). #219 carries the
-    live pin on purpose, so an update never overwrites what Dependabot set;
-    this offers the tested pin beside it, only when it is newer, for a
-    person to confirm. `state` is tested-ahead (`cmd` is the line with the
-    tested pin, `recommend` the one plain sentence on what moving to it
-    gains, #519), equal (`cmd` is the live line), live-ahead or unread (no
-    `cmd`); `note` is the one line that says so, naming both SHAs when read."""
+    against the one the target tag was tested with (#511). The update
+    always carries the live pin, so it never overwrites what Dependabot set
+    (#219); a live pin older than the tested one is raised first, in a pull
+    request of its own, and the update waits for it (#1183). `state` is
+    behind (the tested pin is newer: the update waits), equal, live-ahead or
+    unread (not compared: the update waits too, never proceeding as if the
+    pin were current); `note` is the one line that says so, naming both SHAs
+    when read. When behind, `tested` is the pin to raise to, `integrity` its
+    GitLab checksum (or None, said in `note`), and `url` the compare."""
     live = d["live"].lower()
     calls = "the include is at" if d.get("integrity") else "the workflows call"
     target = d["target"]
     tested, why = tested_plinth_pin(d["template_repo"], target, network, at=d["target_sha"])
     if tested is None:
-        return {"state": "unread", "note": f"plinth pin: the one {target} was tested with was not read ({why}); "
-                                           f"the live pin {live} is kept"}
+        return {"state": "unread", "note": f"plinth pin: the one {target} was tested with was not read ({why}), "
+                                           f"so whether {live} is older was not read"}
     if tested == live:
-        return {"state": "equal", "tested": tested, "cmd": d["cmd"],
+        return {"state": "equal", "tested": tested,
                 "note": f"plinth pin: {calls} {live}, the one {target} was tested with"}
     url = f"https://github.com/{PLINTH_REPO}/compare/{live}...{tested}"
     tags: dict[str, list[str]] = {}
@@ -2924,32 +2931,80 @@ def plinth_pin_choice(d: dict, network: bool) -> dict:
     if status == "ahead":
         n = cmp.get("ahead_by")
         by = f", {n} commit(s) newer" if isinstance(n, int) else ", newer"
-        integrity = None
+        integrity, gap = None, ""
         if d.get("integrity"):
-            # On GitLab the tested pin moves with the checksum the same tag was tested with.
+            # On GitLab the pin moves with the checksum the same tag was tested with.
             integrity, why = tested_plinth_pin(d["template_repo"], target, network,
                                                "plinth_gitlab_integrity", r"[A-Za-z0-9+/]{43}=", d["target_sha"])
-            if integrity is None:
-                return {"state": "unread", "tested": tested,
-                        "note": f"plinth pin: the include is at {live}; {target} was tested with {tested}, but its "
-                                f"checksum was not read ({why}); the live pin is kept"}
-        newer = f"{n} commit(s) newer than" if isinstance(n, int) else "newer than"
-        checks = "pipeline" if d.get("integrity") else "checks"
-        return {"state": "tested-ahead", "tested": tested, "cmd": update_line(d, tested, integrity),
+            gap = "" if integrity else f" (its checksum was not read: {why})"
+        return {"state": "behind", "tested": tested, "integrity": integrity, "url": url, "name": name(tested),
+                "gitlab": bool(d.get("integrity")),
                 "note": f"plinth pin: {calls} {name(live)}; {target} was tested with "
-                        f"{name(tested)}{by}{tag_gap}: {url}",
-                "recommend": f"move the plinth pin to {name(tested)}: this repository's {checks} then run "
-                             f"the plinth commit {target} was tested with, {newer} the one they run now, so what "
-                             f"plinth changed in between reaches it"}
+                        f"{name(tested)}{by}{tag_gap}{gap}: {url}"}
     if status == "behind":
         return {"state": "live-ahead", "tested": tested,
                 "note": f"plinth pin: {calls} {name(live)}, newer than {name(tested)} that {target} "
-                        f"was tested with; the live pin is kept, never moved backwards{tag_gap}: {url}"}
+                        f"was tested with; the update keeps it{tag_gap}: {url}"}
     why = ("the two commits have diverged" if status == "diverged"
            else "offline or API error" if cmp in (ABSENT, ERROR) else "an unexpected compare response")
     return {"state": "unread", "tested": tested,
             "note": f"plinth pin: {calls} {live}; {target} was tested with {tested}, but the two "
-                    f"were not compared ({why}); the live pin is kept"}
+                    f"were not compared ({why})"}
+
+
+def pin_pulls(repo: str, network: bool) -> tuple[list[tuple[int, str]] | None, str | None]:
+    """The open pull requests of `repo` that change a coolbress/plinth
+    `uses:` line in a workflow file (#1183): Dependabot's, or one a person
+    opened. Read from each open pull request's files, the added lines of a
+    `.github/workflows/` patch. Returns ([(number, title)], None), or
+    (None, why) when a read failed: never an empty list for an unread one."""
+    pulls = api(f"repos/{repo}/pulls?state=open&per_page=100", network, paginate=True)
+    if not isinstance(pulls, list):
+        return None, ("offline or API error" if pulls in (ABSENT, ERROR) else "an unexpected pulls response")
+    found: list[tuple[int, str]] = []
+    added = re.compile(r"^\+[ \t]*(-[ \t]*)?uses:[ \t]*[\"']?" + re.escape(PLINTH_REPO) + "/", re.MULTILINE | re.IGNORECASE)
+    for p in pulls:
+        n = p.get("number") if isinstance(p, dict) else None
+        if not isinstance(n, int):
+            return None, "an unexpected pulls response"
+        files = api(f"repos/{repo}/pulls/{n}/files?per_page=100", network, paginate=True)
+        if not isinstance(files, list):
+            return None, f"the files of #{n}: " + ("offline or API error" if files in (ABSENT, ERROR) else "an unexpected response")
+        if any(isinstance(f, dict) and str(f.get("filename", "")).startswith(".github/workflows/")
+               and added.search(str(f.get("patch") or "")) for f in files):
+            found.append((n, str(p.get("title") or "")))
+    return found, None
+
+
+def raise_first(root: Path, choice: dict, repo: str | None, network: bool) -> list[str]:
+    """What to merge before the update, when the live pin is older than the
+    tested one (#1183): the open pull request that changes the plinth
+    `uses:` lines, by number, when `repo` is given and one is open; else the
+    change to make in one pull request, every file that calls plinth moved
+    to the same SHA (#793), or on GitLab the include's ref and checksum.
+    Nothing here opens or changes anything."""
+    tested = choice["tested"]
+    out: list[str] = []
+    if repo and not choice.get("gitlab"):
+        found, why = pin_pulls(repo, network)
+        if found:
+            for n, title in found:
+                out.append(f"merge first: #{n} {title}".rstrip() + f" (https://github.com/{repo}/pull/{n}), which changes "
+                           f"the {PLINTH_REPO} uses: lines; if it raises them to an older commit than {tested}, raise them further")
+            out.append("then plan the update again")
+            return out
+        out.append("no open pull request changes the plinth uses: lines" if why is None
+                   else f"the open pull requests were not read ({why})")
+    if choice.get("gitlab"):
+        checksum = choice.get("integrity") or "(the checksum the tag was tested with, not read)"
+        out.append(f"raise it first in one merge request of its own: .gitlab-ci.yml's {PLINTH_REPO} include to ref "
+                   f"{tested} and integrity {checksum}; merge it, then plan the update again")
+        return out
+    files = plinth_pins(root)["names"] or ["ci.yml", "label.yml"]
+    where = ", ".join(f".github/workflows/{f}" for f in files)
+    out.append(f"raise it first in one pull request of its own: every {PLINTH_REPO} uses: line in {where} "
+               f"to {choice['name']}, all at that one SHA; merge it, then plan the update again")
+    return out
 
 
 def check_template_drift(root: Path, network: bool, host: str | None = None, owner: str | None = None) -> None:
@@ -3026,16 +3081,23 @@ def check_template_drift(root: Path, network: bool, host: str | None = None, own
         return
     if tag == "unread":
         emit("FC-F01", "info", "cmdtag", {"target": target, "sha": d["target_sha"], "why": why})
+    # A live pin older than the tested one is raised first, in a pull
+    # request of its own (#1183): no line until then.
+    choice = plinth_pin_choice(d, network)
+    if choice["state"] == "behind":
+        emit("FC-F01", "info", "line", {"line": choice["note"]})
+        emit("FC-F01", "info", "raise")
+        for line in raise_first(root, choice, None, network):
+            emit("FC-F01", "info", "line", {"line": line})
+        return
     emit("FC-F01", "info", "line", {"line": d["cmd"]})
     for line in moves_lines(d):
         emit("FC-F01", "info", "line", {"line": line})
-    choice = plinth_pin_choice(d, network)
     if choice["state"] == "equal":
         return
     emit("FC-F01", "info", "line", {"line": choice["note"]})
-    if choice["state"] == "tested-ahead":
-        emit("FC-F01", "info", "tested")
-        emit("FC-F01", "info", "line", {"line": choice["cmd"]})
+    if choice["state"] == "unread":
+        emit("FC-F01", "info", "uncompared")
 
 
 PLUGIN_UPDATE_STEPS = ("claude plugin marketplace update plinth", "claude plugin update plinth@plinth",
@@ -3221,15 +3283,18 @@ def print_behind(root: Path, network: bool = True, host: str | None = None) -> i
     return 0
 
 
-def print_update_command(root: Path, plinth_pin: str = "live", network: bool = True, host: str | None = None,
-                         owner: str | None = None) -> int:
+def print_update_command(root: Path, network: bool = True, host: str | None = None,
+                         repo: str | None = None) -> int:
     """--print-update-command: the drift item's command line alone on
-    stdout, exit 0; otherwise why there is none on stderr, exit 1. With
-    --plinth-pin tested, the line with the tested pin, and the comparison
-    on stderr whether or not there is one: --plinth-pin tested never prints
-    a line that would move the pin backwards or past an unread comparison.
-    With the live pin, each file the line moves forward to the ci job's
-    commit is a `moves:` line on stderr (#793)."""
+    stdout, exit 0; otherwise why there is none on stderr, exit 1. The line
+    carries the live pin, and is printed only when that pin is not older
+    than the one the target tag was tested with, read and compared (#1183):
+    behind, stderr names the open pull request that raises it (with --repo)
+    or the change to make; unread, it says what was not read. The
+    comparison is a `plinth pin:` line on stderr whenever it was made. Each
+    file the line moves forward to the ci job's commit is a `moves:` line on
+    stderr (#793)."""
+    owner = repo.split("/")[0] if repo else None
     d = template_drift(root, host, network)
     owner_shared(d, owner, network, root)
     for note in d.get("owner_notes", []):
@@ -3242,17 +3307,25 @@ def print_update_command(root: Path, plinth_pin: str = "live", network: bool = T
                   f"not verified that {d['target']} still names {d['target_sha']}, the commit plinth was tested with ({why})"),
                   file=sys.stderr)
             return 1
-    if d.get("cmd") and plinth_pin == "tested":
-        choice = plinth_pin_choice(d, network)
-        print(choice["note"], file=sys.stderr)
-        if choice.get("recommend"):
-            print(f"recommended: {choice['recommend']}", file=sys.stderr)
-        if choice.get("cmd"):
-            print(choice["cmd"])
-            return 0
-        print("no update command with the tested pin: only the live pin's line stands", file=sys.stderr)
-        return 1
     if d.get("cmd"):
+        # Fail closed as well: a template tag never lands on a plinth older
+        # than the one it was tested with (#511), by order (#1183).
+        choice = plinth_pin_choice(d, network)
+        if choice["state"] == "behind":
+            print(f"no update command: the plinth pin is behind; {choice['note'][len('plinth pin: '):]}", file=sys.stderr)
+            for line in raise_first(root, choice, repo, network):
+                print(line, file=sys.stderr)
+            return 1
+        if choice["state"] == "unread":
+            print(f"no update command: whether the plinth pin is older than the one {d['target']} was tested with "
+                  f"was not read; {choice['note'][len('plinth pin: '):]}", file=sys.stderr)
+            # A failed read may pass; a pin GitHub cannot order against the
+            # tested one (diverged, or not a plinth commit) never will.
+            to = f" to {choice['tested']} or a later plinth release" if choice.get("tested") else ""
+            print(f"run it again if a read failed; otherwise raise the plinth pin{to} in a pull request of its own, "
+                  "merge it, then plan the update again", file=sys.stderr)
+            return 1
+        print(choice["note"], file=sys.stderr)
         for line in moves_lines(d):
             print(line, file=sys.stderr)
         print(d["cmd"])
@@ -5973,9 +6046,6 @@ def main() -> int:
                          "pin is behind plinth's latest release, one line each, `not read` when not read; exit 0 (#904)")
     ap.add_argument("--print-update-command", action="store_true",
                     help="print the template drift item's `copier update` line alone and exit (1, with the reason, when there is none)")
-    ap.add_argument("--plinth-pin", choices=("live", "tested"), default="live",
-                    help="with --print-update-command: the line carrying the plinth pin the workflows call (live, "
-                         "the default) or the one the target template tag was tested with (tested; only when it is newer)")
     ap.add_argument("--move-archetype", metavar="ARCHETYPE",
                     help="with --print-update-command: the line that re-renders this repository under ARCHETYPE at the "
                          "tag it records, with check-drop:/check-add:/check-add-floor:/diff-size-move: lines on stderr (#1004, #1017, #1044)")
@@ -6004,12 +6074,8 @@ def main() -> int:
         return 0
 
     root = Path(a.root).resolve()
-    if a.plinth_pin != "live" and not a.print_update_command:
-        ap.error("--plinth-pin needs --print-update-command")
     if a.move_archetype is not None and not a.print_update_command:
         ap.error("--move-archetype needs --print-update-command")
-    if a.move_archetype is not None and a.plinth_pin != "live":
-        ap.error("--move-archetype carries the live plinth pin; --plinth-pin tested is for a tag update")
     if a.print_plinth_pins:
         return print_plinth_pins(root)
     if a.print_plinth_comments:
@@ -6026,8 +6092,7 @@ def main() -> int:
         return print_move_command(root, a.move_archetype, not a.no_network, a.host,
                                   a.repo.split("/")[0] if a.repo else None)
     if a.print_update_command:
-        return print_update_command(root, a.plinth_pin, not a.no_network, a.host,
-                                    a.repo.split("/")[0] if a.repo else None)
+        return print_update_command(root, not a.no_network, a.host, a.repo)
     project = (root / a.project).resolve()
     if project != root and root not in project.parents:
         # Every item reads one repository: .github/, AGENTS.md, the ruleset at
