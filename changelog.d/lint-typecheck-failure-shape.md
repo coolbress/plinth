@@ -8,7 +8,9 @@
   saying how many there are; `ruff format --check` names the files and
   `uv run ruff format`. `next:` is the local command that shows the same
   errors (`uv run ruff check .`, `uv run mypy .`). ruff or mypy stopping on
-  its own error (exit 2) fails as "could not run", not as findings. The
+  its own error (exit 2) with no file and line named fails as "could not
+  run", not as findings; mypy's syntax error, also exit 2, is an error at
+  its line. The
   ruff and mypy steps are named (`ruff check`, `ruff format --check`,
   `mypy`); no job, step id, check name, input or secret is renamed, and no
   package or action is added.

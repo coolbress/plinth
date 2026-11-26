@@ -319,6 +319,13 @@ shape "mypy, twelve errors" "$out" "$rc"
 jpre mypy.rc 2 /dev/stdin mypy.log <<<"mypy: can't read file 'nonexist': No such file or directory"; job_verdict typecheck MYPY=failure; out="$rt/out"
 grep -q '^failed: mypy could not run (exit 2)' "$out" && ! grep -q '^::error file=' "$out" && ok "mypy exits 2: could not run, not findings" || bad "mypy exits 2" "$(cat "$out")"
 shape "mypy could not run" "$out" "$rc"
+jpre mypy.rc 2 "$fxm/syntax.log" mypy.log; job_verdict typecheck MYPY=failure; out="$rt/out"
+grep -qx 'failed: mypy: 1 error, the first at src/bad.py:1 \[syntax\]' "$out" && grep -q '^::error file=src/bad.py,line=1::' "$out" \
+  && ok "mypy exits 2 on a syntax error: an error at its file and line, not could not run" || bad "mypy's syntax error" "$(cat "$out")"
+printf '%s\n' '::error title=ruff (invalid-syntax),file=@ROOT@/src/bad.py,line=1,col=7::src/bad.py:1:7: invalid-syntax: Expected a parameter' > "$work/syntax.github"
+jpre ruff-check.rc 1 "$work/syntax.github" ruff-check.github; job_verdict lint CHECK=failure
+grep -qx 'failed: ruff check: 1 finding, the first invalid-syntax at src/bad.py:1' "$rt/out" && ok "a rule named by its name: no colon after it in failed:" \
+  || bad "a rule named by its name" "$(tail -3 "$rt/out")"
 mkdir -p "$work/ws/app"; jpre mypy.rc 1 "$fxm/one.log" mypy.log; d="$work/rt-$((n + 1))"
 (cd "$work/ws/app" && env RUNNER_TEMP="$d" GITHUB_WORKSPACE="$work/ws" GITHUB_STEP_SUMMARY="$d/summary" PLINTH_SHA="$SHA" SYNC=success MYPY=failure bash -e "$work/typecheck-verdict.sh") > "$d/out" 2>&1
 n=$((n + 1))
