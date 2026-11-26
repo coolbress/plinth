@@ -629,8 +629,16 @@ MOCK_ADMIN=true no_token "token: First pull request merged with nothing open: un
 # else open is step 2, and the account and the four things are a "then also"
 # line; a web project's line names what waits for the first deploy too.
 MOCK_ADMIN=false state "the token step done, one merge: step 2, the rest a then-also line" "$d" \
-  "command: /grilling" "then also: recommended, not in the way of step 2, from First pull request merged (step 1): $rpages" \
+  "command: /grilling" "then also: recommended, not in the way of step 2, from First pull request merged (step 1): \`$(dirname "$(tr -d '`' <<<"$tpage")")/give-the-agent-its-own-account.md\`, then \`$(dirname "$(tr -d '`' <<<"$tpage")")/set-four-things-by-hand.md\`" \
   "!after the first deploy" "!token step:"
+# Review of this change: a Dependabot pull request open too: its route, and
+# the then-also line still.
+put "$d/open.json" "$(pr 3 'chore(deps): bump x' true SUCCESS)"
+MOCK_ADMIN=false state "the token step done, one merge, Dependabot open: its route, the then-also line still" "$d" \
+  "command: /plinth:floor-check" "!token step:"
+out="$(MOCK_ADMIN=false MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -q '^then also: recommended' <<<"$out" && ok "  and the then-also line is there" || bad "no then-also line beside Dependabot"
+printf '[]' > "$d/open.json"
 MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=ok state "the token step not verified, one merge: the first merge's row, the token page first" "$d" \
   "command: none: the token page first (the tool cell's first page); the other two pages are recommended next" "!then also"
 MOCK_ADMIN_FAIL=1 state "the reach not read, one merge: the first merge's row" "$d" "command: none: the token page first (the tool cell's first page); the other two pages are recommended next"
@@ -646,6 +654,13 @@ for w in "after the first deploy, from " "set-four-things-by-hand.md#after-the-f
 done
 grep -qx 'command: /grilling' <<<"$out" && [ -z "$miss" ] && ok "a web project, the token step done, one merge: the then-also line names what waits for the first deploy" ||
   { bad "the web then-also line:$miss"; grep -E '^(command|then also)' <<<"$out" | sed 's/^/        /'; }
+de="$(repo token-web-elsewhere 'archetype: web
+hosting: elsewhere
+hosting_elsewhere: Fly.io')"
+put "$de/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+also="$(MOCK_ADMIN=false MOCK_DIR="$de" "$script" "$de" 2>&1 | grep '^then also: ')"
+grep -qF "after the first deploy" <<<"$also" && grep -qF "the bill to expect from where it runs" <<<"$also" && ! grep -q 'Render' <<<"$also" &&
+  ok "a web project that runs elsewhere: the after-deploy part, no Render figures" || bad "web elsewhere then-also: $also"
 # The page those lines send to (#1078): each provider's spend-limit row in
 # step 2, dated, with its link; the restore's row count; what waits for the
 # first deploy. A row that loses its fact fails here.

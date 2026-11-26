@@ -215,7 +215,7 @@ What to keep to:
   reason, that whether the step is done is not known, and name the token
   page as the way to make sure; do not say it is done or not done. No `token step:`
   line: say nothing about the step.
-- A `then also:` line (the token step done, one merge, the route step 2)
+- A `then also:` line (the token step done, one merge, whatever the route)
   goes in part 4 as one sentence: the agent's own account and the four
   things by hand, recommended, not in the way. For a `web` project it also
   names what waits for the first deploy, with the bill and when to read the

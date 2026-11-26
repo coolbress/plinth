@@ -35,7 +35,7 @@ September, and the next payment dates in order."*
 ## The loop
 
 ```text
- start ─► first pull request merged ─► the agent's token and account, four things by hand
+ start ─► first pull request merged ─► the agent's token (then, recommended: its account, four things by hand)
                                                            │
  ┌─────────────────────────────────────────────────────────┘
  ▼

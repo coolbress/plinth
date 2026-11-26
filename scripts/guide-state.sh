@@ -1166,15 +1166,22 @@ if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ -z "${pages_name
     *) echo "token step: not verified: ${reach#unknown: }; the agent's token should have Administration at No access, as the token page of $step1 says, $token_page; then, recommended: $rest_pages" ;;
   esac
 fi
-# The token step done and one merge, so the route is step 2 (#1078): the
-# account and the four things are one "then also" line, not the command. A
-# web project's line also names what waits for the first deploy, with the
-# section of the four-things page that carries each, read 2026-11-26.
-if [ "$reach" = none ] && [ "$people_merged" -eq 1 ] && [ -z "$past_first" ] && [ "$said_cmd" = /grilling ]; then
-  also="then also: recommended, not in the way of step 2, from $step1: $rest_pages"
+# The token step done and one merge (#1078): the account and the four
+# things are one "then also" line, not the command, whatever the route (a
+# Dependabot pull request open too). A web project's line also names what
+# waits for the first deploy, with the section of the four-things page that
+# carries each, read 2026-11-26; Render's figures only where it runs there.
+if [ "$reach" = none ] && [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; then
+  pages_dir="$(dirname "$(tr -d '`' <<<"$token_page")")"
+  also="then also: recommended, not in the way of step 2, from $step1: \`$pages_dir/give-the-agent-its-own-account.md\`, then \`$pages_dir/set-four-things-by-hand.md\`"
   if [ "$archetype" = web ]; then
-    section="$(dirname "$(tr -d '`' <<<"$token_page")")/set-four-things-by-hand.md#after-the-first-deploy"
-    also="$also; after the first deploy, from $section: the host's deploy-failure notification, an uptime monitor and an error tracker; one copy of the data off the host, in a place the agent cannot reach, at least weekly (a Render export or pg_dump: Render Hobby restores only the past 3 days); a restore rehearsal that counts one table's rows before and after; and the bill to expect, about US\$13 a month on Render (a US\$7 web service, a US\$6 Postgres, 5 GB of bandwidth included, then US\$0.15 a GB), read on the Billing page after the first month, with usage credits billed at API rates once turned on, so set a monthly limit first"
+    also="$also; after the first deploy, from $pages_dir/set-four-things-by-hand.md#after-the-first-deploy: the host's deploy-failure notification, an uptime monitor and an error tracker; one copy of the data off the host, in a place the agent cannot reach, at least weekly"
+    if [ -z "${hosting:-}" ] || [ "$hosting" = render ]; then
+      also="$also (a Render export or pg_dump: Render Hobby restores only the past 3 days); a restore rehearsal that counts one table's rows before and after; and the bill to expect, about US\$13 a month on Render (a US\$7 web service, a US\$6 Postgres, 5 GB of bandwidth included, then US\$0.15 a GB), read on the Billing page after the first month"
+    else
+      also="$also; a restore rehearsal that counts one table's rows before and after; and the bill to expect from where it runs, read on its Billing page after the first month"
+    fi
+    also="$also, with usage credits billed at API rates once turned on, so set a monthly limit first"
   fi
   echo "$also"
 fi
