@@ -1,8 +1,9 @@
 # How to give the agent its own account
 
 Before this page: [the agent's token](give-the-agent-a-token.md), its
-step 5 included. After it: [the four things by hand](set-four-things-by-hand.md),
-then step 2 of [Run a project](run-a-project.md).
+step 5 included. This page is strongly recommended, not in the way of step 2
+of [Run a project](run-a-project.md). After it:
+[the four things by hand](set-four-things-by-hand.md).
 
 [The agent's token](give-the-agent-a-token.md) stops the agent from changing the checks, but not from
 merging. GitHub decides who may merge by the account, not by the token: your

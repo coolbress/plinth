@@ -4,6 +4,7 @@
 
 ## Contents
 
+0. [The folder](#0-the-folder)
 1. [The host](#1-the-host)
 2. [What to make](#2-what-to-make)
 3. [Follow-ups](#3-follow-ups)
@@ -12,6 +13,65 @@
 6. [The name](#6-the-name)
 7. [Who may see the project](#7-who-may-see-the-project)
 8. [Every answer in one table, before anything is created](#8-every-answer-in-one-table-before-anything-is-created)
+
+## 0. The folder
+
+Read from `new-project.sh --where` before any other question. For `empty` or
+`home`, or when a name argument or `--dir=` is given, or the person said they
+want a new separate project, there is no folder question: go on to the host.
+The table's `Folder` row then says where the project goes, and, when the
+session started in a folder that holds something, that this folder is left
+untouched.
+
+For every other value, ask exactly one question, header `Folder`, before the
+host. Its recommended choice never writes in this folder and never creates a
+repository from it. Inside a repository, name the top folder from `toplevel:`
+when it is not the folder the session started in: the question is about the
+enclosing project, naming the top folder, and a new project never goes
+inside it.
+
+| `folder:` | Question | Choices, recommended first |
+| --- | --- | --- |
+| `files` | "This folder has files but is not a repository. A new project is made separately, and this code is not moved." | New separate project (Recommended) · Put this code on GitHub or GitLab first, then add plinth · Cancel |
+| `git-no-remote` | "This folder is a git repository with no GitHub or GitLab remote." | New separate project (Recommended) · Publish this repository, then add plinth · Cancel |
+| `git-remote <host> <path>` | "This folder is `<path>` on `<host>`, a repository plinth did not make." | Check it and add plinth's files by pull request (Recommended) · New separate project · Cancel |
+| `git-remote-other <host>` | "This folder is a git repository on `<host>`, which plinth does not serve." | New separate project (Recommended) · Cancel |
+| `plinth-made <path> <commit>` | "This project was made by plinth (template `<commit>`)." | Next step in this project (Recommended) · New separate project · Cancel |
+
+What each choice does:
+
+- **New separate project**: the questions go on from the host, as below; the
+  project goes in `~/<name>`, outside this folder, and the table's `Folder`
+  row says this folder is left untouched.
+- **Put this code on GitHub or GitLab first, then add plinth** (`files`):
+  print the command for the person to type, in their own terminal or with
+  `!`, and never run it yourself. On GitHub: `git init`, `git add -A`,
+  `git commit -m "First commit"`, then
+  `gh repo create <name> --private --source=. --push`. On GitLab.com, the
+  same first three, then `glab repo create <name> --private` and
+  `git push -u origin HEAD`. Then `/plinth:floor-check` in this folder.
+- **Publish this repository, then add plinth** (`git-no-remote`): print
+  `gh repo create <name> --private --source=<top folder> --push` (or the
+  two GitLab.com lines above), then `/plinth:floor-check`.
+- **Check it and add plinth's files by pull request** (`git-remote`): print
+  `/plinth:floor-check` for the person to type in this folder.
+- **Next step in this project** (`plinth-made`): print `/plinth:guide` for
+  the person to type in this folder.
+- **Cancel**: nothing is made; say so in one line.
+
+Inside a repository, every hand-off is run from its top folder, the
+`toplevel:` path: `/plinth:floor-check` and `/plinth:guide` read the folder
+they are typed in as the repository's root, and from a subfolder they report
+files missing that the top folder has. When the session started below it,
+print `cd <top folder>` first, written out, and say that the command is
+typed in a session started there.
+
+Every choice but **New separate project** ends the turn with the printed
+command, and runs no preflight and asks nothing more. A hand-off is a
+command the person types: never call the Skill tool for `/plinth:floor-check`
+or `/plinth:guide`, and never run `git init` or `gh repo create` for them.
+In text with no answer (a `claude -p` run with no reply), the folder
+question ends as Cancel, unless the person asked for a new separate project.
 
 ## 1. The host
 
@@ -403,10 +463,14 @@ The questions the groups ask:
   Covenant**: the most used one, version 3.0, written as
   `CODE_OF_CONDUCT.md`; it names where reports of bad behaviour go, so
   its contact is asked next.
-- Header `Folder`: "Where should the local copy go?" with one choice,
+- Header `Folder`: "Where should the local copy go?" with
   **`~/<name>` (Recommended)**, a new folder in your home directory
-  (`--dir=<home>/<name>`, written out); another path is typed into Other
-  and becomes `--dir=<path>`. It must not exist yet, or be empty.
+  (`--dir=<home>/<name>`, written out), and, when `--where` said `empty`,
+  **This folder** (`--dir=<this folder>`, written out); never the home
+  folder itself. Another path is typed into Other and becomes
+  `--dir=<path>`. It must not exist yet, or hold nothing at all: the
+  table's check stops on a folder with anything in it, `.DS_Store`
+  included, and then only `~/<name>` is offered.
 
 A typed answer to `License`, `Reviewer` or `Conduct` that is none of its
 choices is asked again.

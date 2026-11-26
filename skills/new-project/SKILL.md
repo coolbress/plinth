@@ -14,8 +14,22 @@ Do not edit the generated repository in this session.
 
 ## Check first, before any question
 
-Before the first question, and before reading the owner's files, read both
-hosts' readiness. It changes nothing: it asks `gh` and `glab` whether they are
+First read the folder this session started in. It reads only local files,
+with no network and no login:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/new-project.sh --where
+```
+
+It prints one `folder:` line, and `toplevel:` with the repository's top
+folder when it is inside one. What each value asks, and when it asks
+nothing, is [0. The folder](questions.md#0-the-folder) in the questions:
+a folder that already holds a project gets that one question before
+anything else, and only "New separate project" goes on to the host.
+
+Then, only once the folder step goes on to the host (no folder question, or
+**New separate project** chosen), and before reading the owner's files, read both
+hosts' readiness; a hand-off or Cancel never reads it. It changes nothing: it asks `gh` and `glab` whether they are
 installed and logged in, and as whom.
 
 ```bash
@@ -258,5 +272,10 @@ What to do with the output:
   plain words, and
   `/plinth:guide map` shows the whole way on one screen, and
   `/plinth:guide map <step>` one step in depth.
+  When `--where` said anything but `empty` or `home` (the session started
+  inside another folder or project), say first, in one line, where the new
+  project is (its folder, written out) and that this session stays in the
+  old folder: to work on the new project, open a new session there (`cd`
+  into it, then `claude`).
 
 Do not edit the generated repository in this session.
