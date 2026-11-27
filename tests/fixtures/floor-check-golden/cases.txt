@@ -15251,9 +15251,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -15347,9 +15347,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -15443,9 +15443,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -15540,9 +15540,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -15637,9 +15637,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -15734,9 +15734,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -15831,9 +15831,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -15927,9 +15927,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16024,9 +16024,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16121,9 +16121,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16218,9 +16218,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16315,9 +16315,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16412,9 +16412,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16508,9 +16508,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16605,9 +16605,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16701,9 +16701,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16797,9 +16797,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16895,9 +16895,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -16991,9 +16991,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -17087,8 +17087,8 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -17184,9 +17184,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -17280,9 +17280,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required
@@ -17375,9 +17375,9 @@ floor check: root=$WORK/good project=.
   PASS  relative links in 5 markdown files resolve
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
-  PASS  template: the recorded tag is the target tag (v1.51.0)
-  INFO    not verified that v1.51.0 still names f0ed80ea9e18cf833a67997514862a5fc2536290, the commit plinth was tested with (the tag was not found)
-  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.51.0
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found)
+  INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
   INFO  archetype backend: container image, .env.example and JSON logs required

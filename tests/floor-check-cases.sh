@@ -657,14 +657,14 @@ merge_wall "without --merge-ruleset its bypass actor is not let through" "FC-E24
 # they do not fit, never a FAIL. With the merge ruleset standing, only admins
 # merge, so the agent's own account (write) is not a person here.
 collab() { # <login>:<admin|write|bot> ...: the collaborators list
-  local c out=() l r
+  local c rows=() l r
   for c in "$@"; do l="${c%%:*}"; r="${c#*:}"
     case "$r" in
-      admin) out+=("{\"login\":\"$l\",\"type\":\"User\",\"permissions\":{\"admin\":true,\"push\":true}}") ;;
-      write) out+=("{\"login\":\"$l\",\"type\":\"User\",\"permissions\":{\"admin\":false,\"push\":true}}") ;;
-      bot)   out+=("{\"login\":\"$l\",\"type\":\"Bot\",\"permissions\":{\"admin\":true,\"push\":true}}") ;;
+      admin) rows+=("{\"login\":\"$l\",\"type\":\"User\",\"permissions\":{\"admin\":true,\"push\":true}}") ;;
+      write) rows+=("{\"login\":\"$l\",\"type\":\"User\",\"permissions\":{\"admin\":false,\"push\":true}}") ;;
+      bot)   rows+=("{\"login\":\"$l\",\"type\":\"Bot\",\"permissions\":{\"admin\":true,\"push\":true}}") ;;
     esac; done
-  local IFS=,; printf '[%s]' "${out[*]}" > "$mapi/repos/o/r/collaborators?per_page=100.json"
+  local IFS=,; printf '[%s]' "${rows[*]}" > "$mapi/repos/o/r/collaborators?per_page=100.json"
 }
 count() { # <approvals> [owners]: the pull_request rule requires that many, with code owners' review when said
   jq -c --argjson n "$1" --argjson o "$([ "${2:-}" = owners ] && echo true || echo false)" "map(if .type == \"pull_request\" then .parameters.required_approving_review_count = \$n | .parameters.require_code_owner_review = \$o else . end) + [$b_rule]" \
