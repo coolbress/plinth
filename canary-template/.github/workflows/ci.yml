@@ -44,7 +44,7 @@ permissions:
 
 jobs:
   ci:
-    uses: coolbress/plinth/.github/workflows/python-ci.yml@9d0feb70c9d5296f2b559c0de8c3a31a00d8a4c3
+    uses: coolbress/plinth/.github/workflows/python-ci.yml@50a45c30d5a8f0700ac6e6426a8b6c15e96018b7
     with:
       # The Python versions CI tests. CI tests the lowest supported version
       # and one newer version that takes bug fixes. The lowest is
