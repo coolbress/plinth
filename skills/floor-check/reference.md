@@ -18,6 +18,7 @@ when the person asks about one item; the skill's own rules are in
 - [What the door sets beside the wall, and the project's own answers](#what-the-door-sets-beside-the-wall-and-the-projects-own-answers)
 - [A private repository](#a-private-repository)
 - [Template drift](#template-drift)
+- [Reading the checker's text output](#reading-the-checkers-text-output)
 
 ## The machine's items and the merge line
 
@@ -224,7 +225,7 @@ covers only what is listed here.
 | Plinth pins agree | The same `uses:` lines as Action pins, those of `coolbress/plinth/...` at a full commit SHA: two or more SHAs across the files (`ci.yml` and `label.yml` are rendered at one commit; a hand edit moves one) are a WARN naming each file with its SHA, and the INFO under it is the `sed` line that moves each lagging file's plinth references, and nothing else in it, to the SHA the `ci` job calls. The owner, repository and SHA compare in any letter case, as GitHub reads them. One SHA, or none outside the `ci` job, prints nothing, whatever the template state | A plinth `uses:` on a tag or branch (the Action pins WARN, not repeated). A `uses` it cannot read is a SKIP naming the file and line, unless the readable ones already disagree. Not a FAIL: `label / label` is not a required check |
 | Release workflow | For a `cli`, `library`, `backend` or `data-ml` on GitHub, `.github/workflows/release.yml` at the repository root (also with `--project`) as text, comments dropped: present (plinth-template 1.29.0 renders it for `cli` and `library`, 1.30.0 for `backend`, 1.31.0 for `data-ml`); every line of its `on:` block is `push:`, `tags:` or a tag pattern under it, so another event, another filter or a key it cannot read (a quoted one) is a WARN naming that line; no `secrets.<name>` other than `GITHUB_TOKEN`, and no `password:`. For `data-ml`, the files its `ASSETS:` line names: one ending in `.pkl`, `.pickle`, `.joblib` or `.pt`, in any letter case, is a WARN; no such line, or a value that is not one line of plain file names (a folded or literal block such as `>-`, a value continued on a deeper-indented line, a second `ASSETS:` line, an expression, a comment), is a SKIP | Whether PyPI has a publisher registered, whether the `pypi` environment exists or what protects it, whether the image was pushed or who can fetch it, whether the release exists or its files match their `SHA256SUMS`, which files a `data-ml` step uploads other than through `ASSETS`, whether the tag-against-version step is still there, what the jobs do. Missing on an instance rendered before the template release that adds it is a WARN whose INFO names the update. On GitLab, an INFO: the template renders no release workflow there. `web` is not asked |
 | Model card | For a `data-ml`, on either host, `MODEL_CARD.md` in the project directory: present (plinth-template 1.31.0 renders it). Missing is a WARN whose INFO names the update | What the card says, whether its personal-data answer is true or filled in, whether the training run fills its results. Other archetypes are not asked |
-| Render Blueprint | `render.yaml` in the project directory, whenever it is there (#811): for a `web` instance hosted on Render, whether it is there at all is the separate `render.yaml present` item; for any other repository, a JavaScript or TypeScript one included, it is read when present and nothing is said when it is not. Read as block YAML with the standard library: each `type: web` service has a `healthCheckPath` and `autoDeployTrigger: checksPass`, each database names a `plan` other than `free` (Render deletes a free Postgres after 30 days, with no backups), and no `envVars` entry, under a service or an `envVarGroups` group, whose key names a secret (`SECRET`, `PASSWORD`, `TOKEN`, `API_KEY`, `PRIVATE_KEY`, `CREDENTIAL`, `DATABASE_URL`, `..._DSN`) carries a literal `value:`. Each gap is a WARN with one fix line, one per service or database that has it, and never a FAIL. The name match errs toward a WARN: `TOKEN_TTL_SECONDS` with a literal value is one. A file with no web service or no `envVars` says so as an INFO, not a PASS | Dashboard-only settings: Blueprint Auto Sync, health alerts, spend limits. Whether the plan named exists, whether the path answers, a secret under a name the pattern does not match. A file in a form the reader does not read (a flow collection other than `[]` or `{}`, a block scalar, an anchor or alias, a merge key, a nested list, a plain value holding a colon and a space, a backslash escape in double quotes, in a key or a value, a tab in the indentation, resources under `projects` or `ungrouped`) is one SKIP for the whole file. The SKIP names the line number and the form, never what the line holds: `ci / floor-check` publishes it as an annotation, and the line may hold a secret. Railway and Fly files are not read |
+| Render Blueprint | `render.yaml` in the project directory, whenever it is there (#811): for a `web` instance hosted on Render, or a `dashboard` whose answers say `hosting: render`, whether it is there at all is the separate `render.yaml present` item; for any other repository, a JavaScript or TypeScript one included, it is read when present and nothing is said when it is not. Read as block YAML with the standard library: each `type: web` service has a `healthCheckPath` and `autoDeployTrigger: checksPass`, each database names a `plan` other than `free` (Render deletes a free Postgres after 30 days, with no backups), and no `envVars` entry, under a service or an `envVarGroups` group, whose key names a secret (`SECRET`, `PASSWORD`, `TOKEN`, `API_KEY`, `PRIVATE_KEY`, `CREDENTIAL`, `DATABASE_URL`, `..._DSN`) carries a literal `value:`. Each gap is a WARN with one fix line, one per service or database that has it, and never a FAIL. The name match errs toward a WARN: `TOKEN_TTL_SECONDS` with a literal value is one. A file with no web service or no `envVars` says so as an INFO, not a PASS | Dashboard-only settings: Blueprint Auto Sync, health alerts, spend limits. Whether the plan named exists, whether the path answers, a secret under a name the pattern does not match. A file in a form the reader does not read (a flow collection other than `[]` or `{}`, a block scalar, an anchor or alias, a merge key, a nested list, a plain value holding a colon and a space, a backslash escape in double quotes, in a key or a value, a tab in the indentation, resources under `projects` or `ungrouped`) is one SKIP for the whole file. The SKIP names the line number and the form, never what the line holds: `ci / floor-check` publishes it as an annotation, and the line may hold a secret. Railway and Fly files are not read |
 | JSON logs | For a service archetype (`backend`, `data-ml`, `web`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
 
 ## The ci job
@@ -468,3 +469,99 @@ running an updated plugin's `/plinth:floor-check` by hand, or its own
 `ci / floor-check` once its workflow pin is raised (Dependabot proposes
 that) — CI downloads the checker from the plinth commit its own workflow is
 pinned to, so an older pin keeps running the older checker until then.
+
+## Reading the checker's text output
+
+What the lines of a text run (`ci / floor-check`, or `--all`) mean, and how
+the skill read them before it read the JSON.
+
+An item the run could not read is a SKIP line, never a PASS.
+
+Lead with a summary in plain words, for a person who may not know the
+checker's terms yet. It comes before the checker's output and replaces none
+of it:
+
+1. How many items fail and how many were not verified, the two numbers on
+   the checker's last line, which starts `-- N failed, M not verified`, and
+   how many WARN lines there are. With no FAIL, say that no check failed in
+   what was verified, and that the not-verified count is what could not be
+   verified, whether or not the checker read it. When the line goes on
+   `(K cannot be read here)`, say how many of the M the person can clear
+   (M minus K) before the K that stay; never present the M as M problems.
+2. For each FAIL, one plain sentence on what it means for the person: what
+   can happen to their project or their merge while it stays, not what the
+   checker compared. For example, "a pull request can merge without the
+   secret scan running" rather than "required checks dropped".
+3. Which one to fix first, and why: the one that lets a change reach `main`
+   unchecked or reach other people comes before a missing document. With no
+   FAIL, name the WARN to look at first, or say there is none.
+
+Then give the checker's output whole. Do not summarise it, shorten it, or
+drop PASS lines; the user reasons from the text they receive, and a FAIL you
+paraphrased is a FAIL they cannot hand to an agent. The summary above is the
+only paraphrase, and it says what a FAIL means, never that one is fixed.
+
+After the output, list every FAIL and WARN line again as a bulleted list, and
+under each one write one line that fixes it: a command, or a file and what to
+put in it. Nothing else under the item. The user pastes that line to an agent
+as is.
+
+```text
+- FAIL  CHANGELOG.md missing or empty
+  Create CHANGELOG.md in the Keep a Changelog format with an Unreleased section.
+- FAIL  main: required checks dropped: ['ci / secrets']
+  ${CLAUDE_PLUGIN_ROOT}/scripts/with-admin-token.sh ${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-ruleset.sh owner/name 'ci / secrets:15368'
+```
+
+Ruleset fixes need repository administration, so they go through
+`with-admin-token.sh` (spell out the plugin root path); tell the user to run
+that line in a separate terminal window, not with `!`: `!` runs it without a
+terminal, so the token prompt gets nothing. Never run it. The same holds for
+every `gh api -X` call printed under a repository setting (push protection,
+the Actions allowlist, private vulnerability reporting, the Actions token, the
+tag ruleset): relay it as printed, behind `with-admin-token.sh` in a separate
+terminal when the user's login cannot administer the repository.
+
+An INFO naming a product the plan lacks (GitHub Code Security or Secret
+Protection on a private repository) is a fact about the plan: buying it is the
+user's choice, never a step to run or to recommend as a repair.
+
+INFO lines are facts, not defects; leave them where they are. INFO lines
+indented under a FAIL or WARN are the exception: they belong to that finding
+and carry its repair or what the repair needs (a command, a URL, the change it
+brings), so write the fix line under that item from them. SKIP lines are
+what the run could not check (offline, no `--repo`, an API error, a token
+that does not see the item); the summary counts them as `N not verified`.
+After the FAIL and WARN list, name what was not verified in one line, and
+what would verify it (a network, a login, an admin-read token): the SKIPs
+without the mark first, since the person can clear them. Then say in one line
+that the SKIPs ending `[cannot be read here]` cannot be read from this machine
+or repository whatever is changed there, and name what stands in for each
+where its line names it (`ci / secrets` for push protection, `ci / lint`'s
+security rules for CodeQL). Three kinds carry the mark: SSH keys (the
+account's settings say which push), the sandbox while Claude Code does not
+record its state, and a GitHub status a private repository's plan does not
+expose to its administrator (push protection, the CodeQL rule, the CodeQL
+default setup languages). That last kind is marked only when the token is
+shown to read an admin-only setting (the Actions permissions) and the
+security settings still come back empty: GitHub answers a fine-grained token
+without the Administration permission the same way, which is how the agent
+works after the first merge. Without that proof the SKIPs stay plain, with an
+INFO under them saying to run this again with a token that has
+Administration; relay that as a SKIP the person can clear. They stay listed, so the person knows what was not checked; they are counted
+inside M, never as a PASS. An exit code
+of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
+not-verified count says what was not.
+`N/A` lines (a JavaScript or TypeScript repository, above) are not defects
+either: leave them out of the FAIL and WARN list, write no fix under them, and
+in the summary say that plinth has no checks for that language rather than
+that those items pass.
+A third count, `K left to /plinth:floor-check`, appears only in a run with
+`--actions-token` (`ci / floor-check`) and only when K is above 0: INFO
+lines for reads that token cannot make and this skill, run with a login that
+administers the repository, does (push protection, private vulnerability
+reporting, the Actions allowlist, the Actions token settings, the ruleset's bypass actors, the CodeQL default setup languages, the squash commit settings, and
+a private repository's missing CodeQL rule). In that job's summary their
+`not yet confirmed` lines end `; left to /plinth:floor-check` and are not
+annotated; the other `not yet confirmed` lines are. This skill's own run
+never prints the count; without the flag those reads are SKIPs.

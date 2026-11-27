@@ -1227,14 +1227,14 @@ then ok "--sandbox: sandbox.enabled true is an INFO, and the measured macOS line
 # commit its entry pins (#743): `update plinth@plinth` leaves a dependency at
 # its old commit (#714). The files are in the shape Claude Code 2.1.314 writes.
 pin=d1478fcb140db0b93c0c8df17bcfd311844749d0; old=c55ee46073ed923f86ce59a5eb3b6d895095d1b7
-tpin=ccbc15639c97057cbfcf32ecebc38ef716e4bb37
+tpin=30202c767cfaf325212b3921ab484f83adaec850
 pc="$work/pconf"; pm="$work/pmarket"
 plugins_fixture() { # <mattpocock-skills commit> [extra JSON entries]: a fresh config and marketplace copy
   rm -rf "$pc" "$pm"; mkdir -p "$pc/plugins" "$pm/.claude-plugin"
-  printf '{"name":"plinth","plugins":[{"name":"plinth","source":"./"},{"name":"mattpocock-skills","source":{"source":"git-subdir","url":"u","path":"skills","sha":"%s"}},{"name":"taste-skill","source":{"source":"git-subdir","url":"u","path":"skills","sha":"%s"}},{"name":"last30days","source":{"source":"url","url":"u","ref":"main"}}]}\n' "$pin" "$tpin" > "$pm/.claude-plugin/marketplace.json"
+  printf '{"name":"plinth","plugins":[{"name":"plinth","source":"./"},{"name":"mattpocock-skills","source":{"source":"git-subdir","url":"u","path":"skills","sha":"%s"}},{"name":"frontend-design","source":{"source":"git-subdir","url":"u","path":"plugins/frontend-design/skills","sha":"%s"}},{"name":"last30days","source":{"source":"url","url":"u","ref":"main"}}]}\n' "$pin" "$tpin" > "$pm/.claude-plugin/marketplace.json"
   printf '{"name":"plinth","version":"2.19.1"}\n' > "$pm/.claude-plugin/plugin.json"
   printf '{"plinth":{"source":{"source":"git","url":"u"},"installLocation":"%s"}}\n' "$pm" > "$pc/plugins/known_marketplaces.json"
-  printf '{"version":2,"plugins":{"plinth@plinth":[{"scope":"user","version":"2.19.1","gitCommitSha":"%040d"}],"mattpocock-skills@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}],"taste-skill@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}]%s}}\n' 0 "$1" "$tpin" "${2:-}" > "$pc/plugins/installed_plugins.json"
+  printf '{"version":2,"plugins":{"plinth@plinth":[{"scope":"user","version":"2.19.1","gitCommitSha":"%040d"}],"mattpocock-skills@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}],"frontend-design@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}]%s}}\n' 0 "$1" "$tpin" "${2:-}" > "$pc/plugins/installed_plugins.json"
 }
 plugins_run() { out="$(CLAUDE_CONFIG_DIR="$pc" python3 "$checker" --root "$good" --no-network --plugins 2>&1)"; rc=$?; }
 behind_line='WARN  mattpocock-skills@plinth (user) is behind its pin: installed commit c55ee46073ed, the plinth marketplace pins d1478fcb140d'
@@ -1253,7 +1253,7 @@ for have in "${pin:0:12}0000000000000000000000000000" "${pin:0:12}" "$(tr a-f A-
 done
 plugins_fixture "$pin"; plugins_run
 if [ "$rc" = 0 ] && ! grep -qE '(WARN|SKIP|FAIL).*@plinth' <<<"$out" && ! grep -q 'plugins not checked' <<<"$out" \
-   && grep -qF 'at the plinth marketplace'"'"'s pin: mattpocock-skills@plinth (user), plinth@plinth (user), taste-skill@plinth (user)' <<<"$out"
+   && grep -qF 'at the plinth marketplace'"'"'s pin: frontend-design@plinth (user), mattpocock-skills@plinth (user), plinth@plinth (user)' <<<"$out"
 then ok "--plugins: every plugin at its pin reports nothing to do"
 else bad "--plugins up to date"; grep -E 'plugin|@plinth' <<<"$out" | sed 's/^/        /'; fi
 # A project or local install is updated with its scope, from its project folder:
@@ -1284,16 +1284,16 @@ is "$out" FC-G02 warn \
 plugins_fixture "$pin" ',"codex@openai-codex":[{"scope":"user","gitCommitSha":"'"$pin"'"}],"last30days@plinth":[{"scope":"project","projectPath":"/p","gitCommitSha":"'"$pin"'"}],"gone@plinth":[{"scope":"user","gitCommitSha":"'"$pin"'"}]'
 python3 - "$pc/plugins/installed_plugins.json" <<'PY'
 import json, sys
-p = sys.argv[1]; d = json.load(open(p)); del d["plugins"]["taste-skill@plinth"][0]["gitCommitSha"]; json.dump(d, open(p, "w"))
+p = sys.argv[1]; d = json.load(open(p)); del d["plugins"]["frontend-design@plinth"][0]["gitCommitSha"]; json.dump(d, open(p, "w"))
 PY
 plugins_run
 for want in 'INFO  plugins from another marketplace, outside what plinth compares: codex@openai-codex' \
             'SKIP  last30days@plinth (project in /p) not checked: its entry pins no full commit' \
-            'SKIP  taste-skill@plinth (user) not checked: its install records no full commit' \
+            'SKIP  frontend-design@plinth (user) not checked: its install records no full commit' \
             'SKIP  gone@plinth (user) not checked: the plinth marketplace has no entry for it'; do
   grep -qF -- "$want" <<<"$out" || { bad "--plugins: expected '$want'"; grep -E 'plugin|@' <<<"$out" | sed 's/^/        /'; }
 done
-grep -qE 'at the plinth.*(codex|last30days|taste-skill|gone)' <<<"$out" && bad "--plugins: a plugin not compared was reported at the pin" \
+grep -qE 'at the plinth.*(codex|last30days|frontend-design|gone)' <<<"$out" && bad "--plugins: a plugin not compared was reported at the pin" \
   || ok "--plugins: another marketplace, no pinned commit, no installed commit and no entry are not checked, never at the pin"
 # Another marketplace's plugin is outside what floor-check compares, not a read
 # that failed (#1002): an INFO, out of the not-verified count.
@@ -1819,6 +1819,23 @@ rm -rf "$web.empty"; cp -R "$web" "$web.empty"; sed -i.bak 's/^archetype: web$/a
 git -C "$web.empty" add -A; out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"
 if is "$out" FC-C03 info && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "another archetype is not asked for render.yaml"
 else bad "a cli instance was asked for render.yaml"; fi
+# A dashboard (#1069): plain, no image, and asked for render.yaml only when
+# its answers say hosting: render; on its own computer, nothing is asked.
+dash="$work/dash"; rm -rf "$dash"; cp -R "$web.empty" "$dash"
+sed -i.bak 's/^archetype: cli$/archetype: dashboard/' "$dash/.copier-answers.yml"; rm "$dash/.copier-answers.yml.bak"
+printf 'hosting: local\n' >> "$dash/.copier-answers.yml"; git -C "$dash" add -A
+out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
+if is "$out" FC-C03 info && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "a dashboard on its own computer is not asked for render.yaml"
+else bad "a dashboard with hosting: local"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
+sed -i.bak 's/^hosting: local$/hosting: render/' "$dash/.copier-answers.yml"; rm "$dash/.copier-answers.yml.bak"; git -C "$dash" add -A
+out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
+if is "$out" FC-C12 fail && is "$out" FC-C12 info && grep -q 'render.yaml missing: a dashboard with hosting: render deploys from it' <<<"$out" \
+   && grep -q -- '-- 1 failed' <<<"$out"; then ok "a dashboard on Render without render.yaml: one FAIL, in a dashboard's words, with its fix"
+else bad "a dashboard on Render without render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
+printf 'services: []\n' > "$dash/render.yaml"; git -C "$dash" add -A
+out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
+if is "$out" FC-C12 pass && grep -q -- '-- 0 failed' <<<"$out"; then ok "a dashboard on Render with render.yaml passes, and no image is asked"
+else bad "a dashboard on Render with render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
 # What render.yaml says (#811), read when the file is there: each web
 # service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
 # other than free, and secret-named envVars set without a literal value. Each
@@ -2343,6 +2360,10 @@ for arch in backend data-ml; do
   then ok "--print-ruleset for $arch is the wall plus image, from one app (check-ruleset.sh passes with image)"
   else bad "--print-ruleset for $arch fails the wall's invariants:"; "$root/scripts/check-ruleset.sh" "$work/$arch-ruleset.json" image | grep FAIL -A2 | sed 's/^/        /'; fi
 done
+# A dashboard ships no container (#1069): its wall is ruleset.json's, no image.
+python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype dashboard > "$work/dashboard-ruleset.json"
+if cmp -s <(jq -S . "$work/dashboard-ruleset.json") <(jq -S . "$root/ruleset.json")
+then ok "--print-ruleset for dashboard is ruleset.json, unchanged: no image check"; else bad "--print-ruleset for dashboard changed the wall"; fi
 python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype web > "$work/web-ruleset.json"
 if "$root/scripts/check-ruleset.sh" "$work/web-ruleset.json" "image,ci / migrations,ci / deploy-check" >/dev/null 2>&1
 then ok "--print-ruleset for web is the wall plus image and the two web checks, from one app (#615)"
@@ -2654,6 +2675,7 @@ move "$mcopy" "$pinned_api" --move-archetype library
 if [ "$rc" = 0 ] && ! grep -qE "^check-(add|drop): " "$work/print-err"; then ok "cli to library: no required check changes"
 else bad "cli to library (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
 for why in "backend|the recorded archetype is already backend" "web|web is not moved to or from here" \
+           "dashboard|dashboard is not moved to or from here: its hosting answer (local or render)" \
            "cli --x|'cli --x' is not an archetype's name" "CLI|'CLI' is not an archetype's name"; do
   move "$good" "$pinned_api" --move-archetype "${why%%|*}"
   if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: ${why#*|}" "$work/print-err"; then ok "--move-archetype ${why%%|*}: no line, exit 1, says why"
@@ -2674,6 +2696,10 @@ wcopy="$work/move-from-web"; rm -rf "$wcopy"; cp -R "$good" "$wcopy"; sed -i.bak
 move "$wcopy" "$pinned_api" --move-archetype cli
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: web is not moved to or from here" "$work/print-err"; then ok "--move-archetype from web: no line"
 else bad "--move-archetype from web (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
+dcopy="$work/move-from-dashboard"; rm -rf "$dcopy"; cp -R "$good" "$dcopy"; sed -i.bak 's/^archetype: backend/archetype: dashboard/' "$dcopy/.copier-answers.yml" && rm "$dcopy/.copier-answers.yml.bak"
+move "$dcopy" "$pinned_api" --move-archetype cli
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: dashboard is not moved to or from here" "$work/print-err"; then ok "--move-archetype from dashboard: no line (#1069)"
+else bad "--move-archetype from dashboard (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
 move "$pcopy" "$pinned_api" --move-archetype cli
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: the recorded tag v1.0.0 is not $target_ref, the tag plinth targets; update the template first (/plinth:template-update), then move" "$work/print-err"
 then ok "--move-archetype behind the target tag: no line, update first"

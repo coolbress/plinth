@@ -232,6 +232,15 @@ if [ "${nj:-0}" -gt 100 ]; then
   if ! grep -qE '(^|, )[a-z_]+ 0(,|$)' <<<"$h"; then ok "documents with an unknown, with a review, and with checks not evaluated are among them ($h)"
   else bad "no document has one of an unknown, a review, or a not-evaluated list: the schema's rules for it were not exercised ($h)"; fi
 else bad "only ${nj:-0} runs made again with --format json: the recorder did not run as it should"; fi
+# A --verdicts file that cannot be written ends the run: stdout is still one
+# document, the crashed one, not a whole run followed by it.
+mkdir -p "$work/bare"
+"$py" "$checker" --root "$work/bare" --no-network --format json --verdicts "$work/no-such-dir/verdicts" \
+  > "$work/crash.json" 2>/dev/null
+c="$("$py" -c 'import json, sys; d = json.load(open(sys.argv[1])); print((d.get("crashed") or {}).get("error"), d.get("exit"))' "$work/crash.json" 2>&1)"
+if [ "$c" = "FileNotFoundError 1" ] && "$py" "$root/tests/lib/json-schema-check.py" "$root/scripts/floor-check.schema.json" "$work/crash.json" >/dev/null
+then ok "a --verdicts file that cannot be written: one valid document, crashed, exit 1"
+else bad "a --verdicts file that cannot be written does not print one crashed document" "$c"; fi
 
 # The two pipelines that run the checker in consumers' CI do not move with
 # this work: their floor-check jobs are held to the copy beside the golden.

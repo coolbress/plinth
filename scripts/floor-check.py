@@ -547,9 +547,11 @@ def _project() -> tuple[dict, ...]:
                         "form": "{workflow}: ASSETS is not a one-line list of file names this checker reads "
                                 "(ASSETS: {assets}); uploaded files not verified"}),
         check("FC-C12", "render.yaml present", states=("pass", "fail", "info"), handoff="agent", docs=PROJECT_DOCS,
-              archetypes=("web",), fix="git restore --source=origin/main -- render.yaml",
+              archetypes=("web", "dashboard"), fix="git restore --source=origin/main -- render.yaml",
               messages={"good": "render.yaml present",
                         "bad": "render.yaml missing: the web archetype deploys from it, after the checks pass",
+                        "dashboard": "render.yaml missing: a dashboard with hosting: render deploys from it, "
+                                     "after the checks pass",
                         "restore": "  restore it from the default branch: git restore --source=origin/main -- render.yaml"}),
         check("FC-C13", "render.yaml is read", states=("unknown",), handoff="person", docs=PROJECT_DOCS,
               fix="write render.yaml in the block form plinth-template's is in",
@@ -1403,7 +1405,7 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
     assert (state == "unknown") == (reason is not None), (cid, state, reason)
     assert (state == "review") == (reader is not None), (cid, state, reader)
     msg = e["messages"][msg_key].format(**(values or {}))
-    r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader}
+    r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader, "key": msg_key}
     results.append(r)
     verdicts.extend(verdict_lines(r))
     line = render_text(r)
@@ -1488,7 +1490,8 @@ def run_record(rs: list[dict], run: dict | None = None, crashed: dict | None = N
         e = REGISTRY[r["id"]]
         results.append({"id": r["id"], "state": r["state"], "shown": SHOWN[r["state"]], "message": r["msg"],
                         "reason": r["reason"], "cannot_be_read_here": r["reason"] == HERE, "reader": r["reader"],
-                        "area": AREAS[e["area"]], "name": e["name"], "handoff": e["handoff"],
+                        "key": r["key"], "area": AREAS[e["area"]], "name": e["name"], "handoff": e["handoff"],
+                        "fix": e["fix"], "keepable": e["keepable"],
                         "lifecycle": e["lifecycle"], "view": e["view"], "ci_visible": e["ci_visible"]})
     return {"schema": SCHEMA_ID, **(run or {}), "results": results,
             "not_evaluated": [{"id": i, "name": e["name"], "area": AREAS[e["area"]]}
@@ -3633,6 +3636,11 @@ def print_move_command(root: Path, new: str, network: bool = True, host: str | N
     if "web" in (old, new):
         return no("web is not moved to or from here: its hosting answers, its two checks and its tag ruleset "
                   "change with it, and that move was not measured; a move into web will also need custom_user_model=true (#1092)")
+    # `dashboard` likewise (#1069): its `hosting` answer (local or render)
+    # and the tag ruleset change with it, and that move was not measured.
+    if "dashboard" in (old, new):
+        return no("dashboard is not moved to or from here: its hosting answer (local or render) and the tag ruleset "
+                  "change with it, and that move was not measured")
     if old == new:
         return no(f"the recorded archetype is already {new}")
     d = template_drift(root, host, network, move=True)
@@ -3815,7 +3823,10 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
         verdict("FC-C02", (project / "uv.lock").is_file())
 
     answers = copier_answers(project) or {}
-    on_render = archetype == "web" and answers.get("hosting") != "elsewhere"
+    # A dashboard is on Render only when its answers say so: its default is
+    # its own computer (plinth-template's `hosting: local`, #1069).
+    on_render = (archetype == "web" and answers.get("hosting") != "elsewhere") or (
+        archetype == "dashboard" and answers.get("hosting") == "render")
     # A render.yaml outside a Render web instance (another archetype, no
     # template, a hand-written one) is still what Render deploys from (#811):
     # read it when it is there, and say nothing when it is not.
@@ -3826,6 +3837,8 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
         return
     if archetype not in CONDITIONAL_ARCHETYPES:
         emit("FC-C03", "info", "plain", {"archetype": archetype})
+        if on_render:
+            check_render_yaml(project, archetype)
         if archetype in PACKAGE_ARCHETYPES:
             # A repository-level file: GitHub reads workflows at the root, not
             # under --project, and the host is the one the run resolved,
@@ -3837,7 +3850,7 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
     check_env_example(project)
     check_json_logs(project)
     if on_render:
-        check_render_yaml(project)
+        check_render_yaml(project, archetype)
     elif archetype == "web":
         check_hosted_elsewhere(answers.get("hosting_elsewhere"))
     if archetype in RELEASES:
@@ -3927,12 +3940,18 @@ def check_release_workflow(root: Path, host: str, archetype: str) -> None:
             emit("FC-C11", "pass", "good", {"workflow": RELEASE_WORKFLOW, "assets": m.group(2).strip()})
 
 
-def check_render_yaml(project: Path) -> None:
+def check_render_yaml(project: Path, archetype: str = "web") -> None:
     """The web archetype's Render Blueprint (plinth-template v1.20.0): the
     deploy that waits for the checks (#615). Asked of a `hosting: render`
     instance and of one with no hosting answer, rendered before the question
-    existed (plinth-template#128)."""
-    if not verdict("FC-C12", (project / "render.yaml").is_file()):
+    existed (plinth-template#128); and of a dashboard whose answers say
+    `hosting: render` (#1069)."""
+    present = (project / "render.yaml").is_file()
+    if archetype == "dashboard" and not present:
+        emit("FC-C12", "fail", "dashboard")
+        emit("FC-C12", "info", "restore")
+        return
+    if not verdict("FC-C12", present):
         emit("FC-C12", "info", "restore")
         return
     check_render_blueprint(project / "render.yaml")
@@ -4956,10 +4975,11 @@ def check_actions_allowlist(root: Path, repo: str, network: bool, actions_token:
 
 # The archetypes that release from a `v*` tag, and get the door's tag
 # ruleset (ruleset-tags.json, #772): every one but `web`, which deploys on
-# green. The exception is named, not the list: the template owns the
+# green, and `dashboard`, which runs where it is started or deploys on green
+# (#1069). The exception is named, not the list: the template owns the
 # archetypes (tests/archetype-single-source.sh). `*-v*` is a uv workspace
 # member's own tag, `<prefix>-v<version>` (#931), whatever its prefix.
-TAG_NOT_RELEASING = ("web",)
+TAG_NOT_RELEASING = ("web", "dashboard")
 TAG_RULESET = {"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active",
                "bypass_actors": [],
                "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}},
@@ -6384,11 +6404,15 @@ def main() -> int:
         check_database_urls(root)
 
     if out_format == "json":
+        # The verdicts file first: when it cannot be written, the one
+        # document printed is the crashed one, not a whole run and then it.
+        if a.verdicts:
+            Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
         print_json(results)
     else:
         print(render_summary(results))
-    if a.verdicts:
-        Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
+        if a.verdicts:
+            Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
     return 1 if any(r["state"] == "fail" for r in results) else 0
 
 

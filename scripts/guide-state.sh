@@ -200,7 +200,15 @@ release_said() {
     else row "A merged change to put out" | sed -n 3p | grep -oE 'plinth does not deploy a `web` app that runs anywhere else' || printf '%s\n' "$next"; fi
     return
   fi
-  items="${next#*; }"; lead="${items%%, \`*}"
+  # A dashboard (#1069): the cell's clause for where it runs.
+  if [ "$archetype" = dashboard ]; then
+    if [ "${hosting:-}" = render ]; then
+      if grep -qF 'so does a `dashboard` on Render' <<<"$next"; then printf '%s\n' 'A `dashboard` on Render goes out by itself once `main` is green'
+      else printf '%s\n' "$next"; fi
+    else grep -oE 'a `dashboard` on the person.s computer is not put out' <<<"$next" || printf '%s\n' "$next"; fi
+    return
+  fi
+  items="${next##*; }"; lead="${items%%, \`*}"
   mine="$(awk -v a="\`$archetype\`" '{ n = split($0, p, /, `/); for (i = 2; i <= n; i++) if (index("`" p[i], a)) { print "`" p[i]; exit } }' <<<"$items")"
   if [ -n "$archetype" ] && [ -n "$mine" ]; then printf '%s, %s\n' "$lead" "$mine"; else printf '%s\n' "$next"; fi
 }
@@ -377,6 +385,7 @@ archetype="$(answer archetype)"; hosting="$(answer hosting)"; place="$(answer ho
 made=yes; echo "made by plinth: yes, template $(answer _commit)"
 echo "archetype: ${archetype:-not recorded}"
 [ "$archetype" = web ] && echo "hosting: ${hosting:-render (no answer recorded)}${place:+ ($place)}"
+[ "$archetype" = dashboard ] && echo "hosting: ${hosting:-local (no answer recorded)}"
 
 # behind [--no-network]: the template tag against the one this plinth targets,
 # the plinth pin against plinth's latest release, as floor-check reads them.
@@ -706,7 +715,7 @@ if [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; then
   reach="$(admin_reach in_repo_gh "$repo" "?" "?")"
 fi
 release_due=""; release_line=""
-if [ "$archetype" != web ]; then
+if [ "$archetype" != web ] && [ "$archetype" != dashboard ]; then
   if [ -z "$history_ok" ]; then
     echo "release due: not read ($(tail -1 <<<"$history" | tr '\t' ' '))"
   else

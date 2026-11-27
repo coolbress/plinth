@@ -267,6 +267,9 @@ put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false S
 put "$d/issues.json" "$(issue 4 'Ask the user for their name' '')" "$(issue 5 'Show monthly totals' ready-for-agent)"
 expect "an issue open: the ready-for-agent one, not the lowest number" "$d" "A ticket ready (step 4)" "/implement #5" "before: /clear"
 grep -q "hosting: render" <<<"$(MOCK_DIR="$d" "$script" "$d")" && ok "a web project says where it runs" || bad "web: no hosting line"
+# A dashboard says where it runs too (#1069); with no answer, its default.
+dshw="$(repo dash-where "archetype: dashboard")"
+grep -qx "hosting: local (no answer recorded)" <<<"$(MOCK_DIR="$dshw" "$script" "$dshw")" && ok "a dashboard says where it runs" || bad "dashboard: no hosting line"
 # /retro after a person's merge (#1081): the newest merge a person's, within
 # the past day, and the route prints before: /clear. The fixtures' merges are
 # from 2026-10, so the case above is the one without a recent merge.
@@ -1385,7 +1388,7 @@ out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
 # The tool cell the join makes, held in its words, not by the join itself:
 # Tool, plinth piece, then "also:" and "class:".
 out="$("$script" "$work/plain" map 4 2>&1)"
-grep -qF '  tool: `/clear`, then `/implement #N`: one ticket per session, test first; `/design-taste-frontend`: a page a person will look at; the project'"'"'s `verify` skill, its check before each commit, which takes the place of the bundled `/verify` (that one runs the app, as `/run` does); also: `/simplify` (built in): cleanup of the changed code; class: built in, then installed; installed' <<<"$out" &&
+grep -qF '  tool: `/clear`, then `/implement #N`: one ticket per session, test first; `/frontend-design`: a page a person will look at; the project'"'"'s `verify` skill, its check before each commit, which takes the place of the bundled `/verify` (that one runs the app, as `/run` does); also: `/simplify` (built in): cleanup of the changed code; class: built in, then installed; installed' <<<"$out" &&
   ok "the tool cell: Tool, plinth piece, also: and class:, in that order" || bad "the tool cell: $(grep '^  tool: ' <<<"$out")"
 cp "$root/skills/guide/steps.md" "$work/plugin/skills/guide/steps.md"
 orphans="$(awk '/^## Steps/{on=1; next} on && /^\| /' "$root/skills/guide/steps.md" | awk -F ' \\| ' '{ c = $1; sub(/^\| /, "", c) } c != "Where you are" && c !~ /^---/ { print c }' |
@@ -1737,6 +1740,9 @@ state "release not due: no tag and nothing merged" "$d" "release due: no: no tag
 d="$(repo release-web 'archetype: web')"
 cp "$work/release-feat/merged.json" "$work/release-feat/history.json" "$d/"
 state "a web app: no release signal" "$d" "!release due" "command: /grilling"
+d="$(repo release-dash 'archetype: dashboard')"
+cp "$work/release-feat/merged.json" "$work/release-feat/history.json" "$d/"
+state "a dashboard: no release signal, it releases nothing (#1069)" "$d" "!release due" "command: /grilling"
 # Past the 100 merged pull requests read, with the tag older than all of them.
 d="$(repo release-cut)"
 many=(); for i in $(seq 1 100); do many+=("$(pr "$i" "feat: change $i" false SUCCESS)"); done
@@ -2077,6 +2083,12 @@ has "map: a web app hosted elsewhere: the table's words that plinth does not dep
 printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: web\nhosting: render\n' > "$d5/.copier-answers.yml"
 out="$(MOCK_DIR="$d5" "$script" "$d5" map 2>&1)"
 has "map: a web app on Render: it goes out by itself" "$out" "      A merged change to put out: A \`web\` app on Render goes out by itself"
+printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: dashboard\nhosting: render\n' > "$d5/.copier-answers.yml"
+out="$(MOCK_DIR="$d5" "$script" "$d5" map 2>&1)"
+has "map: a dashboard on Render: it goes out by itself too" "$out" "      A merged change to put out: A \`dashboard\` on Render goes out by itself once \`main\` is green"
+printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: dashboard\nhosting: local\n' > "$d5/.copier-answers.yml"
+out="$(MOCK_DIR="$d5" "$script" "$d5" map 2>&1)"
+has "map: a dashboard on its computer: it is not put out" "$out" "      A merged change to put out: a \`dashboard\` on the person's computer is not put out"
 printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' > "$d/.copier-answers.yml"
 out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
 has "map: step 9 needs attention when the template is behind" "$out" "  ✗ needs attention 9 Between pieces of work: "
