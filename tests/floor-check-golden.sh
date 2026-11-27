@@ -172,6 +172,67 @@ if [ -z "$stray" ]; then ok "no FC-UNASSIGNED left, and nothing prints a verdict
 else bad "a verdict printed without an id, or FC-UNASSIGNED, in scripts/floor-check.py" "$stray"; fi
 fi
 
+# --format json (#1105): each recorded run, made again with it, prints one
+# document that scripts/floor-check.schema.json validates, holding the same
+# ids and states in the same order as the text run emitted, its counts and
+# exit code those of the text run.
+mkdir -p "$work/json"
+"$py" - "$work/records" "$work/json" > "$work/json.txt" <<'PY'
+import json, sys
+from pathlib import Path
+records, out = Path(sys.argv[1]), Path(sys.argv[2])
+n = usage = 0
+seen = {"unknown": 0, "review": 0, "not_evaluated": 0}
+for f in sorted(records.glob("*.json")):
+    r = json.loads(f.read_text(encoding="utf-8"))
+    if r.get("json") is None:
+        continue
+    args = " ".join(r["args"])
+    # A usage error (exit 2, nothing printed) is one with --format json too: no document.
+    if r["exit"] == 2 and not r["stdout"]:
+        if r["json"]["exit"] != 2 or r["json"]["stdout"]:
+            print(f"differs: {args}: a usage error as text, exit {r['json']['exit']} with --format json")
+        usage += 1
+        continue
+    n += 1
+    (out / f.name).write_text(r["json"]["stdout"], encoding="utf-8")
+    try:
+        doc = json.loads(r["json"]["stdout"])
+    except ValueError:
+        continue   # the validator names it
+    emitted = [tuple(line.split("\t", 1)[0].split(" ", 1)) for line in r["emitted"]
+               if not line.startswith("crashed ")]
+    got = [(x.get("id"), x.get("state")) for x in doc.get("results", [])]
+    for s in ("unknown", "review"):
+        seen[s] += any(x.get("state") == s for x in doc.get("results", []))
+    seen["not_evaluated"] += bool(doc.get("not_evaluated"))
+    if got != emitted:
+        print(f"differs: {args}: the text run emitted {len(emitted)} results, the JSON holds {len(got)}"
+              + next((f"; first difference at {i}: {a} against {b}" for i, (a, b) in enumerate(zip(emitted, got)) if a != b), ""))
+    if r["json"]["exit"] != r["exit"] or doc.get("exit") != r["exit"]:
+        print(f"differs: {args}: exit {r['exit']} as text, {r['json']['exit']} with --format json, {doc.get('exit')} in the document")
+    counts = {s: sum(x == s for _, x in emitted) for s in {x for _, x in emitted}}
+    if any(doc.get("summary", {}).get(s) != c for s, c in counts.items()):
+        print(f"differs: {args}: the summary's counts are not the results'")
+print(f"documents {n}")
+print(f"usage {usage}")
+print("holding " + ", ".join(f"{k} {v}" for k, v in seen.items()))
+PY
+nj="$(sed -n 's/^documents //p' "$work/json.txt")"
+if [ "${nj:-0}" -gt 100 ]; then
+  if v="$("$py" "$root/tests/lib/json-schema-check.py" "$root/scripts/floor-check.schema.json" "$work/json"/*.json)"
+  then ok "$nj runs again with --format json: every document is valid against scripts/floor-check.schema.json ($(sed -n 's/^usage //p' "$work/json.txt") usage errors print none, as without it)"
+  else bad "a --format json document is not valid against scripts/floor-check.schema.json" "$(head -20 <<<"$v")"; fi
+  d="$(grep '^differs: ' "$work/json.txt")"
+  if [ -z "$d" ]; then ok "each document holds the text run's ids and states in order, its counts and its exit code"
+  else bad "a --format json document says another run than the text" "$(head -20 <<<"$d")"; fi
+  # The schema's rules for an unknown's reason and a review's reader hold
+  # nothing unless some document has one.
+  h="$(sed -n 's/^holding //p' "$work/json.txt")"
+  if ! grep -qE '(^|, )[a-z_]+ 0(,|$)' <<<"$h"; then ok "documents with an unknown, with a review, and with checks not evaluated are among them ($h)"
+  else bad "no document has one of an unknown, a review, or a not-evaluated list: the schema's rules for it were not exercised ($h)"; fi
+else bad "only ${nj:-0} runs made again with --format json: the recorder did not run as it should"; fi
+
 # The two pipelines that run the checker in consumers' CI do not move with
 # this work: their floor-check jobs are held to the copy beside the golden.
 "$py" - "$root" "$work" <<'PY'

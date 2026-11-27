@@ -17,11 +17,10 @@ bad() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf 
 fixture() {
   local d="$tmp/$3"
   mkdir -p "$d/tests"
-  # one, and the skills skill-size.sh lists exceptions for, which must exist
-  for s in one floor-check; do
-    mkdir -p "$d/skills/$s"
-    printf -- '---\nname: %s\ndescription: x\n---\nbody\n' "$s" > "$d/skills/$s/SKILL.md"
-  done
+  # one small skill (skill-size.sh lists no exception today; one it listed
+  # would have to exist here too)
+  mkdir -p "$d/skills/one"
+  printf -- '---\nname: one\ndescription: x\n---\nbody\n' > "$d/skills/one/SKILL.md"
   cp "$root/tests/size_caps.py" "$d/tests/size_caps.py"
   if [ -n "$1" ]; then
     python3 - "$d/AGENTS.md" "$1" "$2" <<'PY'
@@ -62,6 +61,25 @@ expect fail "a cap set twice (a raise by an added line): not read" "$d" "AGENTS_
 d="$(fixture 50 2000 skill-over)"
 python3 -c 'import sys; open(sys.argv[1], "w").write("---\nname: one\n---\n" + "x\n" * 501)' "$d/skills/one/SKILL.md"
 expect fail "a skill over 500 lines still fails (the skill caps as they were)" "$d" "the limits are 500 lines and 20000 bytes"
+
+# The arsenal's own caps (#1086): 12,000 bytes passes, one byte more fails,
+# and so does a 251st line; another skill of that size still passes.
+arsenal_of() { # <dir> <lines> <bytes>: skills/arsenal/SKILL.md of that size
+  mkdir -p "$1/skills/arsenal"
+  python3 -c 'import sys
+path, lines, size = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+body = "---\nname: arsenal\n---\n" + "x\n" * (lines - 4)
+open(path, "w").write(body + "y" * (size - len(body) - 1) + "\n")' "$1/skills/arsenal/SKILL.md" "$2" "$3"
+}
+d="$(fixture 50 2000 arsenal-at)"; arsenal_of "$d" 250 12000
+expect pass "the arsenal at its caps (250 lines, 12,000 bytes)" "$d" "skills/arsenal/SKILL.md: 250 lines, 12000 bytes"
+d="$(fixture 50 2000 arsenal-bytes)"; arsenal_of "$d" 100 12001
+expect fail "the arsenal one byte over (12,001)" "$d" "the limits are 250 lines and 12000 bytes"
+d="$(fixture 50 2000 arsenal-lines)"; arsenal_of "$d" 251 9000
+expect fail "the arsenal one line over (251)" "$d" "the limits are 250 lines and 12000 bytes"
+d="$(fixture 50 2000 other-size)"
+python3 -c 'import sys; open(sys.argv[1], "w").write("---\nname: one\n---\n" + "x\n" * 300 + "y" * 15000 + "\n")' "$d/skills/one/SKILL.md"
+expect pass "another skill of 300 lines and 15,000 bytes: the arsenal's caps are its own" "$d" "skills/one/SKILL.md: 304 lines"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

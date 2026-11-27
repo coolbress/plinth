@@ -46,7 +46,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 - `/plinth:guide` is a user-only skill that names the next command; `/plinth:arsenal` stays the model-invocable catalog, and the guide reads the arsenal's table instead of keeping its own. 2026-10-28, #710
 - The plain "what next" question goes to `/plinth:guide`. 2026-11-14, #920
-- The arsenal's "which tool now" row points to `/plinth:guide` alone. 2026-11-24, #1086 (decided; not built yet: #1086)
+- The arsenal's "which tool now" row points to `/plinth:guide` alone. 2026-11-24, #1086
 - The answer opens with the next step, then open items and what is done so far (at most five record titles, verbatim); fixed status words, no progress bar. 2026-11-24, #1076 (decided; not built yet: #1076)
 - A step's tools are shown in depth only before the first merge (`mode: full`); this partly reverses #908. 2026-11-24, #1076 (decided; not built yet: #1076)
 - `guide map` is one screen with one step in depth through `map <step>`, and off-by-default features have their own `features` view; this reverses #908 for `map`. 2026-11-24, #1087 (decided; not built yet: #1087)
@@ -57,7 +57,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - The start-of-project lines on the agent's reach are guidance, not gates. 2026-10-06, #412
 - Paid services are never in the default set; error tracking, uptime and previews are listed with their free tiers. 2026-10-28, #702
 - The arsenal says not to use `/ship` in a plinth project until a trial shows it keeps the pull-request rules. 2026-11-24, #1085 (decided; not built yet: #1085)
-- The arsenal's "Not used with plinth" line lists only a tool an agent reaches without installing anything (a built-in, or a skill plinth installs) whose use breaks a plinth rule, with its class and the rule; tools that need installing are not listed. 2026-11-26, #1086 (decided; not built yet: #1086)
+- The arsenal's "Not used with plinth" line lists only a tool an agent reaches without installing anything (a built-in, or a skill plinth installs) whose use breaks a plinth rule, with its class and the rule; tools that need installing are not listed. 2026-11-26, #1086
 
 ## floor-check and records
 
@@ -187,7 +187,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 ## Agents and safety
 
-- The agent never sees the GitHub token: settings deny `gh auth token` and reading gh's config. 2026-09-04, coolbress/plinth-template#5
+- Settings deny `gh auth token` and reading gh's config, which closes the common ways of reading the GitHub token, not every one: a deny rule is not a boundary around the program. What a token the agent does reach can do is bounded by the everyday token's scope, one repository with no Workflows and no Administration. 2026-09-04, coolbress/plinth-template#5, #300
 - The agent's everyday credential is a fine-grained token for one repository, without Workflows or Administration. 2026-09-29, #300
 - Workflow permission stays off the agent's token; a refused workflow push goes to a person, never a wider token. 2026-10-07, #417
 - Ruleset changes are a person's, through `scripts/with-admin-token.sh`. 2026-09-11, #129
