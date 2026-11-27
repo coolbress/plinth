@@ -1004,7 +1004,10 @@ if grep -qF -- '--data scheduled_run=true --vcs-ref' "$work/home-sched-on/calls.
 then ok sched-on "--scheduled-run reaches copier, and the closing lines say where it runs and where its results are"
 else bad sched-on "the answer or the closing line is missing"; grep -E '^uvx' "$work/home-sched-on/calls.log" | cut -c1-400 | sed 's/^/        /'; fi
 E="MOCK_SCHED_Q=1" run sched-no ok yes no "(public, MIT, cli, as owner)" -- probe --no-scheduled-run
-for c in sched-no none; do
+# No flag, with a template that asks it: the default, no answer passed.
+E="MOCK_SCHED_Q=1" run sched-default ok yes no "(public, MIT, cli, as owner)" -- probe
+for c in sched-no sched-default; do
+  [ -f "$work/home-$c/calls.log" ] && [ -f "$work/home-$c/out" ] || { bad "sched-off-$c" "the case $c has not run: nothing to read"; continue; }
   if ! grep -qF -- 'scheduled_run' "$work/home-$c/calls.log" && ! grep -qF 'where it runs:' "$work/home-$c/out"
   then ok "sched-off-$c" "a cli without --scheduled-run passes no answer and says nothing about a schedule: the template's default, on this computer"
   else bad "sched-off-$c" "a scheduled_run answer or a where-it-runs line appeared"; fi
@@ -2305,7 +2308,8 @@ for phrase in 'says the computer is off ("even when my laptop is off", "while I 
               'asks header `Schedule`: "Should it keep running on GitHub while your computer is off?"' \
               'On GitLab.com it is not asked: say it runs on the computer only' \
               'The results are a download under Artifacts on each run'"'"'s page, kept 90 days; in a public repository GitHub turns the schedule off after 60 days with no activity' \
-              '`--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub |'; do
+              '`--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub |' \
+              'When the table'"'"'s check stops with "does not ask scheduled_run", the plinth installed renders a template from before the scheduled run'; do
   if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-schedule "the skill says \"$phrase\""
   else bad skill-schedule "the skill does not say \"$phrase\""; fi
 done

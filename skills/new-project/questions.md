@@ -128,7 +128,11 @@ Ask only what decides between the kinds still open:
   **Only on my computer** (`--no-scheduled-run`). On GitLab.com it is not
   asked: say it runs on the computer only, since a GitLab pipeline schedule
   was not tried. With `--archetype=cli` given and neither flag, nothing is
-  asked and it runs on the computer only, the default.
+  asked and it runs on the computer only, the default. When the table's
+  check stops with "does not ask scheduled_run", the plinth installed
+  renders a template from before the scheduled run: show the message, say
+  so, and offer `--no-scheduled-run` (on the computer only) or waiting for
+  a plinth release that has it.
 
 ## 4. The archetype recommendation
 
