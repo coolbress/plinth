@@ -567,6 +567,71 @@ undo_lines() { # <worktree> <branch>
   echo "  git -C $(q "$rn") push -u origin $rb"
   echo "  (cd $(q "$rn") && gh pr create --fill)"
 }
+# Each `added=` line of the record, and where it is in the worktree now: the
+# file and its section (the Markdown heading, the TOML table, the YAML keys
+# above it), or that it is not there. At most 20 for a file.
+kept_lines() { # <worktree> <record>
+  local p line at sec ln shown="" c=0
+  while IFS=$'\t' read -r p line; do
+    [ -n "$p" ] || continue
+    [ "$p" = "$shown" ] || { shown="$p"; c=0; }
+    c=$((c + 1))
+    if [ "$c" -gt 20 ]; then
+      [ "$c" != 21 ] || echo "- \`$p\`: and more, not listed here"
+      continue
+    fi
+    if at="$(python3 "$here/template-update-combine.py" where "$1/$p" "$line" 2>/dev/null)"; then
+      sec="${at%%$'\t'*}"; ln="${at#*$'\t'}"
+      echo "- \`$p\`, ${sec:+under \`$sec\`, }line $ln: $(code_span "$line")"
+    else
+      echo "- \`$p\`: $(code_span "$line"), not in the file now"
+    fi
+  done < <(sed -n 's/^added=//p' "$2")
+}
+code_span() { # <text>: a Markdown code span for one line
+  local t; t="$(printf '%s' "$1" | sed 's/^[[:space:]]*//')"
+  case "$t" in *'`'*) printf '`` %s ``' "$t" ;; *) printf '`%s`' "$t" ;; esac
+}
+# For each file copier left in conflict (#1186): the lines this repository
+# added to the template's render of the recorded tag that the template's side
+# drops, and a combination that keeps them, the template's side with each of
+# those lines where it belongs now (template-update-combine.py), written
+# beside the record, never into the worktree. A file holding such a line has
+# no one side to recommend: either drops something. Each line goes to the
+# record as `added=<path>\t<line>`, for the description. Not compared when the
+# old render cannot be made. GitHub's plain update only (#1184's Decisions).
+propose_combinations() {
+  local pdir p old report n
+  pdir="$(dirname "$sf")/plinth-template-update.combined"
+  echo
+  if ! render_old "$cmd" "$from"; then
+    echo "The lines this repository added in each conflict were not compared with the template's render of $from"
+    echo "(copier's last line: $(tail -n 1 "$tmp/old-render.log")): read both sides of each before recommending one."
+    echo
+    return 0
+  fi
+  echo "Lines this repository added to the template's render of $from that the template's side drops (#1186):"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$p" in *.rej) echo "  $p: the hunks copier could not apply to ${p%.rej}; no combination is proposed"; continue ;; esac
+    git -C "$top" show "$base:$p" > "$tmp/base-file" 2>/dev/null || : > "$tmp/base-file"
+    old="$tmp/old-render/$p"; [ -f "$old" ] || old=-
+    if ! report="$(python3 "$here/template-update-combine.py" combine "$wt/$p" "$tmp/base-file" "$old" "$pdir/$p" 2>&1)"; then
+      echo "  $p: $report; no combination is proposed"
+      continue
+    fi
+    n="$(grep -c '^risk' <<<"$report" || true)"
+    if [ "$n" = 0 ]; then
+      echo "  $p: none; the template's side keeps every line this repository added"
+      continue
+    fi
+    echo "  $p: $n; neither side whole keeps both, so neither is the recommendation."
+    echo "    The combination, the template's side with those lines kept: $pdir/$p"
+    awk -F '\t' '$1 == "risk" { printf "      + %s    (%s)\n", $3, $2 }' <<<"$report"
+    awk -F '\t' -v p="$p" '$1 == "risk" && $3 !~ /^[[:space:][:punct:]]*$/ { printf "added=%s\t%s\n", p, $3 }' <<<"$report" >> "$sf"
+  done <<<"$conflicts"
+  echo
+}
 finish() { # <worktree>
   local wt="$1" sf repo default base from to cmd branch left pr
   sf="$(state_file "$wt" 2>/dev/null)" && [ -f "$sf" ] \
@@ -800,6 +865,12 @@ finish() { # <worktree>
     echo
     list "$resolved"
     echo
+    if grep -q '^added=' "$sf"; then
+      echo "Lines this repository added that the template's side dropped in a conflict (#1186), and where each is now:"
+      echo
+      kept_lines "$wt" "$sf"
+      echo
+    fi
     echo "Edited by a person after the update, outside a conflict:"
     echo
     list "$edited"
@@ -1122,7 +1193,7 @@ render_old() { # <cmd> <ref>
   prefix="${1%% copier update *}"
   [ "$prefix" != "$1" ] && [ -n "$2" ] || { echo "the line is not the copier update this script reads: $1" > "$tmp/old-render.log"; return 1; }
   read -ra words <<<"$prefix"
-  mkdir "$tmp/old-render" && git -C "$r" show HEAD:.copier-answers.yml > "$tmp/old-render/.copier-answers.yml" \
+  mkdir "$tmp/old-render" && git -C "$top" show "$base:.copier-answers.yml" > "$tmp/old-render/.copier-answers.yml" \
     || { echo "could not read .copier-answers.yml at the base" > "$tmp/old-render.log"; return 1; }
   ( cd "$tmp/old-render" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" copier recopy --defaults --overwrite --quiet \
       --vcs-ref "$2" . < /dev/null ) > "$tmp/old-render.log" 2>&1
@@ -1702,6 +1773,7 @@ if [ -n "$conflicts" ]; then
     while IFS= read -r p; do [ -n "$p" ] && ours_of "$wt" "$p"; done <<<"$conflicts"
     echo
   fi
+  [ -n "$move" ] || [ "$host" != github ] || propose_combinations
   echo "In $wt, resolve each (remove every conflict marker, delete each .rej once applied), git add it, then run:"
   echo "  $(q "$0") --finish $(q "$wt")"
   exit 3

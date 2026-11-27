@@ -230,6 +230,20 @@ case "${MOCK_COPIER:-clean}" in
       | git update-index --index-info
     printf '<<<<<<< before updating\nours\n=======\ntheirs\n>>>>>>> after updating\n' > CONTRIBUTING.md ;;
   rej) printf -- '--- a\n+++ b\n' > CONTRIBUTING.md.rej ;;
+  # MOCK_CONFLICT_DIR (#1186): a conflict in each file `list` names (`<path>\t<key>`),
+  # written as copier writes one: <key>.head, the markers around <key>.ours
+  # and <key>.theirs, then <key>.tail; the index holds the three stages.
+  custom)
+    while IFS=$'\t' read -r cp ck; do
+      [ -n "$cp" ] || continue
+      cd_="$MOCK_CONFLICT_DIR/$ck"
+      cb="$(git hash-object -w "$cp")"
+      cat "$cd_.head" "$cd_.ours" "$cd_.tail" > .o; cat "$cd_.head" "$cd_.theirs" "$cd_.tail" > .t
+      co="$(git hash-object -w .o)"; ct="$(git hash-object -w .t)"; rm .o .t
+      git update-index --force-remove "$cp"
+      printf '100644 %s 1\t%s\n100644 %s 2\t%s\n100644 %s 3\t%s\n' "$cb" "$cp" "$co" "$cp" "$ct" "$cp" | git update-index --index-info
+      { cat "$cd_.head"; echo "<<<<<<< before updating"; cat "$cd_.ours"; echo "======="; cat "$cd_.theirs"; echo ">>>>>>> after updating"; cat "$cd_.tail"; } > "$cp"
+    done < "$MOCK_CONFLICT_DIR/list" ;;
   # A template that names GLOSSARY.md, as plinth-template's domain docs do
   # from the release that follows mattpocock/skills v1.3.2 (#714).
   glossary) mkdir -p docs/agents && printf -- '- Root **`GLOSSARY.md`**: the glossary.\n' > docs/agents/domain.md ;;
@@ -491,6 +505,67 @@ q_run -- --apply "$base" --archetype cli --answer records_language Korean
 if [ "$rc" = 2 ]; then ok "--answer is refused with an archetype move (usage)"; else bad "--answer with --archetype (rc=$rc)"; fi
 q_run -- --apply "$base" --answer records_language Korean --answer records_language English
 if [ "$rc" = 2 ]; then ok "--answer naming one question twice is refused (usage)"; else bad "--answer twice (rc=$rc)"; fi
+rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
+repo="$repo_was"; BARE="$bare_was"; export BARE
+
+# ── conflicts: a combination that keeps this repository's lines (#1186) ─
+# A conflict whose "before" side holds a line this repository added to the
+# template's render offers no one side as the recommendation: the
+# combination, the template's side with that line kept, is written beside
+# the record. A conflict with no such line may still take the template's
+# side. The description names each kept line and where it is now.
+repo_was="$repo"; bare_was="$BARE"
+cx="$work/conflicts"; mkdir -p "$cx" "$work/comb-old"
+part() { printf '%b' "$2" > "$cx/$1"; } # <key.part> <text>
+part agents.head '# Agents\n\n## Always\n\n'; part agents.old '- a template rule\n'
+part agents.ours '- a template rule\n- Our own rule\n'; part agents.theirs '- a rewritten template rule\n- another template rule\n'
+part agents.tail "\n## This project\n\nThis project's own rules: a template update never changes this section.\n"
+part yml.head 'jobs:\n  ci:\n    with:\n'; part yml.old '      versions: "3.13"\n'
+part yml.ours '      timeout: 20\n      # no second run here\n      versions: ""\n'; part yml.theirs '      # the newer version\n      versions: "3.14"\n'
+part yml.tail '    permissions: {}\n'
+part contrib.head '# Contributing\n\n'; part contrib.old '- keep it short\n'; part contrib.ours '- keep it short\n'
+part contrib.theirs '- keep it brief\n'; part contrib.tail ''
+printf 'AGENTS.md\tagents\nsettings.yml\tyml\nCONTRIBUTING.md\tcontrib\n' > "$cx/list"
+fixture combine
+while IFS=$'\t' read -r cp ck; do
+  cat "$cx/$ck.head" "$cx/$ck.ours" "$cx/$ck.tail" > "$repo/$cp"
+  cat "$cx/$ck.head" "$cx/$ck.old" "$cx/$ck.tail" > "$work/comb-old/$cp"
+done < "$cx/list"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "our lines" && git -C "$repo" push -q origin main
+base="$(git -C "$BARE" rev-parse main)"; reset_logs
+out="$(cd "$repo" && MOCK_COPIER=custom MOCK_CONFLICT_DIR="$cx" MOCK_OLD_RENDER="$work/comb-old" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" 2>&1)"; rc=$?
+wt="$(wt_of combine)"
+comb_of() { sed -n "s|^    The combination, the template's side with those lines kept: \(.*/$1\)\$|\1|p" <<<"$out"; }
+ca="$(comb_of AGENTS.md)"; cy="$(comb_of settings.yml)"
+if [ "$rc" = 3 ] && grep -qxF "  AGENTS.md: 1; neither side whole keeps both, so neither is the recommendation." <<<"$out" \
+   && grep -qxF "      + - Our own rule    (no old place; propose: under ## This project, the file's last section)" <<<"$out" \
+   && [ -f "$ca" ] && grep -qxF -- "- Our own rule" "$ca" && grep -qxF -- "- a rewritten template rule" "$ca" && ! grep -q '^<<<<<<<\|^>>>>>>>' "$ca" \
+   && case "$ca" in "$wt"/*) false ;; *) true ;; esac
+then ok "a conflict whose before side holds a line this repository added offers no one side; the combination keeps the line, outside the worktree"
+else bad "combination, Markdown (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$ca" 2>/dev/null | sed 's/^/        /'; fi
+if [ -f "$cy" ] && grep -qxF '      versions: ""' "$cy" && ! grep -qF '"3.14"' "$cy" && ! grep -qF "the newer version" "$cy" \
+   && grep -qxF '      timeout: 20' "$cy" && grep -qxF '      # no second run here' "$cy" && grep -qxF '    permissions: {}' "$cy" \
+   && grep -qxF '      +       versions: ""    (replaces versions: "3.14")' <<<"$out"
+then ok "a key this repository set that the template's side sets too: this repository's value replaces the template's, with its own comment"
+else bad "combination, YAML"; cat "$cy" 2>/dev/null | sed 's/^/        /'; fi
+if grep -qxF "  CONTRIBUTING.md: none; the template's side keeps every line this repository added" <<<"$out"
+then ok "a conflict with no line this repository added may still take the template's side"
+else bad "combination, no added line"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The person's word: AGENTS.md as combined, with the line moved under
+# `## This project`; settings.yml as combined; CONTRIBUTING.md the template's side.
+grep -vxF -- "- Our own rule" "$ca" > "$wt/AGENTS.md"; printf -- '- Our own rule\n' >> "$wt/AGENTS.md"
+cp "$cy" "$wt/settings.yml"; cat "$cx/contrib.head" "$cx/contrib.theirs" > "$wt/CONTRIBUTING.md"
+git -C "$wt" add AGENTS.md settings.yml CONTRIBUTING.md
+reset_logs
+run --finish "$wt" --resolved AGENTS.md "the combination, the line moved under ## This project, on the person's word" \
+  --resolved settings.yml "the combination, on the person's word" --resolved CONTRIBUTING.md "the template's side, on the person's word"
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+kept="$(awk '/^Lines this repository added that the template.s side dropped/ { f = 1; next } f && /^$/ && n++ { exit } f && /^- /' <<<"$body")"
+if [ "$rc" = 0 ] && grep -qxF -- "- \`AGENTS.md\`, under \`## This project\`, line 11: \`- Our own rule\`" <<<"$kept" \
+   && grep -qxF -- "- \`settings.yml\`, under \`jobs.ci.with\`, line 6: \`timeout: 20\`" <<<"$kept" \
+   && grep -qxF -- "- \`settings.yml\`, under \`jobs.ci.with\`, line 5: \`versions: \"\"\`" <<<"$kept" && ! grep -qF CONTRIBUTING <<<"$kept"
+then ok "the description lists each kept line and the file and section it is in now"
+else bad "the description's kept lines (rc=$rc)"; printf '%s\n' "$out" "$body" | sed 's/^/        /'; fi
 rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
 repo="$repo_was"; BARE="$bare_was"; export BARE
 
