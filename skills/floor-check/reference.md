@@ -18,6 +18,7 @@ when the person asks about one item; the skill's own rules are in
 - [What the door sets beside the wall, and the project's own answers](#what-the-door-sets-beside-the-wall-and-the-projects-own-answers)
 - [A private repository](#a-private-repository)
 - [Template drift](#template-drift)
+- [The adoption record](#the-adoption-record)
 - [Reading the checker's text output](#reading-the-checkers-text-output)
 
 ## The machine's items and the merge line
@@ -469,6 +470,63 @@ running an updated plugin's `/plinth:floor-check` by hand, or its own
 `ci / floor-check` once its workflow pin is raised (Dependabot proposes
 that) — CI downloads the checker from the plinth commit its own workflow is
 pinned to, so an older pin keeps running the older checker until then.
+
+## The adoption record
+
+`.plinth-adoption.yml`, at the repository root next to `.copier-answers.yml`,
+records an adoption: a repository plinth did not make, taking plinth's floor
+in steps. The adopt pull request writes it (#1106); every later change to it
+is a file change, made through a pull request like any other. The checker
+reads it on every machine and in `ci / floor-check`, so all of them say the
+same about the same commit. With no file nothing changes.
+
+```yaml
+schema: 1
+plinth: v2.45.0
+origin: none                  # or other-template:<_src_path>
+archetype: backend
+started: 2026-11-27
+step: ci                      # files, ci, wall or done
+wall_due: 2026-12-20          # at most 30 days after started
+kept:
+  - id: FC-C20                # an id from the checker's registry
+    path: Dockerfile
+    reason: deliberately-different   # not-applicable, deliberately-different or later
+    why: "the base image is pinned by the registry we mirror"
+    until: 2027-03-01         # required for later
+```
+
+The checker reads this form, not all of YAML: top-level `key: value` lines
+and `kept:` as a list of `- key: value` entries (or `kept: []`), values plain
+or quoted. [`scripts/plinth-adoption.schema.json`](../../scripts/plinth-adoption.schema.json)
+is its shape; `floor-check.py --print-adoption` prints the file in that shape.
+
+- **A kept finding** (a FAIL or WARN whose id is in `kept`) prints as
+  `INFO  kept by choice (<reason>): …` and is not counted. The entry applies
+  to every line of that id; `path` says what was kept, for the reader. The
+  report says the kept items in one line, "Kept by you".
+- **What cannot be kept:** an id the registry marks not keepable (the wall's
+  rules, push protection, a tracked dotenv file, a literal secret, a release
+  tag left unguarded, a production database within the agent's reach). Such
+  an entry is not applied, and a FAIL says it cannot be kept and why. So is
+  an id that names no check, and an entry whose `until` has passed (the
+  finding is counted again from the day after).
+- **The wall, later:** while the default branch has no rules at all, the step
+  is not `done`, and today is on or before `wall_due`, "no rules govern main"
+  prints as `INFO  the wall: later, …` and is not counted. The adopt order
+  puts the ruleset after the first green run on the default branch, and the
+  adopt pull request runs `ci / floor-check` before then. From the day after
+  `wall_due` it is a FAIL again. A `wall_due` more than 30 days after
+  `started` is read as 30 days, and said so. The 30 is a starting value, to
+  be looked at again after the first measured adoption. A `started` after today
+  makes the record invalid, so the cap cannot be moved forward. Once the branch has
+  rules, `wall_due` changes nothing: a missing rule or a dropped required
+  check is a FAIL as before. A GitLab checkout's protected branch is not
+  held off this way yet.
+- **A file that cannot be read or is not valid** (a field the schema does
+  not have, a field given twice, a date that is not one, `later` with no
+  `until`, a line in another form) is a FAIL naming the file and why, and
+  nothing in it applies.
 
 ## Reading the checker's text output
 

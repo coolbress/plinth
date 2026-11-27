@@ -4031,5 +4031,216 @@ if [ -n "$gl_pin" ] && is "$out" FC-F02 warn
 then ok "GitLab: the include's pin is the one compared"
 else bad "skew, GitLab pin '$gl_pin'"; printf '%s\n' "$out" | grep -E 'plugin|plinth pin' | sed 's/^/        /'; fi
 
+# --- The adoption record (#1112): .plinth-adoption.yml at the root, written by
+# the adopt pull request. A run with no file is byte for byte the golden one
+# (tests/floor-check-golden.sh); the cases below each write one.
+adopt="$work/adopt"
+mkdir -p "$work/adopt-records"; n_records=0
+adoption() { # <file body, or "" for none>: a copy of the good fixture with that record, kept for the schema check below
+  rm -rf "$adopt"; cp -R "$good" "$adopt"; [ -z "$1" ] && return
+  printf '%s\n' "$1" > "$adopt/.plinth-adoption.yml"
+  n_records=$((n_records + 1)); cp "$adopt/.plinth-adoption.yml" "$work/adopt-records/$n_records.yml"
+}
+record_head='schema: 1
+plinth: v2.45.0
+origin: none
+archetype: backend
+started: 2026-11-01
+step: ci
+wall_due: 2026-11-20'
+a_run() { # <TODAY> [checker args...]: sets out and rc for the copy
+  local d="$1"; shift
+  out="$(FLOOR_CHECK_TODAY="$d" python3 "$checker" --root "$adopt" --no-network "$@" 2>&1)"; rc=$?
+}
+a_wall() { # <TODAY> [checker args...]: the copy against the wall fixture with no rules on main
+  local d="$1"; shift
+  printf '[]' > "$api/repos/o/r/rules/branches/main.json"
+  out="$(FLOOR_CHECK_TODAY="$d" FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$adopt" --no-network --repo o/r \
+    --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "$@" 2>&1)"; rc=$?
+  printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+}
+expect() { # <description> <condition>
+  if eval "$2"; then ok "$1"; else bad "$1"; printf '%s\n' "$out" | grep -E 'FAIL|WARN|INFO|SKIP|failed' | sed 's/^/        /'; fi
+}
+unpin="sed -i.bak 's/@sha256:[0-9a-f]*//' \"\$adopt/Dockerfile\""   # FC-C20 alone fails
+
+adoption "$record_head"
+a_run 2026-11-10
+expect "a valid record is read and said once, with its step and what it keeps" \
+  'is "$out" FC-F09 info && [ "$rc" = 0 ] && grep -qF ".plinth-adoption.yml read: step ci, 0 kept by choice; the wall due by 2026-11-20" <<<"$out"'
+
+adoption "$record_head
+kept:
+  - id: FC-C20
+    path: Dockerfile
+    reason: deliberately-different
+    why: \"the base image is pinned by the registry we mirror\""
+eval "$unpin"
+a_run 2026-11-10
+expect "a kept FAIL prints as kept by choice, is not counted, and the run exits 0" \
+  'is "$out" FC-C20 kept && grep -qE "^  INFO  kept by choice \(deliberately-different\): " <<<"$out" && grep -q -- "^-- 0 failed" <<<"$out" && [ "$rc" = 0 ]'
+a_run 2026-11-10 --actions-token --verdicts "$work/adopt.verdicts"
+expect "in the CI form the kept finding leaves the verdicts file a pass" \
+  '[ "$rc" = 0 ] && head -1 "$work/adopt.verdicts" | grep -q "^pass: " && ! grep -q "base image" "$work/adopt.verdicts"'
+out="$(FLOOR_CHECK_TODAY=2026-11-10 python3 "$checker" --root "$adopt" --no-network --format json 2>&1)"; rc=$?
+expect "--format json: the kept result is an info carrying what kept it and what it was" \
+  '[ "$rc" = 0 ] && jq -e '"'"'[.results[] | select(.id == "FC-C20")][0] | .state == "info" and .kept.reason == "deliberately-different" and .kept.was == "fail" and .kept.path == "Dockerfile"'"'"' <<<"$out" >/dev/null && jq -e '"'"'[.results[] | select(.id != "FC-C20") | .kept] | all(. == null)'"'"' <<<"$out" >/dev/null'
+
+adoption "$record_head
+kept:
+  - id: FC-C20
+    path: Dockerfile
+    reason: later
+    why: rewrite after the release
+    until: 2026-11-05"
+eval "$unpin"
+a_run 2026-11-10
+expect "a kept entry whose until has passed FAILs, and the finding is counted again" \
+  'is "$out" FC-F09 fail && is "$out" FC-C20 fail && grep -qF "kept FC-C20 until 2026-11-05, which has passed" <<<"$out" && [ "$rc" = 1 ]'
+a_run 2026-11-05
+expect "on its until date the entry still applies" 'is "$out" FC-C20 kept && [ "$rc" = 0 ]'
+
+adoption "$record_head
+kept:
+  - id: FC-C20
+    path: Dockerfile
+    reason: later
+    why: rewrite after the release"
+eval "$unpin"
+a_run 2026-11-10
+expect "reason later with no until: the file is invalid, a FAIL naming it, and nothing in it applies" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml is not valid: kept entry 1: reason later with no until" <<<"$out" && is "$out" FC-C20 fail'
+
+adoption "$record_head
+kept:
+  - id: FC-A28
+    path: .env
+    reason: deliberately-different
+    why: it holds no secret"
+a_run 2026-11-10
+expect "an id marked not keepable is not applied, and a FAIL says it cannot be kept and why" \
+  'is "$out" FC-F09 fail && grep -qF "keeps FC-A28, which cannot be kept (a tracked secret reaches everyone" <<<"$out" && [ "$rc" = 1 ]'
+
+adoption "$record_head
+kept:
+  - id: FC-Z99
+    path: x
+    reason: not-applicable
+    why: x"
+a_run 2026-11-10
+expect "a kept id that names no check is a FAIL, never a silent pass" \
+  'is "$out" FC-F09 fail && grep -qF "keeps FC-Z99, which names no check" <<<"$out"'
+
+adoption "$record_head
+kept: [FC-C20]
+step: wall"
+a_run 2026-11-10
+expect "a field given twice is a FAIL naming the file and the line" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml is not valid: line 9: step given twice" <<<"$out"'
+adoption "$record_head
+  stray: indented"
+a_run 2026-11-10
+expect "a line in a form this checker does not read is a FAIL naming the line" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml is not valid: line 8 is not in the form this checker reads" <<<"$out"'
+adoption "$record_head
+colour: blue"
+a_run 2026-11-10
+expect "an unknown field makes the file invalid" 'is "$out" FC-F09 fail && grep -qF "unknown field colour" <<<"$out"'
+adoption ""; mkdir "$adopt/.plinth-adoption.yml"
+a_run 2026-11-10
+expect "a record that cannot be read is a FAIL naming it, not a silent pass" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml cannot be read (" <<<"$out" && [ "$rc" = 1 ]'
+
+# The wall, with no rules on main: later until wall_due, the FAIL after it.
+adoption "$record_head"
+a_wall 2026-11-20
+expect "no ruleset, on wall_due: the wall prints as later and is not counted" \
+  'is "$out" FC-E12 info && grep -qF "the wall: later, after the first green run on main (until 2026-11-20" <<<"$out" && ! is "$out" FC-E12 fail'
+a_wall 2026-11-21
+expect "no ruleset, the day after wall_due: the wall is down again, a FAIL" 'is "$out" FC-E12 fail && ! is "$out" FC-E12 info'
+a_wall 2026-11-20 --actions-token --verdicts "$work/adopt.verdicts"
+expect "in the CI form, before wall_due, the wall is no fail line in the verdicts file" \
+  '! grep -q "the wall is down" "$work/adopt.verdicts" && is "$out" FC-E12 info'
+adoption "${record_head/step: ci/step: done}"
+a_wall 2026-11-10
+expect "at step done wall_due holds nothing off: no rules is a FAIL" 'is "$out" FC-E12 fail'
+adoption "${record_head/wall_due: 2026-11-20/wall_due: 2027-01-15}"
+a_wall 2026-12-05
+expect "wall_due more than 30 days after started is read as 30 days: said, and the wall FAILs after it" \
+  'is "$out" FC-F09 info && grep -qF "wall_due 2027-01-15 is more than 30 days after started 2026-11-01; read as 2026-12-01" <<<"$out" && is "$out" FC-E12 fail'
+a_wall 2026-12-01
+expect "on the 30th day the capped wall_due still holds the wall off" 'is "$out" FC-E12 info'
+adoption "${record_head/started: 2026-11-01/started: 2099-01-01}"
+a_wall 2026-11-10
+expect "a started after today makes the record invalid, so the 30 days cannot be moved forward: the wall FAILs" \
+  'is "$out" FC-F09 fail && grep -qF "started 2099-01-01 is after today (2026-11-10)" <<<"$out" && is "$out" FC-E12 fail'
+adoption "$record_head"
+out="$(FLOOR_CHECK_TODAY=2026-11-10 FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$adopt" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+expect "with a ruleset in place the record changes no wall line: the intact wall passes as without it" \
+  'grep -q -- "^-- 0 failed" <<<"$out" && ! grep -q "the wall: later" <<<"$out"'
+printf '[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":1}]' > "$api/repos/o/r/rules/branches/main.json"
+out="$(FLOOR_CHECK_TODAY=2026-11-10 FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$adopt" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+expect "a ruleset with rules missing, before wall_due: the missing rules still FAIL" \
+  'is "$out" FC-E15 fail && [ "$rc" = 1 ]'
+
+# The schema: every record above, printed as the checker reads it, against
+# scripts/plinth-adoption.schema.json. The valid ones pass it; the invalid
+# ones the checker refuses fail it too.
+schema_ok() { # <description> <0 valid | 1 invalid> <file body>
+  adoption "$3"
+  local doc; doc="$(python3 "$checker" --root "$adopt" --print-adoption 2>/dev/null)" || { bad "$1 (not printed)"; return; }
+  printf '%s\n' "$doc" > "$work/adopt.json"
+  python3 "$root/tests/lib/json-schema-check.py" "$root/scripts/plinth-adoption.schema.json" "$work/adopt.json" > "$work/adopt.schema" 2>&1
+  local got=$?
+  if [ "$got" = "$2" ]; then ok "$1"; else bad "$1 (schema check exit $got)"; sed 's/^/        /' "$work/adopt.schema"; fi
+}
+schema_ok "schema: the plain record is valid" 0 "$record_head"
+schema_ok "schema: a record with a kept entry is valid" 0 "$record_head
+kept:
+  - id: FC-A06
+    path: CONTRIBUTING.md
+    reason: later
+    why: rewrite after the release
+    until: 2026-11-05"
+schema_ok "schema: later with no until is invalid, as the checker says" 1 "$record_head
+kept:
+  - id: FC-A06
+    path: CONTRIBUTING.md
+    reason: later
+    why: rewrite after the release"
+schema_ok "schema: an unknown field is invalid, as the checker says" 1 "$record_head
+colour: blue"
+schema_ok "schema: a step outside files, ci, wall and done is invalid" 1 "${record_head/step: ci/step: halfway}"
+schema_ok "schema: an origin other than none or other-template:<source> is invalid" 1 "${record_head/origin: none/origin: somewhere}"
+# Every record the cases above wrote, read as the checker reads it: where the
+# checker finds no schema error, the schema finds none; where it finds one, so
+# does the schema. A record not in the form the checker reads has no document
+# to give the schema, and is counted apart. The checker is loaded as a module,
+# so these reads are no checker runs for the golden file.
+agree="$(python3 - "$checker" "$root/tests/lib/json-schema-check.py" "$root/scripts/plinth-adoption.schema.json" "$work/adopt-records" <<'PY'
+import importlib.util, json, subprocess, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("floor_check", sys.argv[1])
+fc = importlib.util.module_from_spec(spec); spec.loader.exec_module(fc)
+both = form = 0
+for f in sorted(Path(sys.argv[4]).glob("*.yml"), key=lambda p: int(p.stem)):
+    try:
+        d = fc.read_adoption(f.read_text(encoding="utf-8"))
+    except ValueError:
+        form += 1
+        continue
+    doc = f.with_suffix(".json"); doc.write_text(json.dumps(fc.adoption_json(d)), encoding="utf-8")
+    schema_ok = subprocess.run([sys.executable, sys.argv[2], sys.argv[3], str(doc)], capture_output=True).returncode == 0
+    if schema_ok != (not fc.adoption_errors(d)):
+        print(f"disagree {f.name}: checker {fc.adoption_errors(d) or 'valid'}, schema {'valid' if schema_ok else 'invalid'}")
+    both += 1
+print(f"read {both} form {form}")
+PY
+)"
+if grep -qE '^read [1-9][0-9]+ form [1-9]' <<<"$agree" && ! grep -q '^disagree' <<<"$agree"
+then ok "every record the cases wrote: the checker and the schema agree on each ($(tail -1 <<<"$agree"))"
+else bad "the checker and the schema disagree on a record the cases wrote"; sed 's/^/        /' <<<"$agree"; fi
+
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
