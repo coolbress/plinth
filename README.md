@@ -117,10 +117,13 @@ table and the paragraph under it.
 Third-party marketplaces do not auto-update by default. To move to a new version, run
 `claude plugin marketplace update plinth`, then
 `claude plugin update plinth@plinth`, then `/reload-plugins`: without the
-marketplace update, the plugin update can stay on the old version. Moving from v1.10.0 or
-earlier also takes `claude plugin update taste-skill@plinth` once, before
-`/reload-plugins`: the dependency's source changed, and until then it fails to
-load (#469). Moving from v1.11.0 or earlier also takes, once and in this order,
+marketplace update, the plugin update can stay on the old version. Moving from v2.45.0 or
+earlier also takes, once and in this order, `claude plugin install plinth@plinth`
+and then `claude plugin uninstall taste-skill@plinth`, before `/reload-plugins`:
+Anthropic's `frontend-design` replaced `taste-skill` as plinth's page-design
+skill (#1082). `update` does not remove taste-skill; before Claude Code
+2.1.319 it does not install frontend-design either.
+Moving from v1.11.0 or earlier also takes, once and in this order,
 `claude plugin install plinth@plinth` and then `claude plugin prune`, before
 `/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace under the
 same name, and `update` does not install the moved copy. Without the two
@@ -177,8 +180,9 @@ Installed with plinth as dependencies, each pinned to a commit
 [mattpocock-skills](https://github.com/mattpocock/skills) (skills
 from `/implement` and `/grilling` to `code-review`, `/to-spec`, `/handoff` and
 `/retro`) and
-[taste-skill](https://github.com/Leonxlnx/taste-skill) (one skill,
-`design-taste-frontend`: frontend design that does not look templated).
+[frontend-design](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/frontend-design)
+(Anthropic's, one skill: distinctive frontend design for pages people look at,
+away from generic templates).
 Listed but not installed:
 `mattpocock-skills-extra`, more Matt Pocock skills, such as
 `/ask-matt`, `/grill-with-docs` and `wizard` (#520, #704, #714);

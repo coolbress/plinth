@@ -1388,7 +1388,7 @@ out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
 # The tool cell the join makes, held in its words, not by the join itself:
 # Tool, plinth piece, then "also:" and "class:".
 out="$("$script" "$work/plain" map 4 2>&1)"
-grep -qF '  tool: `/clear`, then `/implement #N`: one ticket per session, test first; `/design-taste-frontend`: a page a person will look at; the project'"'"'s `verify` skill, its check before each commit, which takes the place of the bundled `/verify` (that one runs the app, as `/run` does); also: `/simplify` (built in): cleanup of the changed code; class: built in, then installed; installed' <<<"$out" &&
+grep -qF '  tool: `/clear`, then `/implement #N`: one ticket per session, test first; `/frontend-design`: a page a person will look at; the project'"'"'s `verify` skill, its check before each commit, which takes the place of the bundled `/verify` (that one runs the app, as `/run` does); also: `/simplify` (built in): cleanup of the changed code; class: built in, then installed; installed' <<<"$out" &&
   ok "the tool cell: Tool, plinth piece, also: and class:, in that order" || bad "the tool cell: $(grep '^  tool: ' <<<"$out")"
 cp "$root/skills/guide/steps.md" "$work/plugin/skills/guide/steps.md"
 orphans="$(awk '/^## Steps/{on=1; next} on && /^\| /' "$root/skills/guide/steps.md" | awk -F ' \\| ' '{ c = $1; sub(/^\| /, "", c) } c != "Where you are" && c !~ /^---/ { print c }' |
