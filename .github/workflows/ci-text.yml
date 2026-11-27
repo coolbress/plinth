@@ -82,7 +82,7 @@ jobs:
       floor-check-required-checks: "ci / install, ci / tools, ci / docs, ci / release-gate"
 
   canary-template:
-    name: canary-template (plinth-template v1.51.0 at f0ed80e)
+    name: canary-template (plinth-template v1.52.0 at 8442a96)
     uses: ./.github/workflows/python-ci-text.yml
     permissions:
       contents: read

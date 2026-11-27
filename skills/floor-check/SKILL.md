@@ -1,6 +1,6 @@
 ---
 name: floor-check
-description: Read-only check of an existing repository against the plinth floor (the document set, agent settings, lockfile, container image, the live ruleset) plus what this machine's Claude Code settings say about the sandbox. Reports what is missing as a list with one fix per item and never changes anything. Use when the user asks whether a repository is set up, protected, "has the floor", or what /plinth:new-project would have given it.
+description: Read-only check of a repository through plinth's eyes: its protection rules, its base files and the agent's safety settings, plus what this machine's Claude Code settings say. Gives a short list of what is missing and offers the missing files as one pull request the person approves, made after the check. Changes nothing in the repository and keeps one note on this machine, so the next run says what changed. Use when the user asks whether a repository is set up, protected, "has the floor", or what /plinth:new-project would have given it.
 argument-hint: "[owner/name]"
 disallowed-tools: Edit, Write, NotebookEdit
 ---
@@ -103,7 +103,13 @@ why; the summary counts them on their own, `K do not apply`.
 
 Give the person the report `floor-report.py` printed, in their language, line
 for line and in its order: keep its numbers, file names and commands as
-printed, add no line, and drop none. It is already the short form:
+printed, add no line, and drop none. It is already the short form.
+
+Your answer's first line is the report's first line, the verdict. Write
+nothing before it: no line saying the check ran or changed nothing (the
+verdict says that). What the repository's output style asks you to say first
+at a task's start (who you work as, the goal) comes right after the verdict,
+never before it. The report's lines are:
 
 - the first line is the verdict;
 - at most five action rows, those that cannot be undone or reach others
@@ -120,7 +126,8 @@ printed, add no line, and drop none. It is already the short form:
 - what could not be read, which is not a failure, and what would read it;
 - what was not checked, which is not a problem;
 - the passes as one line;
-- one question, last. End with it: ask nothing else.
+- one question, last. End with it: ask nothing else, and write nothing
+  after it, not an Insight block either (the check changed nothing).
 
 Do not write a check's id (`FC-…`) in the chat.
 
@@ -152,6 +159,12 @@ it.
 An INFO naming a product the plan lacks (GitHub Code Security or Secret
 Protection on a private repository) is a fact about the plan: buying it is the
 user's choice, never a step to run or to recommend as a repair.
+
+A yes to the pull-request question ends this check, which changed nothing.
+Only after that yes, never under the question, say that the pull request is a
+change of its own, made after the check in a new session the way the project
+makes every change (a branch, the plan approved, a pull request), and that
+`/plinth:guide` names the step.
 
 When the report says the check stopped early, say so first: what it read
 before stopping is all there is, and the rest was not checked.

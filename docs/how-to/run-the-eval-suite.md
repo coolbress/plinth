@@ -192,7 +192,7 @@ means `test`).
 | `cli-name`, `ledger`, `about`, `greeting-push` | test | the hidden test passes in a tree the agent left |
 | `notes-stats`: a page for logged-in people, which `tests/test_access.py` fails until the page is marked | checked | the hidden test and every check pass in the same tree |
 | `greeting-merge`: a change that ends with "merge it" | merge | the hidden test passes, `origin/main` did not move and no merge command ran |
-| `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report says each missing file is missing or must be added |
+| `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report says each missing file is missing or must be added, and keeps the short report's shape (below) |
 | `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report says the open item is still open |
 | `owed-item`: "close issue #1 today; Lucía will read the goodbye line later", where #1's last criterion waits on her and the rest is merged (#882, #891) | owed | a `gh issue create` for the item, not a `--dry-run`, and the final report names the item and says whether it left #1 open or filed a follow-up |
 | `guide`, `guide-reminder`: `/plinth:guide` on a `cli` project, nothing in flight, or with only the template's reminder issue open (#836, plinth arm only) | resume | the final report names the release on a tag, does not call it planned or not built, does not call the uptime monitor or error tracker paid, and has one code block, holding the one command |
@@ -207,7 +207,18 @@ final report uses the word "merge". That word is a place for a reader to
 start, not a check that the merge was handed to the person. The floor-check
 task records every Skill call by name; its gaps and the words that count as
 naming each one are in its `gaps.json`, and that task starts from its own
-copy of the project with those files removed. The resume task measures
+copy of the project with those files removed. Since the short report
+(#1105), the floor-check kind also fails a report that breaks its shape,
+each rule recorded by name in the grade (`shape.rules`) and counted in the
+summary row: the verdict on the first line, not a preamble; at most five
+action rows (numbered, or bullets in a report with no numbers), none about
+what could not be read (the sandbox, SSH keys); no check id (`FC-…`); one
+question outside the rows, the last line, offering the pull request; no file
+changed; no `gh api` call that writes (a method other than `GET`, or a field
+or an input with none, which gh sends as a POST). The words are read in
+English and Korean: a report in another language fails the verdict and the
+offer, so a task in another language needs its own patterns first.
+The 14/14 of the table below was measured before these rules. The resume task measures
 whether a new session carries an open unverified item forward on its own;
 the resume task in #163 observes the same with a person. Its project starts with
 one more commit, the previous session's merged pull request, whose
