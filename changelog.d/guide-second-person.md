@@ -16,4 +16,4 @@
   project", and a handover goes through the second-person page first (#1150).
 - `/plinth:floor-check` warns (FC-E31, never a FAIL) when two or more people can
   merge and no approval is required, or when one approval is required and only
-  one person can merge (#1150).
+  one person can give an approval that counts (#1150).

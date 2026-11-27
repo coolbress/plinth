@@ -1129,8 +1129,8 @@ def _wall() -> tuple[dict, ...]:
               messages={"good": "{branch}: {required} required, and {people} can merge ({who})",
                         "none": "{branch}: {people} can merge ({who}) and no approval is required: nothing makes one "
                                 "of them look at the other's change",
-                        "alone": "{branch}: {required} required, and only {who} can merge: a pull request of theirs "
-                                 "cannot merge, as nobody else's approval counts",
+                        "alone": "{branch}: {required} required, and only {approvers} can give one that counts{how}: "
+                                 "a pull request of theirs cannot merge, as an author cannot approve their own",
                         "hint": "  scripts/with-admin-token.sh scripts/add-ruleset-rule.sh {repo} {preset}   (from a "
                                 "plinth checkout; its docs/how-to/add-a-second-person.md says when)",
                         "review": "who can merge is not read here: /plinth:floor-check reads the collaborators with a "
@@ -5532,18 +5532,37 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
         else:
             verdict("FC-E24", actors == [], {"rid": rid, "actors": actors})
     if "pull_request" in by_type:
-        check_approvals(repo, branch, pr, reserved, network, actions_token)
+        check_approvals(repo, branch, pr, reserved, network, actions_token, root)
+
+
+def codeowner_logins(root: Path | None) -> set[str] | None:
+    """The user logins the CODEOWNERS file GitHub reads names (.github/, the
+    root, docs/, the first found), lowercased; teams (org/team) and emails
+    left out. None when there is no such file."""
+    for rel in (".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"):
+        f = (root or Path(".")) / rel
+        if f.is_file():
+            names = set()
+            for line in read(f).splitlines():
+                for tok in line.split("#", 1)[0].split()[1:]:
+                    if tok.startswith("@") and "/" not in tok:
+                        names.add(tok[1:].lower())
+            return names
+    return None
 
 
 def check_approvals(repo: str, branch: str, pr: dict, reserved: str | None, network: bool,
-                    actions_token: bool) -> None:
-    """The approvals the pull-request rule requires against the people who
-    can merge (#1150), a WARN either way it does not fit: two or more people
-    and no approval, so neither has to look at the other's change; or an
-    approval required and one person, whose own pull requests then cannot
-    merge. Who can merge is the admins where the merge ruleset stands (an
+                    actions_token: bool, root: Path | None = None) -> None:
+    """The approvals the pull-request rule requires against the people
+    (#1150), a WARN either way it does not fit. Two or more people can merge
+    and no approval is required, so neither has to look at the other's
+    change: who can merge is the admins where the merge ruleset stands (an
     agent's own account is a collaborator with write, never the admin), and
-    everyone with write where it does not; bots are not people."""
+    everyone with write where it does not. Or an approval is required and
+    one person at most can give one that counts, so their own pull requests
+    cannot merge: GitHub counts an approval from anyone with write, and with
+    code owners' review on, only from a code owner, so there it is those
+    with write whom this checkout's CODEOWNERS names. Bots are not people."""
     required = pr.get("required_approving_review_count")
     if not isinstance(required, int):
         return
@@ -5557,17 +5576,26 @@ def check_approvals(repo: str, branch: str, pr: dict, reserved: str | None, netw
     role = "admin" if reserved in ("stands", "never") else "push"
     who = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
                  and (c.get("permissions") or {}).get(role) is True)
-    values = {"branch": branch, "who": ", ".join(who) or "nobody",
+    approvers = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
+                       and (c.get("permissions") or {}).get("push") is True)
+    how = ""
+    if pr.get("require_code_owner_review") is True:
+        owners = codeowner_logins(root)
+        approvers = [a for a in approvers if a.lower() in (owners or set())]
+        how = (" (code owners' review is on, and no CODEOWNERS file is here)" if owners is None else
+               " (code owners' review is on, and CODEOWNERS names no one else with write)")
+    values = {"branch": branch, "who": ", ".join(who) or "nobody", "how": how,
+              "approvers": ", ".join(approvers) or "nobody",
               "people": f"{len(who)} {'person' if len(who) == 1 else 'people'}",
               "required": f"{required} approval{'' if required == 1 else 's'}", "repo": repo}
-    if not who:
+    if required >= 1 and len(approvers) <= 1:
+        emit("FC-E31", "warn", "alone", values)
+        emit("FC-E31", "info", "hint", dict(values, preset="one-person"))
+    elif not who:
         emit("FC-E31", "info", "nobody", dict(values, role="admin" if role == "admin" else "write"))
     elif len(who) >= 2 and required == 0:
         emit("FC-E31", "warn", "none", values)
         emit("FC-E31", "info", "hint", dict(values, preset="two-people"))
-    elif required >= 1 and len(who) == 1:
-        emit("FC-E31", "warn", "alone", values)
-        emit("FC-E31", "info", "hint", dict(values, preset="one-person"))
     else:
         emit("FC-E31", "pass", "good", values)
 

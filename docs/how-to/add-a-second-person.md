@@ -98,7 +98,8 @@ with two people, that is still the two of you.
 
 `/plinth:floor-check` warns when this and the people do not match: two or
 more people can merge and no approval is required, or one approval is
-required and only one person can give it.
+required and only one person can give an approval that counts (with code
+owners' review on, that is the people CODEOWNERS names).
 
 ## 5. A token and a plinth install for each person
 
