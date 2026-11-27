@@ -615,21 +615,74 @@ ASKED = re.compile(r"[?？](?=[\s*_)\]\"']|$)")
 UNREADABLE_ROW = re.compile(r"sandbox|ssh key|샌드박스", re.IGNORECASE)
 PR_OFFER = re.compile(r"pull request|\bPR\b|풀 ?리퀘스트", re.IGNORECASE)
 CHECK_ID = re.compile(r"FC-[A-Z]\d")
-GH_METHOD = re.compile(r"\s(?:-X|--method)(?:\s+|=)?([A-Za-z]+)")
-# gh api posts by default once a field or an input is given.
-GH_BODY = re.compile(r"\s(?:-f|-F|--field|--raw-field|--input)(?:\s|=|$)")
+# gh api posts by default once a field or an input is given: `-f x`, `-fx=y`,
+# `-F`, `--field`, `--raw-field`, `--input`, each with `=` or not.
+GH_BODY = re.compile(r"^(?:-[fF].*|--(?:field|raw-field|input)(?:=.*)?)$")
+
+
+def shell_commands(command: str) -> list[str]:
+    """The commands of a shell line, split on `|`, `||`, `&&`, `;` and newlines
+    outside quotes, so a quoted `--jq '.a | b'` stays in its command."""
+    out, cur, quote, i = [], [], "", 0
+    while i < len(command):
+        c = command[i]
+        if quote:
+            cur.append(c)
+            if c == "\\" and quote == '"' and i + 1 < len(command):
+                cur.append(command[i + 1])
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "'\"":
+            quote = c
+            cur.append(c)
+        elif c == "\\" and i + 1 < len(command):
+            cur.append(c + command[i + 1])
+            i += 1
+        elif c in "|;&\n":
+            if c == "&" and command[i + 1 : i + 2] != "&":
+                cur.append(c)
+            else:
+                out.append("".join(cur))
+                cur = []
+                if command[i + 1 : i + 2] == c:
+                    i += 1
+        else:
+            cur.append(c)
+        i += 1
+    out.append("".join(cur))
+    return out
 
 
 def gh_api_writes(command: str) -> list[str]:
     """Each `gh api` call in a shell command that writes: a method other than
-    GET, or no method and a field or an input (gh then posts)."""
+    GET, or no method and a field or an input (gh then posts). Read as shell
+    words, so a quoted argument hides no method and fakes no field."""
     joined = re.sub(r"\\\n", " ", command)
     out = []
-    for part in re.split(r"\|\||&&|[|;\n]", joined):
-        if not re.search(r"\bgh\s+api\b", part):
+    for part in shell_commands(joined):
+        try:
+            words = shlex.split(part)
+        except ValueError:
+            words = part.split()
+        at = next((k for k in range(len(words) - 1) if words[k] == "gh" and words[k + 1] == "api"), None)
+        if at is None:
             continue
-        m = GH_METHOD.search(part)
-        if (m and m.group(1).upper() != "GET") or (not m and GH_BODY.search(part)):
+        args, method, body, k = words[at + 2 :], None, False, 0
+        while k < len(args):
+            a = args[k]
+            if a in ("-X", "--method") and k + 1 < len(args):
+                method, k = args[k + 1], k + 1
+            elif a.startswith("--method="):
+                method = a.split("=", 1)[1]
+            elif a.startswith("-X") and len(a) > 2:
+                method = a[2:].lstrip("=")
+            elif a in ("--jq", "-q", "--template", "-t", "-H", "--header", "--hostname", "--cache", "-p", "--preview"):
+                k += 1  # its value is not an option
+            elif GH_BODY.match(a):
+                body = True
+            k += 1
+        if (method is not None and method.upper() != "GET") or (method is None and body):
             out.append(part.strip())
     return out
 
@@ -641,7 +694,8 @@ def floor_shape(final: str, state: dict[str, Any], tr: dict[str, Any]) -> dict[s
     rows = [line for line in lines if ROW.match(line)] or [line for line in lines if BULLET.match(line)]
     # A decision the person makes is a question inside the row it gates: only
     # the questions outside the rows are counted.
-    asked = [line for line in lines if ASKED.search(line) and line not in rows]
+    # Each question mark counts, so two questions on the last line are two.
+    asked = [line for line in lines if line not in rows for _ in ASKED.findall(line)]
     writes = [w for b in tr["bash"] for w in gh_api_writes(b)]
     rules = {
         "verdict_first": bool(lines) and bool(VERDICT.search(lines[0])) and not PREAMBLE.search(lines[0]),
