@@ -48,10 +48,12 @@ if grep -qE '^1\. I can do it in one pull request: ' <<<"$out" && [ "$(grep -c '
    && [ "$(grep -c 'as one pull request for you to approve?$' <<<"$out")" = 1 ]
 then ok "an empty folder: every file item is one row, and the pull request is offered once"
 else bad "an empty folder: the file items are not one row, or the pull request is offered more than once" "$out"; fi
+# What this machine prints differs (a runner has no plugins installed): the
+# real run is held only to leaving these out; a document built below holds
+# every one of them, in --all and not in the report.
 for s in 'sandbox not verified' 'SSH keys not verified' 'not read either' 'no other credential found' 'no production database URL found' 'from another marketplace' "at the plinth marketplace's pin" 'no archetype'; do
   if grep -qF -- "$s" <<<"$out"; then bad "an empty folder: \"$s\" is in the report; it belongs in the JSON" "$out"
-  elif python3 "$report" --all "$work/empty.json" | grep -qF -- "$s"; then ok "an empty folder: \"$s\" is in --all, not in the report"
-  else bad "an empty folder: \"$s\" is in neither the report nor --all"; fi
+  else ok "an empty folder: \"$s\" is not in the report"; fi
 done
 if python3 "$report" --area machine "$work/empty.json" | grep -qF '  off: '; then ok "the sandbox's lines print with --area machine"
 else bad "the sandbox's lines do not print with --area machine"; fi
@@ -88,6 +90,32 @@ d["exit"] = 1 if n["fail"] else 0
 json.dump(d, open(sys.argv[2], "w"))
 PY
 }
+
+# One result for each fact #1105 leaves to the JSON, as the checker words it.
+doc facts '
+r("FC-G10", "unknown", "SSH keys not verified here: GitHub settings say which keys push", key="github", area="machine", reason="cannot be read here", here=True)
+r("FC-G10", "info", "  not read either: a program named by GIT_ASKPASS", key="askpass", area="machine")
+r("FC-G06", "info", "gh stores 1 account for github.com: x; no other credential found by these rules", key="none", area="machine")
+r("FC-G07", "info", "git asks only gh for github.com; no other credential found by these rules", key="none", area="machine")
+r("FC-G09", "info", "no github.com login in ~/.netrc; no other credential found by these rules", key="none", area="machine")
+r("FC-G11", "info", "no production database URL found in this environment", key="none", area="machine")
+r("FC-G02", "info", "at the plinth marketplace'"'"'s pin: plinth@plinth (user)", key="current", area="machine")
+r("FC-G02", "info", "plugins from another marketplace, outside what plinth compares: x@y", key="other", area="machine")
+r("FC-E06", "info", "wall expectation: checks [], merge methods [squash]", key="expect")
+r("FC-E30", "pass", "the repository has a description", key="good")
+r("FC-E07", "info", "the wall is checked on main, the repository'"'"'s default branch", key="where")
+r("FC-C03", "unknown", "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped", key="none", area="project", reason="no archetype")
+r("FC-C26", "pass", "JSON logs: static hint in src/app.py (structlog)", key="good", area="project")
+r("FC-A11", "info", "a local ISSUE_TEMPLATE replaces the owner'"'"'s shared set", key="info", area="files")
+r("FC-A01", "fail", "LICENSE missing or empty", area="files", handoff="agent")
+'
+out="$(python3 "$report" --no-note "$work/facts.json")"
+all="$(python3 "$report" --all "$work/facts.json")"
+for s in 'SSH keys not verified' 'not read either' 'no other credential found' 'no production database URL found' "at the plinth marketplace's pin" 'from another marketplace' 'wall expectation' 'the repository has a description' 'the wall is checked on' 'no archetype' 'JSON logs: static hint' 'a local ISSUE_TEMPLATE'; do
+  if grep -qF -- "$s" <<<"$out"; then bad "\"$s\" is in the report; it belongs in the JSON" "$out"
+  elif grep -qF -- "$s" <<<"$all"; then ok "\"$s\" is in --all, not in the report"
+  else bad "\"$s\" is in neither the report nor --all" "$all"; fi
+done
 
 doc many '
 for k in range(1, 9):

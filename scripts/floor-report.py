@@ -95,7 +95,8 @@ def rank(f: dict) -> tuple:
 def rows(fs: list[dict]) -> list[dict]:
     """The action rows: every pull-request finding is one row; each other
     finding is its own."""
-    out, pr = [], None
+    out: list[dict] = []
+    pr: dict | None = None
     for f in sorted(fs, key=rank):
         kind = KINDS[f["handoff"]]
         # One that cannot be kept (a tracked secret, say) keeps its own row
@@ -199,7 +200,7 @@ def note_of(doc: dict, root: str, prev: dict | None) -> dict:
 def since(prev: dict, now: dict, doc: dict) -> str:
     a, b, unread = set(prev["findings"]), set(now["findings"]), unread_ids(doc)
     fixed, still, new = a - b - unread, a & b - unread, b - a
-    gone = a & unread - set(f["id"] for f in findings(doc["results"]))
+    gone = a & unread - {f["id"] for f in findings(doc["results"])}
     return (f"Since the last run ({prev['when'][:10]}): {len(fixed)} fixed, {len(still)} still missing, "
             f"{len(new)} new" + (f"; {len(gone)} not read this time, so not counted" if gone else "") + ".")
 
