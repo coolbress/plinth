@@ -24,7 +24,11 @@ first pull request is merged, give the agent a token of its own without it:
    later answers 403, add the permission it needed, but never those two.
    Without Administration the token cannot edit or delete the ruleset
    either; the browser login can, because its `repo` scope includes
-   administration.
+   administration. **Expiration**: choose a date, as GitHub recommends (90
+   days is a reasonable start). When the token expires, the agent's `gh`
+   commands and pushes fail with 401: `gh` prints `Bad credentials (HTTP
+   401)` and `git push` prints `Authentication failed`. Repeat steps 1 and
+   2 with a new token.
 2. In a separate terminal window, not with `!` in Claude Code, run
    `gh auth login`: GitHub.com, HTTPS, **Yes** to authenticating Git, then
    **Paste an authentication token**. The token is for your own account,

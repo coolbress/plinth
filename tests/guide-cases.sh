@@ -26,6 +26,8 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 mkdir -p "$work/bin"
 cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
+# MOCK_CALLS_LOG gets one line per call, to count the calls of a run (#1145).
+[ -z "${MOCK_CALLS_LOG:-}" ] || echo "$1 $2" >> "$MOCK_CALLS_LOG"
 # MOCK_DIR holds open.json, merged.json, issues.json and all.json, and comments.json
 # when a case reads a pull request's comments; MOCK_GH_FAIL makes every call
 # fail as an unauthenticated gh does. A list is cut at --limit.
@@ -70,12 +72,15 @@ fi
 # The history read (#1076): one GraphQL call, its query naming mergedPulls,
 # answered from history.json in GitHub's response shape, else a project
 # created 2026-10-01 with nothing recorded. MOCK_HISTORY_FAIL fails it.
+# Its search for the last look back (#1145) answers from history.json's
+# data.lookBack, else a look back opened a day ago, so that no case is due
+# one unless it says so, whatever day the tests run.
 if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *mergedPulls* ]]; then
   [ -n "${MOCK_HISTORY_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
   set -o pipefail
   if [ -f "$MOCK_DIR/history.json" ]; then cat "$MOCK_DIR/history.json"
   else echo '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":0},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":0,"nodes":[]},"firstMerges":{"nodes":[]}}}}'
-  fi | jq -r "$jqf"
+  fi | jq '.data.lookBack //= {nodes: [{number: 900, title: "Look back \(now - 86400 | todate | .[0:10])", createdAt: (now - 86400 | todate)}]}' | jq -r "$jqf"
   exit
 fi
 # The latest completed run of ci.yml on main (#1076): runs.json in the REST
@@ -1652,10 +1657,11 @@ grep -qxF "main ci: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "so
   ok "the main run read failing: main ci not read, the rest unchanged" || { bad "the main run read failing"; sed 's/^/        /' <<<"$out" | head -30; }
 # The history read failing: its lines say so; nothing else moves.
 out="$(MOCK_HISTORY_FAIL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
-others() { grep -vE '^(started|so far|totals|last activity|release due): |^  20[0-9]{2}-[0-9]{2}-[0-9]{2} ' <<<"$1"; }
+others() { grep -vE '^(started|so far|totals|last activity|release due|look back): |^  20[0-9]{2}-[0-9]{2}-[0-9]{2} ' <<<"$1"; }
 grep -qxF "so far: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "totals: not read (HTTP 502: Bad Gateway)" <<<"$out" &&
-  grep -qxF "started: not read (HTTP 502: Bad Gateway)" <<<"$out" && [ "$(others "$out")" = "$(others "$base")" ] &&
-  ok "the history read failing: started, so far and totals not read, the rest unchanged" ||
+  grep -qxF "started: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "look back: not read (HTTP 502: Bad Gateway)" <<<"$out" &&
+  [ "$(others "$out")" = "$(others "$base")" ] &&
+  ok "the history read failing: started, so far, totals and look back not read, the rest unchanged" ||
   { bad "the history read failing"; diff <(others "$base") <(others "$out") | head; grep -E '^(started|so far|totals)' <<<"$out" | sed 's/^/        /'; }
 state "GitLab: so far not read" "$work/gitlab" "so far: not read (the guide reads GitHub only)"
 grep -qxF "release due: not read (HTTP 502: Bad Gateway)" <<<"$out" && ok "the history read failing: release due not read" ||
@@ -1751,6 +1757,97 @@ put "$d/open.json" "$(pr 12 'feat: totals' false run)"
 state "release due with a pull request open: its route, the signal a line" "$d" \
   "release due: yes: last tag v0.3.0 (2026-10-23); 3 merged since, 1 of them a feat: or fix: by a person" \
   "command: /run" "!where: $rel_where"
+# ── a look back due (#1145) ───────────────────────────────────────────────
+# From the history read: the last issue titled "Look back …" (a newer title
+# with the words elsewhere does not count) and the newest tag; the merges
+# from the merged read. A web project, so no release is due alongside.
+lbh() { # <last look back's createdAt, or "" for none> [<tags nodes>] [<merged total>]
+  local n='[]'
+  [ -z "$1" ] || n="[{\"number\":40,\"title\":\"Look back ${1:0:10}\",\"createdAt\":\"$1\"},{\"number\":41,\"title\":\"fix: the Look back link\",\"createdAt\":\"$(ago 60)\"}]"
+  hist "${2:-[]}" "${3:-1}" | jq --argjson n "$n" '.data.lookBack = {nodes: $n}'
+}
+lb2="$(ago 172800)"; lb40="$(ago 3456000)"
+lb_cmd="/plinth:floor-check"; lb_where="Between pieces of work (step 9)"
+d="$(repo lookback-feats 'archetype: web')"
+many=(); for i in $(seq 1 12); do many+=("$(pr "$i" "feat: change $i" false SUCCESS | just 3600)"); done
+put "$d/merged.json" "${many[@]}"
+lbh "$lb2" > "$d/history.json"
+state "look back due: 12 feat: merges since the last, nothing open: floor-check, not /grilling" "$d" \
+  "look back: yes (10 feat: merges): last look back ${lb2:0:10} (#40); 12 feat: merges by a person since; a tag since: none; 30 days: not yet" \
+  "where: $lb_where" "command: $lb_cmd"
+note="$(grep '^note: ' <<<"$(MOCK_DIR="$d" "$script" "$d")")"
+miss=""
+for w in "a look back is due (10 feat: merges)" "Look back YYYY-MM-DD" "at most three tickets linked to it as sub-issues" "(1) is shipping easy" "(2) the mix of work" \
+         "(3) what the last look back promised" "(4) what can be removed, each with a date" "(5) where the README, AGENTS.md and docs/how-to disagree" \
+         "(6) is the floor intact" "when a restore was last tried and whether it checked the data (a row count before and after)" \
+         "whether the last bills match what was expected, with the spend limits still set" "/usage (built in), w for the last 7 days, and its recommendations" \
+         "on a private repository, the month's Actions usage on GitHub's billing page" "(7) did the agent repeat a mistake" "/insights (built in)"; do
+  grep -qF -- "$w" <<<"$note" || miss="$miss / $w"
+done
+[ -z "$miss" ] && ok "the look back's note: the issue's title, the seven questions, the restore and bills questions, /usage, Actions usage, /insights" || bad "the look back's note lacks:$miss"
+# No call of its own (#1180's cap): the look back comes from the history
+# read. 8 is what one run made on this state before #1145 too.
+calls="$work/calls.log"; : > "$calls"
+MOCK_CALLS_LOG="$calls" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
+n="$(grep -c . "$calls" || true)"
+[ "$n" -eq 8 ] && ok "a look back due: $n gh calls in one run, none of them its own" || bad "a look back due: $n gh calls in one run, not 8: $(sort "$calls" | uniq -c | tr -s ' \n' ' ')"
+put "$d/issues.json" "$(issue 11 'Show monthly totals' ready-for-agent)"
+state "look back due with a ticket ready: the ticket is the command, the look back a line" "$d" \
+  "look back: yes (10 feat: merges): last look back ${lb2:0:10} (#40); 12 feat: merges by a person since; a tag since: none; 30 days: not yet" \
+  "command: /implement #11" "!where: $lb_where"
+d="$(repo lookback-tag 'archetype: web')"
+put "$d/merged.json" "$(pr 2 'docs: after the look back' false SUCCESS | just 3600)"
+lbh "$lb2" "[{\"name\":\"v0.2.0\",\"target\":{\"committedDate\":\"$(ago 86400)\"}}]" > "$d/history.json"
+state "look back due: a tag pushed since the last" "$d" \
+  "look back: yes (a tag): last look back ${lb2:0:10} (#40); 0 feat: merges by a person since; a tag since: v0.2.0; 30 days: not yet" \
+  "command: $lb_cmd"
+d="$(repo lookback-30 'archetype: web')"
+put "$d/merged.json" "$(pr 2 'docs: after the look back' false SUCCESS | just 3024000)"
+lbh "$lb40" > "$d/history.json"
+state "look back due: 30 days since the last, with a merge" "$d" \
+  "look back: yes (30 days with a merge): last look back ${lb40:0:10} (#40); 0 feat: merges by a person since; a tag since: none; 30 days: passed, with 1 merge by a person since" \
+  "command: $lb_cmd"
+d="$(repo lookback-quiet 'archetype: web')"
+put "$d/merged.json" "$(pr 2 'docs: before the look back' false SUCCESS | just 3888000)"
+lbh "$lb40" > "$d/history.json"
+state "look back not due: 30 days, but no merge since" "$d" \
+  "look back: no: last look back ${lb40:0:10} (#40); 0 feat: merges by a person since; a tag since: none; 30 days: passed, with no merge by a person since" \
+  "command: /grilling"
+d="$(repo lookback-none-due 'archetype: web')"
+put "$d/merged.json" "$(pr 2 'docs: one' false SUCCESS | just 3600)" "$(pr 3 'feat: two' false SUCCESS | just 3600)"
+lbh "$lb2" > "$d/history.json"
+state "look back not due: one feat: in two days, no tag" "$d" \
+  "look back: no: last look back ${lb2:0:10} (#40); 1 feat: merge by a person since; a tag since: none; 30 days: not yet" \
+  "command: /grilling"
+d="$(repo lookback-first 'archetype: web')"
+put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS | just 3456000)" "$(pr 3 'chore: tidy' false SUCCESS | just 3600)"
+lbh "" > "$d/history.json"
+state "no look back yet: counted from the first merge, which counts" "$d" \
+  "look back: yes (30 days with a merge): no look back yet, counted from the first merge (${lb40:0:10}); 0 feat: merges by a person since; a tag since: none; 30 days: passed, with 2 merges by a person since" \
+  "command: $lb_cmd"
+d="$(repo lookback-bots 'archetype: web')"
+put "$d/merged.json" "$(pr 2 'docs: before the look back' false SUCCESS | just 3888000)" "$(pr 3 'chore(deps): bump x' true SUCCESS | just 3600)"
+lbh "$lb40" > "$d/history.json"
+state "look back not due: 30 days, only Dependabot merged since" "$d" \
+  "look back: no: last look back ${lb40:0:10} (#40); 0 feat: merges by a person since; a tag since: none; 30 days: passed, with no merge by a person since"
+d="$(repo lookback-case 'archetype: web')"
+put "$d/merged.json" "$(pr 2 'docs: one' false SUCCESS | just 3600)"
+lbh "$lb40" | jq --arg t "$(ago 172800)" '.data.lookBack.nodes += [{number: 42, title: "look Back, typed by hand", createdAt: $t}]' > "$d/history.json"
+state "a look back titled in another case counts" "$d" \
+  "look back: no: last look back ${lb2:0:10} (#42); 0 feat: merges by a person since; a tag since: none; 30 days: not yet"
+d="$(repo lookback-release)"
+many=(); for i in $(seq 1 12); do many+=("$(pr "$i" "feat: change $i" false SUCCESS | just 3600)"); done
+put "$d/merged.json" "${many[@]}"
+lbh "$lb2" > "$d/history.json"
+state "a release and a look back both due: the release is the command, the look back a line" "$d" \
+  "look back: yes (10 feat: merges): last look back ${lb2:0:10} (#40); 12 feat: merges by a person since; a tag since: none; 30 days: not yet" \
+  "where: $rel_where" "command: $rel_cmd"
+d="$(repo lookback-nothing 'archetype: web')"
+lbh "" > "$d/history.json"
+state "no look back and nothing merged: never due" "$d" "look back: no: no look back yet; nothing merged yet"
+grep -qF 'A `look back: yes` line' "$guide_md" && grep -qF 'when `where:` is not the look back' "$guide_md" &&
+  ok "the skill says the look back is one Then sentence when it is not the step" || bad "the skill does not place the look back line"
+
 # The skill says how the signal is said: in part 3 when it is the step, in
 # part 4 otherwise.
 grep -qF 'When `where:` is the release' "$guide_md" && grep -qF 'When a `release due:` line is printed and `where:` is not the release' "$guide_md" &&

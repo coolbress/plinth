@@ -330,9 +330,19 @@ repositories in the accounts it reached
   "Template update available: …". What to type for it is
   `/plinth:template-update`. A repository made before the merge ruleset gets
   [the command that adds it](give-the-agent-its-own-account.md#a-repository-made-before-the-merge-ruleset).
-  Every week or two, `/improve-codebase-architecture` finds what to deepen,
-  and `/ponytail-audit`, [listed](#skills-plinth-lists-but-does-not-install),
-  what to cut, for step 2. `/improve-codebase-architecture` is the hardest of
+  A look back is due, and `/plinth:guide` says so, at whichever comes first
+  since the last issue titled `Look back …` (or since the first merge): a
+  version tag pushed, 10 `feat:` pull requests merged, or 30 days with at
+  least one merge; never with nothing merged. 10 and 30 are starting values
+  with no controlled study behind them. One tool per job, cheapest first:
+  `/plinth:floor-check` for whether the floor is intact; `/insights` (built
+  in) for the mix of work and a mistake the agent repeated; then, only when
+  you want them, `/improve-codebase-architecture` for what to deepen and
+  `/ponytail-audit`, [listed](#skills-plinth-lists-but-does-not-install),
+  for what to cut. It leaves one issue, `Look back YYYY-MM-DD`, with a short
+  answer to each of the seven questions the guide gives, and at most three
+  tickets linked to it, each to finish within two days, for step 2 or 4.
+  `/improve-codebase-architecture` is the hardest of
   the default skills for a beginner: it uses engineer vocabulary, runs a
   design interview and writes an HTML report.
 - **Look at:** `/plinth:floor-check`'s report.
