@@ -194,7 +194,10 @@
         "handoff",
         "lifecycle",
         "view",
-        "ci_visible"
+        "ci_visible",
+        "key",
+        "fix",
+        "keepable"
       ],
       "properties": {
         "id": {
@@ -289,6 +292,19 @@
         "ci_visible": {
           "type": "boolean",
           "description": "Whether ci / floor-check prints this check."
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which of the check's messages this is, as the registry names it."
+        },
+        "fix": {
+          "type": "string",
+          "description": "The registry's fix for the check, in a sentence."
+        },
+        "keepable": {
+          "type": "boolean",
+          "description": "false when the finding cannot be kept by choice: it is irreversible or reaches others."
         }
       },
       "allOf": [

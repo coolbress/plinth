@@ -7,7 +7,9 @@
 # the single argument `--repo o/r`, so the wall was never checked (#241). The
 # block is read out of SKILL.md, not copied here, so a test cannot pass a stale
 # copy. `gh` and `python3` are stubs on PATH: `gh` answers the repository name,
-# `python3` prints each argument it was given on its own line.
+# `python3` appends each argument it was given, one per line, to $CALLS, then
+# a `--` line. The block is two calls joined by a pipe (#1105): the checker,
+# with --format json, and scripts/floor-report.py reading its output.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 skill="$root/skills/floor-check/SKILL.md"
@@ -24,7 +26,9 @@ fi
 
 mkdir -p "$work/bin"
 printf '#!/bin/sh\nprintf "%%s" "$STUB_REPO"\n' > "$work/bin/gh"
-printf '#!/bin/sh\nfor a in "$@"; do printf "[%%s]\\n" "$a"; done\n' > "$work/bin/python3"
+# Each call also logs what it read on stdin and prints "piped": the second
+# call reads "piped" only through a pipe from the first.
+printf '#!/bin/sh\nin="$(cat)"\nfor a in "$@"; do printf "[%%s]\\n" "$a" >> "$CALLS"; done\nprintf "stdin: %%s\\n--\\n" "$in" >> "$CALLS"\necho piped\n' > "$work/bin/python3"
 chmod +x "$work/bin/gh" "$work/bin/python3"
 
 base="[/plugin/scripts/floor-check.py]
@@ -42,9 +46,12 @@ for sh in bash zsh; do
   # A missing shell is a failure, not a skip: a skipped zsh is today's bug unseen.
   if ! command -v "$sh" >/dev/null; then bad "$sh is not installed, so the block was not run under it"; continue; fi
   for repo in o/r ""; do
-    got="$(cd "$work" && PATH="$work/bin:$PATH" CLAUDE_PLUGIN_ROOT=/plugin STUB_REPO="$repo" "$sh" -c "$block" 2>&1)"
-    if [ -n "$repo" ]; then want="$base"$'\n'"[--repo]"$'\n'"[$repo]"; what="repo=$repo: --repo and the value as two arguments"
-    else want="$base"; what="repo empty: neither --repo nor a value"; fi
+    : > "$work/calls"
+    (cd "$work" && PATH="$work/bin:$PATH" CLAUDE_PLUGIN_ROOT=/plugin STUB_REPO="$repo" CALLS="$work/calls" "$sh" -c "$block" </dev/null 2>&1)
+    got="$(cat "$work/calls")"
+    report=$'[/plugin/scripts/floor-report.py]\n[--root]\n[.]\nstdin: piped\n--'
+    if [ -n "$repo" ]; then want="$base"$'\n'"[--repo]"$'\n'"[$repo]"$'\n[--format]\n[json]\nstdin: \n--\n'"$report"; what="repo=$repo: --repo and the value as two arguments, the JSON piped to the report"
+    else want="$base"$'\n[--format]\n[json]\nstdin: \n--\n'"$report"; what="repo empty: neither --repo nor a value, the JSON piped to the report"; fi
     if [ "$got" = "$want" ]; then ok "$sh, $what"
     else bad "$sh, $what; got:"; sed 's/^/        /' <<<"$got"; fi
   done
