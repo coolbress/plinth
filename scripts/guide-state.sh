@@ -600,11 +600,18 @@ fi
 #     wayfinder:task), among the 50 closed issues updated last;
 #   - releases (not drafts) and tags with no release, the 10 newest of each;
 #   - feat: merges by people, from the merged pull requests read above.
+# The same call finds the last look back (#1145): the newest issue, open or
+# closed, whose title starts with "Look back" in any case, from a search of
+# the repository's issue titles, newest first (search finds the words
+# anywhere, so the start is checked here; by best match, the newest could
+# fall past the first 10), and the moment 30 days ago, for the line below.
 # Every other merge is counted only. The newest five are printed, newest
 # first; with a problem open, only the totals line. Each event keeps its whole
 # timestamp, in UTC (a tag's date may carry an offset), until the five are
 # picked: only the printed date is cut to the day.
-history_q='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+history_q='query($owner: String!, $name: String!, $lookq: String!) {
+  lookBack: search(query: $lookq, type: ISSUE, first: 10) { nodes { ... on Issue { number title createdAt } } }
+  repository(owner: $owner, name: $name) {
   createdAt pushedAt
   mergedPulls: pullRequests(states: MERGED) { totalCount }
   closedIssues: issues(states: CLOSED) { totalCount }
@@ -631,12 +638,14 @@ history_jq='def clean: gsub("[\t\n\r]"; " ");
      ([$r.releases.nodes[] | select(.isDraft | not) | .tagName] as $rel | $r.tags.nodes[] | select(.name as $t | $rel | index($t) | not)
        | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", ($at | utc), .name, "tag", ""]),
      ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
-       | ["first", .mergedAt, "#\(.number)", (.title | clean)]))
+       | ["first", .mergedAt, "#\(.number)", (.title | clean)]),
+     ([.data.lookBack.nodes[]? | select((.title // "") | ascii_downcase | startswith("look back")) | select(.createdAt != null)] | max_by(.createdAt)
+       | ["lookback", (if . then .createdAt else "" end), (if . then "#\(.number)" else "" end), (now - 2592000 | todate)]))
   | @tsv'
 # Read here, before the route: the release signal (#1077) takes its last
 # tag from it. Printed at the end, after main ci.
 history_ok=""
-history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f query="$history_q" \
+history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f lookq="repo:$repo is:issue in:title \"Look back\" sort:created-desc" -f query="$history_q" \
       --jq "\"$repo\" as \$repo | $history_jq" 2>&1)" && history_ok=yes
 # The latest completed run of ci.yml on main, read here too: a release is not
 # the next step while it fails (#1077 review). Printed after the route.
@@ -712,6 +721,49 @@ if [ "$archetype" != web ]; then
     else of="$feats of them a feat: or fix: by a person${read_cut:+ among those read}"; release_due=yes; fi
     release_line="release due: $([ -n "$release_due" ] && echo yes || echo no): $from, $of"
     echo "$release_line"
+  fi
+fi
+
+# A look back (#1145): due, whichever comes first since the last one (or,
+# with none yet, since the first merge by a person, which counts): a tag
+# pushed; 10 feat: merges by a person; 30 days with at least one merge by a
+# person (Dependabot's alone do not make one due).
+# Never with nothing merged. 10 and 30 are starting values, with no
+# controlled study behind them. Counted from the merged pull requests read
+# above; when that read was cut, the line says so. No call of its own: it
+# comes from the history read, and with it not read, it says so and nothing
+# else moves. The next step only when nothing else is open (the route below);
+# otherwise a line the skill turns into one sentence.
+lookback_due=""
+if [ -z "$history_ok" ]; then
+  echo "look back: not read ($(tail -1 <<<"$history" | tr '\t' ' '))"
+else
+  lb_at="$(awk -F '\t' '$1 == "lookback" { print $2; exit }' <<<"$history")"
+  lb_ref="$(awk -F '\t' '$1 == "lookback" { print $3; exit }' <<<"$history")"
+  cut30="$(awk -F '\t' '$1 == "lookback" { print $4; exit }' <<<"$history")"
+  first_at="$( { awk -F '\t' '$1 == "first" { print $2 }' <<<"$history"
+      [ -n "$past_first" ] || awk -F '\t' '$2 == "person" { print $5 }' <<<"$merged"; } | grep . | sort | head -1 || true)"
+  lb_from="${lb_at:-$first_at}"
+  if [ -z "$lb_from" ]; then
+    echo "look back: no: no look back yet; nothing merged yet"
+  else
+    if [ -n "$lb_at" ]; then lb_last="last look back ${lb_at:0:10} ($lb_ref)"
+    else lb_last="no look back yet, counted from the first merge (${first_at:0:10})"; fi
+    lb_since="$(awk -F '\t' -v at="$lb_from" '$5 >= at' <<<"$merged")"
+    lb_n="$(awk -F '\t' '$2 == "person"' <<<"$lb_since" | grep -c . || true)"
+    lb_feats="$(awk -F '\t' '$2 == "person" && $4 ~ /^feat(\([^)]*\))?!?:/' <<<"$lb_since" | grep -c . || true)"
+    lb_cut=""
+    if [ -n "$past_first" ] && [[ "$(tail -1 <<<"$merged" | field 5)" > "$lb_from" ]]; then lb_cut=", of the last $read read"; fi
+    lb_tag="$(awk -F '\t' -v at="$lb_from" '$1 == "lasttag" && $3 >= at { print $2; exit }' <<<"$history")"
+    lb_why=""
+    [ -z "$lb_tag" ] || lb_why="a tag"
+    [ "$lb_feats" -lt 10 ] || lb_why="${lb_why:+$lb_why, }10 feat: merges"
+    { [[ "$lb_from" > "$cut30" ]] || [ "$lb_n" -eq 0 ]; } || lb_why="${lb_why:+$lb_why, }30 days with a merge"
+    [ -z "$lb_why" ] || lookback_due=yes
+    if [[ "$lb_from" > "$cut30" ]]; then lb_days="30 days: not yet"
+    elif [ "$lb_n" -eq 0 ]; then lb_days="30 days: passed, with no merge by a person since"
+    else lb_days="30 days: passed, with $lb_n merge$([ "$lb_n" = 1 ] || echo s) by a person since$lb_cut"; fi
+    echo "look back: $([ -n "$lookback_due" ] && echo "yes ($lb_why)" || echo no): $lb_last; $lb_feats feat: merge$([ "$lb_feats" = 1 ] || echo s) by a person since$lb_cut; a tag since: ${lb_tag:-none}; $lb_days"
   fi
 fi
 
@@ -1185,6 +1237,12 @@ elif [ -n "$release_due" ] && [ -z "$main_red" ]; then
   how="$(row "A merged change to put out" | sed -n 4p)"
   note="$(sed -n 's/^release due: yes: //p' <<<"$release_line"); $(release_said)"
   say "A merged change to put out" "none: ${how#*for the others, }"
+elif [ -n "$lookback_due" ] && [ -z "$main_red" ]; then
+  # Nothing else open (#1145): the look back, opened by floor-check (question
+  # 6). Until the template's Look back issue form ships, the note carries the
+  # title and the seven questions itself.
+  note="a look back is due ($lb_why); after /plinth:floor-check, open an issue titled Look back YYYY-MM-DD (today's date) with a short answer to each of seven questions, and at most three tickets linked to it as sub-issues, each one to finish within two days: (1) is shipping easy: the last tag, and the feat: and fix: merges since; (2) the mix of work since the last look back (feat, fix, refactor, chore); (3) what the last look back promised and what is still open, incident notes' follow-ups included; (4) what can be removed, each with a date; (5) where the README, AGENTS.md and docs/how-to disagree with what the code does; (6) is the floor intact: the template and plinth pins, the checks and the ruleset (this floor-check); when a restore was last tried and whether it checked the data (a row count before and after); whether the last bills match what was expected, with the spend limits still set: /usage (built in), w for the last 7 days, and its recommendations, which say which skills, plugins and MCP servers used it, and, on a private repository, the month's Actions usage on GitHub's billing page against the plan's included amount; (7) did the agent repeat a mistake, and if so move its fix one rung up (a written rule, then a check that fails). /insights (built in) helps with 2 and 7; only if the person wants, /improve-codebase-architecture and, if installed, /ponytail-audit with 4"
+  say "Between pieces of work" "/plinth:floor-check"
 else
   say "An idea in your own words" "/grilling"
 fi
