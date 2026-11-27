@@ -11,19 +11,23 @@ this repository added there kept. Standard library only.
       repository's). Writes the whole file, each block resolved to the
       combination, to <out>, and prints one line per line this repository
       added that the template's side drops:
-          risk<TAB><placement><TAB><line>
+          risk<TAB><placement><TAB><count><TAB><line>
+      <count> is how many times <line> is in the template's side of the
+      whole file, for `where`; <line> is the rest of the line, tabs and all.
       <placement> is `in place` (after or before a line both sides keep),
-      `replaces <the template's line>` (the same key, set by this repository),
+      `replaces <the template's line>` (the same key under the same parent
+      keys or table, set by this repository),
       `no old place` (its neighbours are gone: at the end of the block), or
       `no old place; propose: <where>` for a Markdown line, `under ## This
       project` when the file ends in that section. Exit 0; exit 2 when the
       markers cannot be read (nested, unclosed, or diff3's `|||||||`).
 
-  template-update-combine.py where <file> <line>
-      Where <line> is now: `<section><TAB><line number>`, the section being
-      the Markdown heading above it, the TOML table, or the YAML keys it sits
-      under (`jobs.ci.with`), empty when there is none. Prints nothing and
-      exits 1 when the line is not in the file.
+  template-update-combine.py where <file> <line> <count>
+      Where <line> is now: `<section><TAB><line number>` of its last
+      occurrence, the section being the Markdown heading above it, the TOML
+      table, or the YAML keys it sits under (`jobs.ci.with`), empty when
+      there is none. Prints nothing and exits 1 when the file holds it no
+      more than <count> times, the template's side's own.
 """
 
 from __future__ import annotations
@@ -141,7 +145,9 @@ def units(side: list[str], kind: str) -> list[tuple[int, int, int]]:
             break
         item, d, j = i, depth(side[i]), i + 1
         while j < n and side[j].strip() and (
-            d > 0 or (kind == "yaml" and indent(side[j]) > indent(side[item]) and not is_comment(side[j], kind))
+            d > 0
+            or (kind == "yaml" and indent(side[j]) > indent(side[item]) and not is_comment(side[j], kind)
+                and key_of(side[j], kind) is None)
         ):
             d += depth(side[j])
             j += 1
@@ -150,8 +156,29 @@ def units(side: list[str], kind: str) -> list[tuple[int, int, int]]:
     return out
 
 
+def parents(lines: list[str], n: int, kind: str) -> tuple[str, ...]:
+    """The keys line n sits under: the TOML table, or the YAML keys of the
+    lines above it with less indentation."""
+    if kind == "toml":
+        return tuple(t.strip() for t in reversed(lines[:n]) if re.match(r"^\s*\[", t))[:1]
+    if kind != "yaml":
+        return ()
+    keys: list[str] = []
+    limit = indent(lines[n])
+    for t in reversed(lines[:n]):
+        if not t.strip() or t.lstrip().startswith("#") or indent(t) >= limit:
+            continue
+        k = key_of(t, kind)
+        if k is not None:
+            keys.insert(0, k)
+            limit = indent(t)
+        if limit == 0:
+            break
+    return tuple(keys)
+
+
 def combine(ours: list[str], theirs: list[str], added: set[str], kind: str,
-            closing: bool) -> tuple[list[str], list[tuple[str, str]]]:
+            closing: bool, head: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
     result = list(theirs)
     kept = set(theirs)
     risky = [ln.strip() != "" and ln in added and ln not in kept and not ln.startswith((OURS, THEIRS)) for ln in ours]
@@ -165,10 +192,12 @@ def combine(ours: list[str], theirs: list[str], added: set[str], kind: str,
             continue
         span = ours[first:last + 1]
         placement = ""
-        k = key_of(ours[item], kind)
+        k = key_of(ours[item], kind) if risky[item] else None
         if k is not None:
+            where = parents(head + ours, len(head) + item, kind)
             for tf, ti, tl in units(result, kind):
-                if key_of(result[ti], kind) == k and indent(result[ti]) == indent(ours[item]) and result[ti] not in added:
+                if key_of(result[ti], kind) == k and indent(result[ti]) == indent(ours[item]) \
+                        and parents(head + result, len(head) + ti, kind) == where and result[ti] not in added:
                     placement = f"replaces {result[ti].strip()}"
                     result[tf:tl + 1] = span
                     break
@@ -191,11 +220,11 @@ def combine(ours: list[str], theirs: list[str], added: set[str], kind: str,
     for a, b in tail_report:
         for ln in tail[a:b]:
             if ln.strip() and ln in added and ln not in kept:
-                where = "no old place"
+                note = "no old place"
                 if kind == "md" and closing:
-                    where += "; propose: drop it, the file's last section is that heading" if ln.strip() == THIS_PROJECT \
+                    note += "; propose: drop it, the file's last section is that heading" if ln.strip() == THIS_PROJECT \
                         else f"; propose: under {THIS_PROJECT}, the file's last section"
-                report.append((where, ln))
+                report.append((note, ln))
     result += tail
     return result, report
 
@@ -219,29 +248,31 @@ def cmd_combine(path: str, base_path: str, old_path: str, out_path: str) -> int:
     out: list[str] = []
     at = 0
     for s, m, e in found:
-        res, report = combine(text[s + 1:m], text[m + 1:e], added, kind, closing)
+        res, report = combine(text[s + 1:m], text[m + 1:e], added, kind, closing, out + text[at:s])
         out += text[at:s] + res
         at = e + 1
         for placement, line in report:
-            print(f"risk\t{placement}\t{line}")
+            print(f"risk\t{placement}\t{theirs_whole.count(line)}\t{line}")
     out += text[at:]
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text("\n".join(out) + "\n", encoding="utf-8")
     return 0
 
 
-def cmd_where(path: str, line: str) -> int:
+def cmd_where(path: str, line: str, theirs_count: str) -> int:
     text, kind = lines_of(path), kind_of(path)
-    if line not in text:
+    # Kept only when the file holds more of it than the template's side did.
+    if text.count(line) <= int(theirs_count):
         return 1
-    n = text.index(line)
+    n = len(text) - 1 - text[::-1].index(line)
     section = ""
     if kind == "md":
         section = next((t for t in reversed(text[:n]) if re.match(r"^#{1,6} ", t)), "")
     elif kind == "toml":
         section = next((t.strip() for t in reversed(text[:n]) if re.match(r"^\s*\[", t)), "")
     elif kind == "yaml":
-        keys, limit = [], indent(line)
+        keys: list[str] = []
+        limit = indent(line)
         for t in reversed(text[:n]):
             if not t.strip() or t.lstrip().startswith("#") or indent(t) >= limit:
                 continue
@@ -259,8 +290,8 @@ def cmd_where(path: str, line: str) -> int:
 def main(argv: list[str]) -> int:
     if len(argv) == 6 and argv[1] == "combine":
         return cmd_combine(*argv[2:6])
-    if len(argv) == 4 and argv[1] == "where":
-        return cmd_where(argv[2], argv[3])
+    if len(argv) == 5 and argv[1] == "where":
+        return cmd_where(argv[2], argv[3], argv[4])
     print(__doc__, file=sys.stderr)
     return 2
 

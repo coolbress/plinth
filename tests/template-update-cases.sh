@@ -569,6 +569,35 @@ else bad "the description's kept lines (rc=$rc)"; printf '%s\n' "$out" "$body" |
 rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
 repo="$repo_was"; BARE="$bare_was"; export BARE
 
+# The helper itself, on the shapes the review on #1186 found (each failed
+# before its fix): a parent key keeps the template's children; a key is
+# matched only under its own table; a line starting with a tab is reported
+# whole; a line the template's side already holds is not counted as kept.
+combine_py="$root/scripts/template-update-combine.py"; hx="$work/helper"; mkdir -p "$hx"
+printf 'jobs:\n  t:\n    steps:\n      - name: Test\n<<<<<<< before updating\n        run: pytest\n        timeout-minutes: 20\n=======\n        run: pytest -q --strict\n>>>>>>> after updating\n' > "$hx/a.yml"
+printf 'jobs:\n  t:\n    steps:\n      - name: Test\n        run: pytest\n        timeout-minutes: 20\n' > "$hx/a.base"
+printf 'jobs:\n  t:\n    steps:\n      - name: Test\n        run: pytest\n' > "$hx/a.old"
+python3 "$combine_py" combine "$hx/a.yml" "$hx/a.base" "$hx/a.old" "$hx/out/a.yml" > "$hx/a.report"
+if grep -qxF '        run: pytest -q --strict' "$hx/out/a.yml" && grep -qxF '        timeout-minutes: 20' "$hx/out/a.yml" && ! grep -qxF '        run: pytest' "$hx/out/a.yml"
+then ok "the combination keeps the template's change to a sibling of a line this repository added"
+else bad "helper, a parent key"; cat "$hx/out/a.yml" "$hx/a.report" 2>/dev/null | sed 's/^/        /'; fi
+printf '<<<<<<< before updating\n[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\n=======\n[tool.a]\ntimeout = 15\n[tool.b]\ntimeout = 10\n>>>>>>> after updating\n' > "$hx/b.toml"
+printf '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\n' > "$hx/b.base"; printf '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 10\n' > "$hx/b.old"
+python3 "$combine_py" combine "$hx/b.toml" "$hx/b.base" "$hx/b.old" "$hx/out/b.toml" > "$hx/b.report"
+if [ "$(cat "$hx/out/b.toml")" = "$(printf '[tool.a]\ntimeout = 15\n[tool.b]\ntimeout = 20')" ]
+then ok "a key is replaced only under its own table: the template's [tool.a] change and this repository's [tool.b] value both stay"
+else bad "helper, a key in two tables"; cat "$hx/out/b.toml" "$hx/b.report" 2>/dev/null | sed 's/^/        /'; fi
+printf 'test:\n<<<<<<< before updating\n\tpytest\n\tmypy .\n=======\n\tpytest -q\n>>>>>>> after updating\n' > "$hx/Makefile"
+printf 'test:\n\tpytest\n\tmypy .\n' > "$hx/m.base"; printf 'test:\n\tpytest\n' > "$hx/m.old"
+python3 "$combine_py" combine "$hx/Makefile" "$hx/m.base" "$hx/m.old" "$hx/out/Makefile" > "$hx/m.report"
+if [ "$(cut -f4- "$hx/m.report")" = "$(printf '\tmypy .')" ] && grep -qxF "$(printf '\tmypy .')" "$hx/out/Makefile"
+then ok "a line that starts with a tab is reported and kept whole"
+else bad "helper, a tab"; cat -t "$hx/m.report" 2>/dev/null | sed 's/^/        /'; fi
+printf 'a:\n  x: 1\nb:\n  x: 1\n' > "$hx/w.yml"
+if ! python3 "$combine_py" where "$hx/w.yml" "  x: 1" 2 >/dev/null && [ "$(python3 "$combine_py" where "$hx/w.yml" "  x: 1" 1)" = "$(printf 'b\t4')" ]
+then ok "a line the template's side already holds as often is not counted as kept; one more is found where it is"
+else bad "helper, where with a count"; fi
+
 # ── the base must be the verified default branch ────────────────────────
 reset_logs
 run --apply "$(printf '%040d' 1)"

@@ -567,12 +567,13 @@ undo_lines() { # <worktree> <branch>
   echo "  git -C $(q "$rn") push -u origin $rb"
   echo "  (cd $(q "$rn") && gh pr create --fill)"
 }
-# Each `added=` line of the record, and where it is in the worktree now: the
+# Each `added=<path>\t<count>\t<line>` of the record, and where it is in the worktree now: the
 # file and its section (the Markdown heading, the TOML table, the YAML keys
 # above it), or that it is not there. At most 20 for a file.
 kept_lines() { # <worktree> <record>
-  local p line at sec ln shown="" c=0
-  while IFS=$'\t' read -r p line; do
+  local rec p n line at sec ln shown="" c=0
+  while IFS= read -r rec; do
+    p="${rec%%$'\t'*}"; rec="${rec#*$'\t'}"; n="${rec%%$'\t'*}"; line="${rec#*$'\t'}"
     [ -n "$p" ] || continue
     [ "$p" = "$shown" ] || { shown="$p"; c=0; }
     c=$((c + 1))
@@ -580,7 +581,7 @@ kept_lines() { # <worktree> <record>
       [ "$c" != 21 ] || echo "- \`$p\`: and more, not listed here"
       continue
     fi
-    if at="$(python3 "$here/template-update-combine.py" where "$1/$p" "$line" 2>/dev/null)"; then
+    if at="$(python3 "$here/template-update-combine.py" where "$1/$p" "$line" "$n" 2>/dev/null)"; then
       sec="${at%%$'\t'*}"; ln="${at#*$'\t'}"
       echo "- \`$p\`, ${sec:+under \`$sec\`, }line $ln: $(code_span "$line")"
     else
@@ -598,7 +599,7 @@ code_span() { # <text>: a Markdown code span for one line
 # those lines where it belongs now (template-update-combine.py), written
 # beside the record, never into the worktree. A file holding such a line has
 # no one side to recommend: either drops something. Each line goes to the
-# record as `added=<path>\t<line>`, for the description. Not compared when the
+# record as `added=<path>\t<count>\t<line>`, for the description. Not compared when the
 # old render cannot be made. GitHub's plain update only (#1184's Decisions).
 propose_combinations() {
   local pdir p old report n
@@ -627,8 +628,10 @@ propose_combinations() {
     fi
     echo "  $p: $n; neither side whole keeps both, so neither is the recommendation."
     echo "    The combination, the template's side with those lines kept: $pdir/$p"
-    awk -F '\t' '$1 == "risk" { printf "      + %s    (%s)\n", $3, $2 }' <<<"$report"
-    awk -F '\t' -v p="$p" '$1 == "risk" && $3 !~ /^[[:space:][:punct:]]*$/ { printf "added=%s\t%s\n", p, $3 }' <<<"$report" >> "$sf"
+    # The line is everything after the third tab, a leading tab included.
+    awk -F '\t' '$1 == "risk" { l = $0; sub(/^[^\t]*\t[^\t]*\t[^\t]*\t/, "", l); printf "      + %s    (%s)\n", l, $2 }' <<<"$report"
+    awk -F '\t' -v p="$p" '$1 == "risk" { l = $0; sub(/^[^\t]*\t[^\t]*\t[^\t]*\t/, "", l)
+      if (l !~ /^[[:space:][:punct:]]*$/) printf "added=%s\t%s\t%s\n", p, $3, l }' <<<"$report" >> "$sf"
   done <<<"$conflicts"
   echo
 }
