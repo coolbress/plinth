@@ -400,10 +400,12 @@ for rel in ("docs/tutorials/getting-started.md", "docs/how-to/cut-a-release.md")
     if not on("onetime", rel):
         continue
     text = (docs / rel).read_text(encoding="utf-8")
-    if "README.md#install-in-detail" in text and "uninstall taste-skill@plinth" not in text:
+    # Any command on the old dependency, wrapped or not (#1082).
+    flat_text = " ".join(text.split())
+    if "README.md#install-in-detail" in text and "taste-skill@plinth" not in flat_text:
         ok()
     else:
-        i = text.find("uninstall taste-skill@plinth")
+        i = text.find("taste-skill@plinth")
         fail(f"{rel}:{text.count(chr(10), 0, i) + 1 if i >= 0 else 1} must link README.md#install-in-detail and not repeat the one-time commands")
 
 # 8. The three questions (#921): step 5 of run-a-project.md lists them under

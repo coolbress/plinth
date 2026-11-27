@@ -126,7 +126,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Dependencies that run a hook stay out of the default set (last30days moved to the catalog). 2026-09-30, #354
 - ponytail-skills is not a dependency; its entry stays listed. 2026-10-19, #598
 - mattpocock-skills installs a narrowed set; the listed skills install as `mattpocock-skills-extra@plinth`. 2026-10-19, #593
-- The page-design default is Anthropic's `frontend-design`, pinned to a commit of claude-plugins-official, in place of taste-skill, whose pin could not be raised (upstream added Node scripts). 2026-11-26, #1082
+- The page-design default is Anthropic's `frontend-design`, pinned to a commit of claude-plugins-official, in place of taste-skill: in #713's blind trial (2026-10-31, three briefs, three runs a cell) it graded the same as or higher than taste-skill on every brief at about 63% of its cost a run, and taste-skill's pin cannot be raised (upstream added Node scripts). Replaces #713's decision to keep taste-skill. 2026-11-26, #1082
 - `make-release.sh` run 1 stops when the pinned template's `AGENTS.md`, `CLAUDE.md` or `.claude/` changed, unless the why-file records an eval-suite run; plinth's own skills are outside this guard. 2026-10-28, #700
 - When a release owes both the eval suite and the smoke run, one `scripts/eval-suite.sh --release` run on the release candidate serves both, its link in the release pull request's description and the GitHub Release; the full suite is still required when the template's `AGENTS.md` or `.claude/` changed, with no waiver and no check-name change. 2026-11-25, #1134 (decided; not built yet: #1134)
 - The eval suite is a script around `claude -p`, not `claude plugin eval`. 2026-10-25, #647

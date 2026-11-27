@@ -307,6 +307,7 @@ rm -rf "$up/mkt/.git"
   # With the release's mattpocock-skills-extra installed too: the case where a
   # skill moved between the two entries (#704) could end up under both names.
   claude plugin install mattpocock-skills-extra@plinth -y >/dev/null
+  had_taste=no; rel_list="$(claude plugin list --json)"; ! grep -qF '"taste-skill@plinth"' <<<"$rel_list" || had_taste=yes
   rm -rf "$up/mkt" && mkdir "$up/mkt"
   (cd "$root" && git ls-files -z -co --exclude-standard | tar --null -T - -cf -) | tar -xf - -C "$up/mkt"
   for m in plugin.json marketplace.json; do
@@ -317,16 +318,30 @@ rm -rf "$up/mkt/.git"
   claude plugin list --json | python3 -c 'import json, sys
 for p in json.load(sys.stdin):
     print("  INFO  after update alone: %s errors=%s" % (p["id"], p.get("errors", [])))'
-  # What `update` alone left of the swap, recorded as it is (#1082).
+  # What `update` alone does to the swap (#1082), held to what the README
+  # says: taste-skill stays (when the release installed it) and frontend-design
+  # is not installed. A Claude Code that does otherwise fails here, so the
+  # README's one-time commands are rewritten, not left stale.
   claude plugin list --json | python3 -c 'import json, sys
 ids = {p["id"]: p for p in json.load(sys.stdin)}
+had = sys.argv[1] == "yes"
 for n in ("taste-skill@plinth", "frontend-design@plinth"):
-    print("  INFO  after update alone, %s: %s" % (n, ("installed, errors=%s" % ids[n].get("errors", [])) if n in ids else "not installed"))'
-  # install plinth@plinth, then the old dependency's uninstall when the
-  # release installed it, then prune.
-  for c in "${swap_cmds[0]}" "${swap_cmds[1]}" "${upgrade_cmds[1]}"; do
-    case "$c" in *" uninstall "*) claude plugin list --json | grep -qF '"taste-skill@plinth"' || { echo "  INFO  taste-skill@plinth not installed by $tag: no uninstall"; continue; } ;; esac
-    echo "+ $c -y"; read -ra cmd <<<"$c"; "${cmd[@]}" -y; done
+    print("  INFO  after update alone, %s: %s" % (n, ("installed, errors=%s" % ids[n].get("errors", [])) if n in ids else "not installed"))
+bad = []
+if had and "taste-skill@plinth" not in ids:
+    bad.append("update removed taste-skill@plinth")
+if "frontend-design@plinth" in ids:
+    bad.append("update installed frontend-design@plinth")
+if bad:
+    print("  FAIL  " + "; ".join(bad) + ": the README says update does neither; rewrite its one-time commands"); sys.exit(1)
+print("  PASS  update alone left the swap as the README says")' "$had_taste"
+  # Then the README's commands, in its order: install plinth@plinth, then the
+  # old dependency's uninstall (no -y: without --prune it asks nothing, and the
+  # floor may not take it), then prune for the moves of v1.11.0 and earlier.
+  echo "+ ${swap_cmds[0]} -y"; read -ra cmd <<<"${swap_cmds[0]}"; "${cmd[@]}" -y
+  if [ "$had_taste" = yes ]; then echo "+ ${swap_cmds[1]}"; read -ra cmd <<<"${swap_cmds[1]}"; "${cmd[@]}"
+  else echo "  INFO  $tag did not install taste-skill@plinth: no uninstall"; fi
+  echo "+ ${upgrade_cmds[1]} -y"; read -ra cmd <<<"${upgrade_cmds[1]}"; "${cmd[@]}" -y
   for c in "${dep_cmds[@]}"; do echo "+ $c"; read -ra cmd <<<"$c"; "${cmd[@]}"; done
   # check_list holds no ponytail-skills here: the release installed it as a
   # dependency, and `prune` removed it once plinth no longer names it (#598).
@@ -348,22 +363,28 @@ for n in ("taste-skill@plinth", "frontend-design@plinth"):
 
 # A person who installed Anthropic's frontend-design from the official
 # marketplace before plinth (#1082): both copies install under their own
-# marketplaces. Recorded, not judged: which one a session's `/frontend-design`
-# runs is a session's to say, and the release note says what to do.
+# marketplaces. Recorded as INFO, never a failure: the official marketplace is
+# read at its live head, unpinned, so a clone failure or an upstream rename
+# there says nothing about plinth. Which copy a session's `/frontend-design`
+# runs is a session's to say, not this script's.
 both="$CLAUDE_CONFIG_DIR/both-copies"
 mkdir -p "$both"
 (
+  set +e
   export CLAUDE_CONFIG_DIR="$both"
-  echo "-- frontend-design from the official marketplace first, then plinth"
-  claude plugin marketplace add anthropics/claude-plugins-official >/dev/null
-  echo "+ claude plugin install frontend-design@claude-plugins-official -y"; claude plugin install frontend-design@claude-plugins-official -y
-  claude plugin marketplace add "$root" >/dev/null
-  echo "+ claude plugin install plinth@plinth -y"; claude plugin install plinth@plinth -y
+  echo "-- frontend-design from the official marketplace first, then plinth (recorded, not judged)"
+  claude plugin marketplace add anthropics/claude-plugins-official >/dev/null 2>&1 \
+    && claude plugin install frontend-design@claude-plugins-official -y >/dev/null 2>&1 \
+    || { echo "  INFO  both copies not recorded: frontend-design@claude-plugins-official did not install"; exit 0; }
+  claude plugin marketplace add "$root" >/dev/null 2>&1 && claude plugin install plinth@plinth -y >/dev/null 2>&1 \
+    || { echo "  INFO  both copies not recorded: plinth@plinth did not install beside it"; exit 0; }
   claude plugin list --json | python3 -c 'import json, sys
 for p in json.load(sys.stdin):
     if p["id"].startswith(("frontend-design@", "plinth@")):
         print("  INFO  both copies: %s enabled=%s errors=%s" % (p["id"], p.get("enabled"), p.get("errors", [])))'
   for p in frontend-design@claude-plugins-official frontend-design@plinth; do
-    echo "  INFO  $p: $(claude plugin details "$p" 2>&1 | grep -E '^ *Skills \(' | sed 's/^ *//')"
+    s="$(claude plugin details "$p" 2>&1 | grep -E '^ *Skills \(' | sed 's/^ *//')"
+    echo "  INFO  $p: ${s:-no Skills line read}"
   done
+  exit 0
 )
