@@ -11,6 +11,13 @@ script="$root/scripts/guide-state.sh"
 names="$root/tests/lib/guide-names.sh"
 arsenal="$root/skills/arsenal/SKILL.md"
 work="$(mktemp -d)" && work="$(cd "$work" && pwd -P)" || { echo "guide-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
+# The table as the guide reads it (#1086): the arsenal's stage table joined
+# with the guide's own cells, six a row, under the arsenal's heading.
+# shellcheck source=scripts/lib/stage-table.sh
+. "$root/scripts/lib/stage-table.sh"
+joined="$work/joined.md"
+{ printf '## Where you are, and what to do next\n\n'; stage_table "$arsenal" "$root/skills/guide/steps.md" || exit 1; printf '\n## End\n'; } > "$joined" ||
+  { echo "guide-cases: the arsenal's table and the guide's steps do not join" >&2; exit 1; }
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
 bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
@@ -200,7 +207,7 @@ pr() { # <number> <title> <bot:true|false> <check conclusion or "-" for none, "r
     "$(ago "${6:-86400}")" 0 "$1" "$(ago "${5:-86400}")"
 }
 put() { local f="$1"; shift; local IFS=,; printf '[%s]' "$*" > "$f"; }
-row_tool() { awk -F ' \\| ' -v p="| $1" -v r="$root" 'index($0, p) == 1 { gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r, $3); print $3; exit }' "$arsenal"; }
+row_tool() { awk -F ' \\| ' -v p="| $1" -v r="$root" 'index($0, p) == 1 { gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r, $3); print $3; exit }' "$joined"; }
 issue() { local l=""; [ -z "$3" ] || l="{\"name\":\"$3\"}"; printf '{"number":%s,"title":"%s","labels":[%s]}' "$1" "$2" "$l"; }
 
 # Every command a case printed, for the check that each is a command of the
@@ -308,8 +315,8 @@ put "$d/issues.json" "$(issue 5 'Show monthly totals' ready-for-agent)"
 expect "a pull request open comes before the issue it closes" "$d" "A pull request with checks running (step 5)" "/run" "note: pull request #6, checks pending"
 # The step 5 row the guide prints offers the built-in security pass (#1080).
 out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
-if grep -q '^| A pull request with checks running (step 5) | .*`/security-review` (built in' <<<"$out" &&
-   grep -q '^tool: .*`/security-review` (built in' <<<"$out"
+if grep -q '^| A pull request with checks running (step 5) | .*`/security-review`: a security pass' <<<"$out" &&
+   grep -q '^tool: .*`/security-review`: a security pass' <<<"$out"
 then ok "step 5: the printed row and its tool line offer /security-review"
 else bad "step 5: no /security-review in the printed row"; grep -E '^(tool:|\| A pull request)' <<<"$out" | sed 's/^/        /'; fi
 put "$d/open.json" "$(pr 6 'feat: monthly totals' false FAILURE)"
@@ -1145,9 +1152,10 @@ grep -qx 'where: not read' <<<"$out" && ! grep -q '^command:' <<<"$out" &&
   ok "a GitLab checkout: not read, no step" || bad "a GitLab checkout"
 
 # A table that lost a row the guide looks for stops with exit 1, never guesses.
-mkdir -p "$work/plugin/skills/arsenal" "$work/plugin/scripts/lib"
+mkdir -p "$work/plugin/skills/arsenal" "$work/plugin/skills/guide" "$work/plugin/scripts/lib"
 cp "$script" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
-cp "$root/scripts/lib/admin-reach.sh" "$work/plugin/scripts/lib/"
+cp "$root/scripts/lib/admin-reach.sh" "$root/scripts/lib/stage-table.sh" "$work/plugin/scripts/lib/"
+cp "$root/skills/guide/steps.md" "$work/plugin/skills/guide/"
 grep -v '^| An idea in your own words' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
 d="$work/idle"
 out="$(MOCK_DIR="$d" "$work/plugin/scripts/guide-state.sh" "$d" 2>&1)"; rc=$?
@@ -1182,7 +1190,7 @@ printf '# x\n\n## The list\n\n| Feature | Archetypes | Turn it on when | Steps |
 out="$(PLINTH_OFF_BY_DEFAULT="$work/no-rule.md" MOCK_DIR="$d" "$script" "$d" 2>&1)"
 grep -qF '  why: not read (off-by-default: no text under ' <<<"$out" && ok "a list without its sorting rule: why: not read, no guess" || bad "no rule in the list: $(grep -F 'why:' <<<"$out" | head -3)"
 for r in "plinth does not deploy" "an uptime monitor" "it reads the session"; do
-  { sed '/^## Where you are, and what to do next/,/^A tool marked listed/ s/'"$r"'/something else/' "$arsenal"; } > "$work/plugin/skills/arsenal/SKILL.md"
+  { sed '/^## Where you are, and what to do next/,/^## Skills only/ s/'"$r"'/something else/' "$arsenal"; } > "$work/plugin/skills/arsenal/SKILL.md"
   out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
   [ "$rc" -eq 1 ] && grep -qF "no longer says '$r'" <<<"$out" && ! grep -q '^why:' <<<"$out" &&
     ok "a table that lost the words of a reason ($r): exit 1, named" || bad "lost reason '$r': exit $rc: $(head -2 <<<"$out")"
@@ -1261,7 +1269,7 @@ grep -qx 'last merge: #7 on 2026-10-27 by person: feat: x' <<<"$out" && ok "map 
 # The table (#1060): without map, this step's row and the next one's, in
 # either mode; on map, no row (#1087): the map's lines stand in for it.
 table_of() { awk '/^table: /{ on = 1; next } on && /^\| /' <<<"$1"; }
-whole="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$arsenal" |
+whole="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$joined" |
   awk -v r="$root" '{ gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r); print }')"
 for d in idle created plain; do
   out="$(MOCK_DIR="$work/$d" "$script" "$work/$d" map 2>&1)"
@@ -1341,7 +1349,7 @@ state "then: after the first pull request's merge, the first-merge row" "$work/c
   "command: merge #2" "then: First pull request merged (step 1) -> $(row_tool 'First pull request merged')"
 
 # Every Then cell names a row of the table, or is -; every row has six cells.
-tbl="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$arsenal" | tail -n +3)"
+tbl="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$joined" | tail -n +3)"
 bad_then=""
 while IFS= read -r r; do
   nf="$(awk -F ' \\| ' '{ print NF }' <<<"$r")"; th="$(awk -F ' \\| ' '{ sub(/ \|$/, "", $6); print $6 }' <<<"$r")"
@@ -1357,6 +1365,34 @@ awk -v r="$(cat "$work/row5")" '{ print } /^\| --- \| --- \| --- \| --- \|/ && !
 out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
 [ "$rc" -eq 1 ] && grep -qF "the arsenal's row 'No repository yet' does not have six cells" <<<"$out" &&
   ok "a row with three cells: exit 1, named" || bad "a short row: exit $rc: $(head -3 <<<"$out")"
+# The guide's own cells (#1086): a stage of the arsenal with no row in
+# skills/guide/steps.md, or one there without four cells, stops with exit 1,
+# named; a row there for no stage of the arsenal is a test failure; every
+# command a How to use it cell names is in the arsenal's table.
+cp "$arsenal" "$work/plugin/skills/arsenal/SKILL.md"
+grep -v '^| A ticket ready' "$root/skills/guide/steps.md" > "$work/plugin/skills/guide/steps.md"
+out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && grep -qF "the guide's steps have no row for 'A ticket ready (step 4)'" <<<"$out" && ! grep -q '^where:' <<<"$out" &&
+  ok "a stage with no row in the guide's steps: exit 1, named" || bad "a stage without the guide's row: exit $rc: $(head -3 <<<"$out")"
+sed 's/^\(| A ticket ready (step 4) | [^|]*|\).*/\1/' "$root/skills/guide/steps.md" > "$work/plugin/skills/guide/steps.md"
+out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && grep -qF "the guide's row 'A ticket ready (step 4)' does not have four cells" <<<"$out" &&
+  ok "a row of the guide's steps without four cells: exit 1, named" || bad "a short row of the guide's steps: exit $rc: $(head -3 <<<"$out")"
+{ cat "$root/skills/guide/steps.md"; grep '^| A ticket ready (step 4) |' "$root/skills/guide/steps.md" | sed 's/| [^|]* |$/| DUP |/'; } > "$work/plugin/skills/guide/steps.md"
+out="$("$work/plugin/scripts/guide-state.sh" "$work/plain" 2>&1)"; rc=$?
+[ "$rc" -eq 1 ] && grep -qF "the guide's steps have two rows for 'A ticket ready (step 4)'" <<<"$out" &&
+  ok "two rows of the guide's steps for one stage: exit 1, named" || bad "a stage twice in the guide's steps: exit $rc: $(head -3 <<<"$out")"
+# The tool cell the join makes, held in its words, not by the join itself:
+# Tool, plinth piece, then "also:" and "class:".
+out="$("$script" "$work/plain" map 4 2>&1)"
+grep -qF '  tool: `/clear`, then `/implement #N`: one ticket per session, test first; `/design-taste-frontend`: a page a person will look at; the project'"'"'s `verify` skill, its check before each commit, which takes the place of the bundled `/verify` (that one runs the app, as `/run` does); also: `/simplify` (built in): cleanup of the changed code; class: built in, then installed; installed' <<<"$out" &&
+  ok "the tool cell: Tool, plinth piece, also: and class:, in that order" || bad "the tool cell: $(grep '^  tool: ' <<<"$out")"
+cp "$root/skills/guide/steps.md" "$work/plugin/skills/guide/steps.md"
+orphans="$(awk '/^## Steps/{on=1; next} on && /^\| /' "$root/skills/guide/steps.md" | awk -F ' \\| ' '{ c = $1; sub(/^\| /, "", c) } c != "Where you are" && c !~ /^---/ { print c }' |
+  while IFS= read -r w; do grep -qF -- "| $w |" "$joined" || echo "$w"; done)"
+[ -z "$orphans" ] && ok "every row of the guide's steps is a stage of the arsenal" || bad "the guide's steps have rows for no stage: $orphans"
+"$names" "$arsenal" "$root/skills/guide/steps.md" >/dev/null && ok "the guide's steps name only commands of the arsenal's table" ||
+  bad "the guide's steps name a command outside the arsenal's table: $("$names" "$arsenal" "$root/skills/guide/steps.md")"
 
 # Every command a case printed is a command the How to use it cell of the
 # row it landed on gives (`#N` for a number, `…` for the words after it): a
@@ -1874,7 +1910,7 @@ grep -qF "read its log first (gh run view 31 --log-failed)" <<<"$out" && ok "  t
 # The row and step 7 (#1079): the undo page named; the order undo, restore,
 # reproduce and fix, incident note; a secret revoked before any history
 # rewrite; the revoke list named and in its order.
-broke_row="$(grep '^| Something broke (step 7) |' "$arsenal")"
+broke_row="$(grep '^| Something broke (step 7) |' "$joined")"
 step7="$(awk '/^### 7\. When something breaks/{on=1; print; next} /^### 8\./{on=0} on' "$root/docs/how-to/run-a-project.md" | tr '\n' ' ' | tr -s ' ')"
 in_order() { # <text> <phrase>...: each phrase found, each after the one before
   local text="$1" at=-1 p i; shift
@@ -1896,14 +1932,14 @@ miss="$(in_order "$step7" "The \`gh\` login and every GitHub token" "Other perso
   ok "the row names the revoke list, and the list is in its order" || bad "the revoke list: ${miss:-the row or the heading lost it}"
 
 # Where the loop ends (#1081): users' reports, /retro, /design at step 2.
-operate_row="$(grep '^| The project in use (operate) |' "$arsenal")"
+operate_row="$(grep '^| The project in use (operate) |' "$joined")"
 grep -qF "what users report is written as an issue and sorted with \`/triage\`" <<<"$operate_row" &&
   ok "the operate row: users' reports become issues sorted by /triage" || bad "the operate row no longer names /triage for users' reports"
 grep -qF "what users report: write it as an issue" <<<"$step7" && grep -qF "/triage" <<<"$step7" &&
   ok "step 7's /triage sentence takes users' reports" || bad "step 7's /triage sentence lost users' reports"
-idea_row="$(grep '^| An idea in your own words (step 2) |' "$arsenal")"
+idea_row="$(grep '^| An idea in your own words (step 2) |' "$joined")"
 step2="$(awk '/^### 2\. Shape the idea/{on=1; print; next} /^### 3\./{on=0} on' "$root/docs/how-to/run-a-project.md" | tr '\n' ' ' | tr -s ' ')"
-grep -qF '`/design` (built in, screen mockups on a canvas)' <<<"$idea_row" && grep -qF 'Type `/grilling`' <<<"$idea_row" &&
+grep -qF 'also: `/design` (built in): screen mockups on a canvas, for an idea that is a page people look at' <<<"$idea_row" && grep -qF 'Type `/grilling`' <<<"$idea_row" &&
   grep -qF '`/design` (built in)' <<<"$step2" && grep -qF 'type `/grilling` with the idea' <<<"$step2" &&
   ok "step 2 names /design for a page people look at, and /grilling stays its command" || bad "step 2 lost /design or /grilling"
 grep -qF 'An `after the merge:` line goes in part 4 as one sentence' "$guide_md" &&
@@ -2033,7 +2069,7 @@ has "map: step 9 needs attention when the template is behind" "$out" "  ✗ 9 Be
 # map <step>: one step in depth, before or after the folder; features.
 depth() { awk '/^step: /{ on = 1 } on' <<<"$1"; }
 want4="step: A ticket ready (step 4) (you are here)
-  purpose: $(awk -F ' \\| ' 'index($0, "| A ticket ready") == 1 { print $2 }' "$arsenal")"
+  purpose: $(awk -F ' \\| ' 'index($0, "| A ticket ready") == 1 { print $2 }' "$joined")"
 # Run from the fixture for the forms with no folder, from elsewhere for the
 # others, so that a folder argument is what is read.
 mkdir -p "$d/spec"

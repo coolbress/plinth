@@ -28,7 +28,7 @@ Three checks are static and WARN-only (#95): tracked dotenv files (names in
 the index, not contents or history), action pins (`uses:` lines of
 .github/workflows, not composite actions), JSON logs (a known setup in a
 service archetype's src/, never what the process prints). What each reads and
-does not read is in its docstring and in skills/floor-check/SKILL.md.
+does not read is in its docstring and in skills/floor-check/reference.md.
 
 The caller is a FAIL item (#325): the `ci` job in .github/workflows/ci.yml
 calls plinth's python-ci.yml at a full commit SHA, read with --repo from the
@@ -216,6 +216,9 @@ LEFT_TO_SKILL = "; left to /plinth:floor-check"
 REPORT = f"https://github.com/coolbress/plinth/blob/{(os.environ.get('PLINTH_SHA') or 'main')[:12]}/skills/floor-check/SKILL.md#report"
 NEXT_ACTION = f"run /plinth:floor-check, which writes the fix for each item: {REPORT}"
 next_action = ""
+# "json" (--format json): the run is printed once, as one JSON document, at
+# the end; nothing else goes to stdout.
+out_format = "text"
 # The SKIP's next action; a line the job annotates stays within 300 characters
 # (the report beside it has the whole text).
 SKIP_NEXT = f"; run /plinth:floor-check where it can read this: {REPORT}"
@@ -253,7 +256,7 @@ VIEWS = ("report", "json", "opt-in:machine", "opt-in:standards", "opt-in:all")
 # The OSPS Baseline release an entry's `baseline` ids come from;
 # tests/floor-check-registry.sh holds every id to that release's list.
 OSPS_BASELINE = "v2026.08.28"
-DOCS = "skills/floor-check/SKILL.md"
+DOCS = "skills/floor-check/reference.md"
 
 
 def check(cid: str, name: str, *, states: tuple[str, ...], handoff: str, fix: str, docs: str,
@@ -732,7 +735,7 @@ def _ci() -> tuple[dict, ...]:
     )
 
 
-WALL_DOCS = f"{DOCS}#run"
+WALL_DOCS = f"{DOCS}#the-ruleset-flags"
 PUSH_DOCS = f"{DOCS}#push-protection"
 ALLOWLIST_DOCS = f"{DOCS}#the-actions-allowlist-and-private-vulnerability-reporting"
 BESIDE_DOCS = f"{DOCS}#what-the-door-sets-beside-the-wall-and-the-projects-own-answers"
@@ -1227,7 +1230,7 @@ def _plinth() -> tuple[dict, ...]:
     )
 
 
-MACHINE_DOCS = f"{DOCS}#run"
+MACHINE_DOCS = f"{DOCS}#the-machines-items-and-the-merge-line"
 # What none_found() prints: finding nothing is not a pass.
 NONE_FOUND = "{what}; no other credential found by these rules; best effort, see the guide's list"
 
@@ -1404,7 +1407,8 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
     results.append(r)
     verdicts.extend(verdict_lines(r))
     line = render_text(r)
-    print(line)
+    if out_format == "text":
+        print(line)
     if TRACE:
         with open(TRACE, "a", encoding="utf-8") as t:
             t.write(f"{cid} {state}\t{line.splitlines()[0]}\n")
@@ -1467,12 +1471,37 @@ def render_verdicts(rs: list[dict]) -> str:
     return "".join(f"{line}\n" for line in lines)
 
 
-def run_record(rs: list[dict]) -> dict:
-    """The run beyond its lines: the registered checks that reported nothing
-    (not evaluated: another host, archetype or flag), for #1105's report."""
+SCHEMA = Path(__file__).resolve().parent / "floor-check.schema.json"
+SCHEMA_ID = "floor-check/1"
+
+
+def run_record(rs: list[dict], run: dict | None = None, crashed: dict | None = None) -> dict:
+    """The run as --format json prints it, in the shape of
+    scripts/floor-check.schema.json: each result with its entry's area, name,
+    hand-off and view; the registered checks that reported nothing (not
+    evaluated: another host, archetype or flag); the summary's counts; and,
+    when the run raised, after which result."""
     seen = {r["id"] for r in rs}
-    return {"results": rs, "not_evaluated": [i for i in REGISTRY if i not in seen],
-            "crashed": None}
+    n = {s: sum(r["state"] == s for r in rs) for s in STATES}
+    results = []
+    for r in rs:
+        e = REGISTRY[r["id"]]
+        results.append({"id": r["id"], "state": r["state"], "shown": SHOWN[r["state"]], "message": r["msg"],
+                        "reason": r["reason"], "cannot_be_read_here": r["reason"] == HERE, "reader": r["reader"],
+                        "area": AREAS[e["area"]], "name": e["name"], "handoff": e["handoff"],
+                        "lifecycle": e["lifecycle"], "view": e["view"], "ci_visible": e["ci_visible"]})
+    return {"schema": SCHEMA_ID, **(run or {}), "results": results,
+            "not_evaluated": [{"id": i, "name": e["name"], "area": AREAS[e["area"]]}
+                              for i, e in REGISTRY.items() if i not in seen],
+            "summary": {**n, "cannot_be_read_here": sum(r["reason"] == HERE for r in rs)},
+            "exit": 1 if n["fail"] or crashed else 0, "crashed": crashed}
+
+
+def print_json(rs: list[dict], crashed: dict | None = None) -> None:
+    print(json.dumps(run_record(rs, run_info, crashed), indent=2, ensure_ascii=False))
+
+
+run_info: dict = {}   # the run's root, project, host and repository, for --format json
 
 
 def read(path: Path) -> str:
@@ -2594,6 +2623,68 @@ def moves_lines(d: dict) -> list[str]:
     """One line per file the update moves forward to the ci job's commit (#793)."""
     return [f"moves: {f} from {old} to {new}, the commit the ci job calls ({old} is an ancestor of it)"
             for f, old, new in d.get("moves", [])]
+
+
+def question_help(text: str, key: str) -> list[str] | None:
+    """The `help:` of the top-level question <key> in a copier.yml, as lines:
+    a plain or quoted scalar, or a `|` or `>` block (dedented; `>` folded into
+    one line). None when the question or its help is not there. Not a YAML
+    parser: the `help:` line one level inside the top-level `<key>:` block."""
+    m = re.search(rf"^{re.escape(key)}:[ \t]*\n((?:[ \t]+.*\n|[ \t]*\n)*)", text + "\n", re.MULTILINE)
+    if not m:
+        return None
+    lines = m.group(1).splitlines()
+    inner = min((len(x) - len(x.lstrip()) for x in lines if x.strip()), default=0)
+    for i, line in enumerate(lines):
+        if len(line) - len(line.lstrip()) != inner or not line.lstrip().startswith("help:"):
+            continue
+        v = line.lstrip()[len("help:"):].strip()
+        if v[:1] in ("|", ">"):
+            block: list[str] = []
+            for x in lines[i + 1:]:
+                if x.strip() and len(x) - len(x.lstrip()) <= inner:
+                    break
+                block.append(x)
+            while block and not block[-1].strip():
+                block.pop()
+            deeper = min((len(x) - len(x.lstrip()) for x in block if x.strip()), default=0)
+            block = [x[deeper:] for x in block]
+            return [" ".join(x.strip() for x in block if x.strip())] if v[0] == ">" else block
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+            v = v[1:-1]
+        return [v] if v else None
+    return None
+
+
+def print_question_help(names: list[str], network: bool) -> int:
+    """--print-question-help (#1185): for each named question, its name on a
+    line, then its help from the copier.yml of the tag this plinth targets
+    (read at the commit new-project.sh pins), each line indented by two; a
+    question with no help there is followed by `  (no help in copier.yml)`;
+    a blank line of help is printed as two spaces, so only a name starts a line.
+    Exit 0; exit 1 with the reason on stderr when copier.yml is not read."""
+    pin = new_project_pin()
+    if not pin:
+        print("no template pin beside this script", file=sys.stderr)
+        return 1
+    template_repo, target, target_sha = pin[0], pin[1], pin[2]
+    data = api(f"repos/{template_repo}/contents/copier.yml?ref={target_sha}", network)
+    text = None
+    if isinstance(data, dict):
+        try:
+            text = base64.b64decode(data["content"]).decode()
+        except (TypeError, KeyError, ValueError):
+            text = None
+    if text is None:
+        print(f"{template_repo} copier.yml at {target}: {'not found' if data is ABSENT else 'offline or API error'}",
+              file=sys.stderr)
+        return 1
+    for name in names:
+        print(name)
+        # A blank line of the help stays indented: only a name starts a line.
+        for line in question_help(text, name) or ["(no help in copier.yml)"]:
+            print(f"  {line}".rstrip() or "  ")
+    return 0
 
 
 def new_project_pin() -> tuple[str, str, str, str, str] | None:
@@ -6097,6 +6188,9 @@ def main() -> int:
     ap.add_argument("--verdicts", metavar="FILE",
                     help="also write one verdict line per FAIL, SKIP and read left to /plinth:floor-check, "
                          "or a pass line, to FILE (ci / floor-check's job summary)")
+    ap.add_argument("--format", choices=("text", "json"), default="text",
+                    help="json: print the run once, as one JSON document in the shape of "
+                         "scripts/floor-check.schema.json, instead of the report's lines")
     ap.add_argument("--sandbox", action="store_true", help="also report what this machine's Claude Code settings say about the sandbox")
     ap.add_argument("--plugins", action="store_true",
                     help="also compare each plugin installed from the plinth marketplace with the commit its entry pins")
@@ -6118,6 +6212,9 @@ def main() -> int:
                     help="print the template CHANGELOG's section headings from the recorded tag to the one this plinth "
                          "targets, with each section's files-and-questions block; exit 0, or the compare link and "
                          "exit 1 when not read (#1184)")
+    ap.add_argument("--print-question-help", nargs="+", metavar="NAME",
+                    help="print each named question of the copier.yml this plinth targets with its help, indented; "
+                         "exit 1, with the reason, when copier.yml is not read (#1185)")
     ap.add_argument("--print-plugin-skew", action="store_true",
                     help="compare the template tag this plinth targets with the latest release's and the CI pin's: exit 3 "
                          "with what to type when it is older, else exit 0, a failed read said on stderr (#843)")
@@ -6138,6 +6235,12 @@ def main() -> int:
                     help="with --print-ruleset: leave the code_scanning rule out, as the door does for a private "
                          "repository without GitHub Code Security")
     a = ap.parse_args()
+    if a.format == "json" and any(v for k, v in vars(a).items() if k.startswith("print_")):
+        ap.error("--format json reports a run; a --print-* flag prints something else")
+    global out_format
+    out_format = a.format
+    # Known before anything is read, so a run that raises still says what it read.
+    run_info.update(root=str(Path(a.root).resolve()), project=a.project, host=a.host or "github", repo=a.repo)
     if a.verdicts:
         global next_action
         next_action = NEXT_ACTION
@@ -6166,6 +6269,8 @@ def main() -> int:
         return print_diff_size(root)
     if a.print_template_changes:
         return print_template_changes(root, not a.no_network)
+    if a.print_question_help:
+        return print_question_help(a.print_question_help, not a.no_network)
     if a.print_plugin_skew:
         return print_plugin_skew(root, not a.no_network, a.host)
     if a.print_behind:
@@ -6189,8 +6294,11 @@ def main() -> int:
     if host not in ("github", "gitlab"):
         emit("FC-F07", "unknown", "other", {"host": host}, reason="an unknown host")
         host = "github"
-    print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
-          + (" host=gitlab" if host == "gitlab" else ""))
+    run_info.update(root=str(root), project=str(project.relative_to(root)) if project != root else ".",
+                    host=host, repo=a.repo)
+    if out_format == "text":
+        print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
+              + (" host=gitlab" if host == "gitlab" else ""))
     javascript = host == "github" and javascript_project(project, root)
     if javascript:
         emit("FC-C04", "info", "info")
@@ -6275,7 +6383,10 @@ def main() -> int:
         check_credentials(root, host)
         check_database_urls(root)
 
-    print(render_summary(results))
+    if out_format == "json":
+        print_json(results)
+    else:
+        print(render_summary(results))
     if a.verdicts:
         Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
     return 1 if any(r["state"] == "fail" for r in results) else 0
@@ -6284,7 +6395,10 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except Exception:
+    except Exception as exc:
+        if out_format == "json":
+            # The skill reads a document either way: one that says where the run stopped.
+            print_json(results, {"after": results[-1]["id"] if results else None, "error": type(exc).__name__})
         if TRACE:
             with open(TRACE, "a", encoding="utf-8") as t:
                 t.write(f"crashed {results[-1]['id'] if results else '-'}\n")

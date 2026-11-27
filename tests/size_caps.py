@@ -12,6 +12,12 @@ goes wrong").
 SKILL_MAX_LINES = 500
 SKILL_MAX_BYTES = 20000
 
+# The arsenal's SKILL.md, tighter: it loads on every call an agent makes to
+# choose a tool, and what lies outside its stage table is in the files beside
+# it (#1086).
+ARSENAL_MAX_LINES = 250
+ARSENAL_MAX_BYTES = 12000
+
 # AGENTS.md (CLAUDE.md is a link to it), at about the size the slimming left.
 AGENTS_MAX_LINES = 110
 AGENTS_MAX_BYTES = 7500

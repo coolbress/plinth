@@ -258,3 +258,28 @@ Where the other facts in `skills/arsenal/installed.md` and `listed.md` come from
 - The end of a project left "No tool answers" in #1086: the template's issue
   form "End or hand over this project" answers it, and the table's end row
   names it.
+- In #1086's second part (2026-11-27) the "Where you are" table took six
+  columns, Trigger, Tool, Class, plinth piece, Also and Then, with one tool
+  per job and at most one alternative. What the guide says of each step
+  (Next action, How to use it, It leaves) moved to `skills/guide/steps.md`,
+  which `scripts/guide-state.sh` joins to the table by the step's name. These
+  left the rows, each still in its plugin or in Claude Code:
+  - `domain-modeling` and `/grill-with-docs` (listed) on the idea row:
+    `/grilling` is its one tool; `domain-modeling`, which keeps
+    `GLOSSARY.md`, stays installed and `installed.md` names it. `/design` moved here from the build row as the
+    idea row's Also, with its two conditions from Claude Code's commands
+    reference (read 2026-11-26, and again 2026-11-27).
+  - `/wayfinder` became the plan row's Also, for when the way is unclear.
+  - `/debug` left "Something broke": it debugs Claude Code, and `/doctor` is
+    the row's one tool for Claude Code itself; `installed.md` keeps the
+    warning that it is not for the app.
+  - `/ponytail-audit` (listed) left "Between pieces of work";
+    `/improve-codebase-architecture` is that row's Also. Both stay where
+    they were, in `listed.md` and `installed.md`.
+  - The build row's Also is `/simplify`, and so is the check row's: cleanup
+    of the changed code. Its plinth piece names the project's `verify`
+    skill: Claude Code's commands reference (read 2026-11-27) lists a
+    bundled `/verify` that builds and runs the app, and the template's
+    `verify` takes its place on purpose and says so, keeping the name its
+    commit-time instruction uses (coolbress/plinth-template#66, "Not
+    building").

@@ -7,9 +7,13 @@ disallowed-tools: Edit, Write, NotebookEdit
 
 # Floor check
 
+**Read-only.** Do not fix anything in this session, and do not run anything
+that writes: it changes no file and no setting. Every `gh api`, `glab api`,
+`with-admin-token.sh`, `claude plugin update` or settings line the report
+prints is the person's to run; give it to them as printed and never run it.
+
 Runs the same checker that `ci / floor-check` runs in CI, from the same file.
-Token, network and inputs can still make the two results differ. Read-only:
-it changes no file and no setting. Do not fix anything in this session, and do not run anything that writes.
+Token, network and inputs can still make the two results differ.
 
 ## Run
 
@@ -26,124 +30,40 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox --plug
 Without a repository name the checker says `no --repo: wall not checked` and
 checks only the files. It reads the GitHub API through `gh` with the user's
 own login, so bypass actors are visible; without a login they show as SKIP.
-`--sandbox` adds the one item that belongs to this machine, not the
-repository: Claude Code's sandbox. Only `sandbox.enabled: true` in the
-user's settings is read, and it is an `INFO`, not a PASS. `/sandbox` on
-Claude Code 2.1.278 does not write that key, so without it the item is not
-verified (SKIP), not reported off. Either way the `INFO` lines under it say
-what the sandbox closes and what it breaks, measured on macOS only: `gh`,
-through the floor's own `Read(~/.config/gh/**)` deny, with no fix a
-repository's settings can make (anthropics/claude-code#95135,
-anthropics/claude-code#67105), and `/plinth:new-project`'s copier step.
-Relay those lines as they are and do not tell the user to turn the sandbox
-on or off; on Linux and WSL2 nothing was measured. This SKIP ends
-`[cannot be read here]`: nothing plinth reads can verify it (see the report's
-not-verified line below).
+`--ruleset` expects the wall `/plinth:new-project` raises; for a repository
+with a different wall (plinth itself, for one) pass
+`--expect-checks "<name>, <name>"` as well. Add `--project <dir>` when the
+project is not at the repository root (the directory the repository's own CI
+gives `python-ci.yml` as its `working-directory`); without it `pyproject.toml`
+and `uv.lock` are read from the root and reported missing. Never pass
+`--actions-token` here: it is `ci / floor-check`'s flag, and it turns the
+reads only this skill can make into INFO lines.
 
-`--plugins` compares each plugin installed from the plinth marketplace with
-the commit its marketplace entry pins (plinth itself with the version of the
-marketplace's copy), read from this machine's Claude Code plugin files.
-`claude plugin update plinth@plinth` leaves a dependency at its old commit
-while reading the entry's new skill list, so one of its skills can report
-"Path not found" (#714). A plugin behind its pin is a WARN naming it and the
-one command that moves it, `claude plugin update <name>@plinth --scope
-<scope>` (for a project or local install, from its project folder): give that
-line to the user and do not run it yourself. Plugins at their pin are one
-INFO line. A plugin from another marketplace is one INFO line naming it:
-outside what plinth compares, not a read that failed, so it is not counted as
-not verified. An entry or an install without a full commit, and plugin files
-this run cannot read, are a SKIP, not checked. Never tell the user any of
-those is up to date.
+What the machine's items say, and what to do with them:
 
-`--credentials` adds the other item of this machine: what can push to
-github.com besides the agent's token. It names `GH_TOKEN` or `GITHUB_TOKEN`
-when set, counts the accounts `gh auth status` stores, and lists git
-credential helpers for github.com other than gh's, an `Authorization`
-`http.extraHeader`, and a github.com login in `~/.netrc`, each a WARN with no
-value printed. Finding none is an INFO saying so, best effort, never a PASS:
-a credential in a form the rules do not recognise is not reported, so do not
-tell the user the machine is clean. `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, `GIT_CONFIG` or a `GIT_CONFIG_*`
-variable, when set, is a SKIP naming it: the configuration it hides is not
-read. SSH keys are a SKIP every time, ending `[cannot be read here]`:
-GitHub's settings say which keys push, not this machine.
-It also reads the scopes `gh auth status` lists for the active github.com
-account: `workflow` among them is a WARN naming the login, since it lets the
-agent push a change to `.github/workflows/`, the checks included; scopes
-without it are an INFO; none listed (a fine-grained token lists none) or an
-answer not read is a SKIP. With `GH_TOKEN` or `GITHUB_TOKEN`
-set, the line says the stored login's scopes may not be the ones in use. On
-GitLab glab's token scopes are a SKIP. The `workflow` WARN is expected
-before the first pull request is merged; its fix is a token without
-`workflow` once that pull request is merged.
-Relay the WARN lines with the fix from
-`${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`; never run a logout or
-delete a credential yourself.
-
-`--credentials` also asks whether a production database URL is within the
-agent's reach (#648). It reads three places: this environment's variables,
-every `.env*` file under the repository, tracked or not (a directory named
-`.env*`, usually a virtualenv, is not entered), and the `env` block of
-`.claude/settings.json` and `.claude/settings.local.json`, the repository's
-and the user's. A `postgres://` or `postgresql://` URL there (any letter case,
-a `+driver` allowed) is a WARN naming the variable, or the file and line,
-never the value, with one fix line: keep the production URL only in the
-host's settings and use a local database for work, the template's SQLite
-default. Not a WARN: a URL whose every host is local (`localhost`, a
-loopback address, `0.0.0.0`, a Unix socket, a `.localhost` name), a reserved
-placeholder name (`example.com`, `.example`, `.test`, `.invalid`), a host
-written as a variable (`${PGHOST}`, `<host>`), a database whose name says it
-is for tests (`test`, `app_test`, `testing`), an empty value, a `#` comment.
-Nothing found is an INFO naming what is not read, never a PASS: shell profile
-files, any other file, and other schemes (`mysql://`, `mongodb://`). Relay a
-WARN with its fix line; never delete the line or the variable yourself.
-
-`--merge-ruleset` expects the second ruleset the door applies: the
-`update` rule alone, with the repository's admin role exempt from it, so
-an account with write access cannot merge and the admin merges as before. It is a
-PASS in that shape, a FAIL in any other, a WARN when no ruleset carries
-`update` (every repository made before it; the WARN names
-`scripts/create-merge-ruleset.sh`, which needs repository administration, so
-give it to the user to run), and a SKIP when its bypass actors cannot be
-read.
-
-With `--merge-ruleset` one more line follows, starting `the merge:`. It
-says whether "merge on your word" is guidance or a boundary for the login
-this run reads with, which in this session is the login the agent inherits.
-GitHub lets the admin role past the merge ruleset whatever the token, so the
-account's role decides: `guidance` (an INFO) when the login is the
-repository's admin, or when it is not but no ruleset reserves the merge;
-`boundary` (a PASS) when it is not the admin and the merge ruleset stands,
-or when it cannot write to the repository at all.
-A login that is not the admin cannot read that ruleset's bypass actors, so
-its actor line stays a SKIP; the boundary is then read from GitHub's own
-answer on the ruleset, that this login can never bypass it. That answer is
-this login's only: the line then says that whether the admin is still exempt,
-so that the person's own merge goes through, was not read, and that the
-person's own run of this skill reads it.
-The line is printed when the branch has no rules or its rules cannot be read,
-too: no rules is `guidance` for any login that can write; unread rules leave
-it a SKIP for one that is not the admin.
-A role it cannot read, or a merge ruleset not found in its shape, is a SKIP:
-never a boundary then. Put the line in the summary in plain words: with
-guidance, the agent could merge and is only asked to wait; with a boundary,
-GitHub refuses the agent's merge and the person merges. Guidance is a setup,
-not a defect: leave it out of the FAIL and WARN list. The way to a boundary
-is `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-its-own-account.md`,
-for the user to do;
-the boundary holds only while no admin login is left where the agent can
-reach it, which the `--credentials` lines are about. `ci / floor-check`
-(`--actions-token`) does not decide it: the Actions token is not the agent's
-login, so the line there is an INFO saying `not verified here`, left to this
-skill.
-
-`--ruleset` expects the wall
-`/plinth:new-project` raises, the CodeQL alert thresholds of its
-`code_scanning` rule included; for a repository with a different wall (plinth
-itself, for one) pass `--expect-checks "<name>, <name>"` as well. Add
-`--project <dir>` when the project is not at the repository root — the
-directory the repository's own CI gives `python-ci.yml` as its
-`working-directory` — because without it `pyproject.toml` and `uv.lock` are
-read from the root and reported missing although they exist one level down.
+- **`--sandbox`.** Claude Code's sandbox is an INFO, never a PASS, or a SKIP
+  ending `[cannot be read here]` when the settings do not record it. Relay
+  the INFO lines under it as they are, and do not tell the user to turn the
+  sandbox on or off.
+- **`--plugins`.** A plugin behind the commit its marketplace entry pins is a
+  WARN with the one `claude plugin update` line that moves it. A SKIP there
+  is not "up to date": never say so.
+- **`--credentials`.** What can push besides the agent's token, the scopes of
+  the active login, and a production database URL within the agent's reach,
+  each a WARN naming where, never the value. Relay the WARN lines with the
+  fix from `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-a-token.md`;
+  never run a logout, delete a credential, or remove a line or a variable.
+  Finding none is an INFO, best effort: never tell the user the machine is
+  clean.
+- **`--merge-ruleset`.** A WARN when no ruleset reserves the merge names
+  `scripts/create-merge-ruleset.sh`, which needs repository administration:
+  give it to the user. The line starting `the merge:` says whether "merge on
+  your word" is guidance (an INFO: the agent could merge and is only asked
+  to wait) or a boundary (a PASS: GitHub refuses the agent's merge); put it
+  in the summary in those plain words. Guidance is a setup, not a defect:
+  leave it out of the FAIL and WARN list. The way to a boundary is
+  `${CLAUDE_PLUGIN_ROOT}/docs/how-to/give-the-agent-its-own-account.md`, for
+  the user to do.
 
 ## A GitLab checkout
 
@@ -157,71 +77,19 @@ repo="$(git remote get-url origin 2>/dev/null | sed -nE 's#^(https://gitlab\.com
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --host gitlab --sandbox --plugins --credentials ${repo:+--repo} ${repo:+"$repo"}
 ```
 
-The wall is read through `glab api` with the user's own login: the
-protected default branch (no one pushes, Maintainers merge, no force push),
-"Pipelines must succeed" with skipped pipelines not counted, squash always
-and fast-forward, the labels, and the include on the default branch. Reading
-the protection needs the Maintainer role; with less it is a SKIP. Without
-`glab` or its login (`glab auth login --hostname gitlab.com`), the wall is a
-SKIP and the checkout's include is read instead. `--credentials` reads
-gitlab.com there: `GITLAB_TOKEN`, `GITLAB_ACCESS_TOKEN` or `OAUTH_TOKEN` set,
-git helpers for gitlab.com other than glab's, an `Authorization` header and a
-gitlab.com login in `~/.netrc`; the login glab itself stores is a SKIP. Relay
-them as on GitHub. The production database URL item reads the same three
-places as on GitHub. The template drift item's `copier update` line carries
-the include's commit and its checksum together (`plinth_sha` and
-`plinth_gitlab_integrity`). In place of `gh`'s denies,
-the agent settings must deny `glab`'s token and config reads. The issue and
-merge request templates are under `.gitlab/`. Dependabot does not run there,
-which is an INFO. In place of the `ci` job, the top-level include of
-`.gitlab-ci.yml` is judged by the GitLab pipeline's own `floor-check` rule,
-read from `${CLAUDE_PLUGIN_ROOT}/gitlab/python-ci.yml`. That rule needs
-PyYAML: without it, the job's PyYAML is installed by hash into a temporary
-directory from PyPI (its wheels cover CPython 3.11 to 3.14; another Python
-without PyYAML gets a SKIP saying so), and with `--no-network` the include is
-a SKIP unless PyYAML is already there.
-
-A FAIL in the wall carries its fix as a `glab api` line or a settings URL;
-it needs the Maintainer role, so give it to the user to run, not yourself.
+The wall is read through `glab api` with the user's own login; reading the
+protection needs the Maintainer role, and without it, or without `glab`, the
+wall is a SKIP. A FAIL in the wall carries its fix as a `glab api` line or a
+settings URL; it needs the Maintainer role, so give it to the user to run.
 
 ## A JavaScript or TypeScript repository
 
 A GitHub repository with `package.json` and no `pyproject.toml` where the
-project is read (the root, or `--project`) is read as a JavaScript or
-TypeScript project (#681), the shape v0, Lovable and Bolt export. Run the same
-command. The first line under the header is an INFO saying so in plain words:
-plinth has no checks for that language (no lint, typecheck, test or build
-check), and the checks that do not depend on the language still apply. Those
-keep their verdicts: the document set, `.claude/settings.json`,
-`.gitattributes`, `.github/dependabot.yml`, tracked dotenv files, action pins,
-and, with a repository name, the ruleset's rules, push protection, CodeQL and
-the labels.
-
+project is read is a JavaScript or TypeScript project. Run the same command.
+The first line under the header is an INFO saying plinth has no checks for
+that language; the checks that do not depend on it keep their verdicts.
 Each item that depends on Python is an `N/A` line saying `does not apply` and
-why, in one sentence: `pyproject.toml`, `uv.lock`, the archetype's items
-(container image, `.env.example`, JSON logs), the `ci` job's call to
-`python-ci.yml` (not read, from the checkout or the default branch), and the
-ruleset's required checks named `ci / <job>`, which only that call reports.
-With none left to require, the `required_status_checks` rule and its
-strictness are not asked for either; a name `--expect-checks` gives that is
-not `ci / <job>` is still judged. CodeQL's default setup is asked to analyse
-`javascript-typescript` (or the older `javascript` or `typescript`) in place of
-`python`, and its fix line names that language. `N/A` lines are neither failures nor
-not-verified items: the summary line counts them on their own, `K do not
-apply`, printed only when K is above 0.
-
-When `bun.lock` or `bun.lockb` is the only lockfile (no `package-lock.json`,
-`npm-shrinkwrap.json`, `yarn.lock` or `pnpm-lock.yaml`), one INFO line says
-that GitHub's dependency review does not read it, so a vulnerable dependency
-is not reported before a merge.
-
-What it leaves out: the project's own lockfile, scripts and source are not
-read, and no JavaScript or TypeScript check exists to stand in for the Python
-ones. Template drift is a SKIP as for any repository the door did not make.
-A repository that also holds a `pyproject.toml`, one whose Python project is
-one directory down (the `--project` line stands), and a GitLab checkout are
-read as before. `ci / floor-check` is not involved: it runs only from
-`python-ci.yml`, which such a repository does not call.
+why; the summary counts them on their own, `K do not apply`.
 
 ## Report
 
@@ -266,7 +134,15 @@ as is.
 Ruleset fixes need repository administration, so they go through
 `with-admin-token.sh` (spell out the plugin root path); tell the user to run
 that line in a separate terminal window, not with `!`: `!` runs it without a
-terminal, so the token prompt gets nothing. Never run it.
+terminal, so the token prompt gets nothing. Never run it. The same holds for
+every `gh api -X` call printed under a repository setting (push protection,
+the Actions allowlist, private vulnerability reporting, the Actions token, the
+tag ruleset): relay it as printed, behind `with-admin-token.sh` in a separate
+terminal when the user's login cannot administer the repository.
+
+An INFO naming a product the plan lacks (GitHub Code Security or Secret
+Protection on a private repository) is a fact about the plan: buying it is the
+user's choice, never a step to run or to recommend as a repair.
 
 INFO lines are facts, not defects; leave them where they are. INFO lines
 indented under a FAIL or WARN are the exception: they belong to that finding
@@ -308,265 +184,6 @@ a private repository's missing CodeQL rule). In that job's summary their
 annotated; the other `not yet confirmed` lines are. This skill's own run
 never prints the count; without the flag those reads are SKIPs.
 
-## What the static checks read, and what they do not
-
-These checks are static reads with a stated scope (#95, the predicates #42
-left open; the plinth pins, #447; the release workflow, #703; render.yaml, #811). A finding from any of them is a WARN, never a FAIL, so a
-repository that passed before they existed still passes; a PASS from them
-covers only what is listed here.
-
-| Check | Reads | Does not read |
-| --- | --- | --- |
-| Tracked dotenv | `git ls-files` under `--root`: a tracked file named `.env` or `.env.<anything>`, except `.env.example`, `.env.sample`, `.env.template` | File contents, git history, an untracked local `.env` (not the defect), `.envrc`, other names such as `prod.env`. It is not a secret scanner; `ci / secrets` is. Outside a git work tree it is a SKIP |
-| Action pins | Every `uses:` line in `.github/workflows/*.yml` and `*.yaml`: `owner/repo@<40-hex SHA>`, `docker://…@sha256:<digest>` or a local `./` path. Comments and block scalars (`run: \|`) are skipped | Composite actions under `.github/actions`, whether the SHA exists upstream, what the pinned action itself calls. A `uses` written in a form the line pattern cannot read (flow style, a quoted, anchored or explicit `?` key: any `uses` in key position that is not a plain `uses: value`) is a SKIP naming the line |
-| Plinth pins agree | The same `uses:` lines as Action pins, those of `coolbress/plinth/...` at a full commit SHA: two or more SHAs across the files (`ci.yml` and `label.yml` are rendered at one commit; a hand edit moves one) are a WARN naming each file with its SHA, and the INFO under it is the `sed` line that moves each lagging file's plinth references, and nothing else in it, to the SHA the `ci` job calls. The owner, repository and SHA compare in any letter case, as GitHub reads them. One SHA, or none outside the `ci` job, prints nothing, whatever the template state | A plinth `uses:` on a tag or branch (the Action pins WARN, not repeated). A `uses` it cannot read is a SKIP naming the file and line, unless the readable ones already disagree. Not a FAIL: `label / label` is not a required check |
-| Release workflow | For a `cli`, `library`, `backend` or `data-ml` on GitHub, `.github/workflows/release.yml` at the repository root (also with `--project`) as text, comments dropped: present (plinth-template 1.29.0 renders it for `cli` and `library`, 1.30.0 for `backend`, 1.31.0 for `data-ml`); every line of its `on:` block is `push:`, `tags:` or a tag pattern under it, so another event, another filter or a key it cannot read (a quoted one) is a WARN naming that line; no `secrets.<name>` other than `GITHUB_TOKEN`, and no `password:`. For `data-ml`, the files its `ASSETS:` line names: one ending in `.pkl`, `.pickle`, `.joblib` or `.pt`, in any letter case, is a WARN; no such line, or a value that is not one line of plain file names (a folded or literal block such as `>-`, a value continued on a deeper-indented line, a second `ASSETS:` line, an expression, a comment), is a SKIP | Whether PyPI has a publisher registered, whether the `pypi` environment exists or what protects it, whether the image was pushed or who can fetch it, whether the release exists or its files match their `SHA256SUMS`, which files a `data-ml` step uploads other than through `ASSETS`, whether the tag-against-version step is still there, what the jobs do. Missing on an instance rendered before the template release that adds it is a WARN whose INFO names the update. On GitLab, an INFO: the template renders no release workflow there. `web` is not asked |
-| Model card | For a `data-ml`, on either host, `MODEL_CARD.md` in the project directory: present (plinth-template 1.31.0 renders it). Missing is a WARN whose INFO names the update | What the card says, whether its personal-data answer is true or filled in, whether the training run fills its results. Other archetypes are not asked |
-| Render Blueprint | `render.yaml` in the project directory, whenever it is there (#811): for a `web` instance hosted on Render, whether it is there at all is the separate `render.yaml present` item; for any other repository, a JavaScript or TypeScript one included, it is read when present and nothing is said when it is not. Read as block YAML with the standard library: each `type: web` service has a `healthCheckPath` and `autoDeployTrigger: checksPass`, each database names a `plan` other than `free` (Render deletes a free Postgres after 30 days, with no backups), and no `envVars` entry, under a service or an `envVarGroups` group, whose key names a secret (`SECRET`, `PASSWORD`, `TOKEN`, `API_KEY`, `PRIVATE_KEY`, `CREDENTIAL`, `DATABASE_URL`, `..._DSN`) carries a literal `value:`. Each gap is a WARN with one fix line, one per service or database that has it, and never a FAIL. The name match errs toward a WARN: `TOKEN_TTL_SECONDS` with a literal value is one. A file with no web service or no `envVars` says so as an INFO, not a PASS | Dashboard-only settings: Blueprint Auto Sync, health alerts, spend limits. Whether the plan named exists, whether the path answers, a secret under a name the pattern does not match. A file in a form the reader does not read (a flow collection other than `[]` or `{}`, a block scalar, an anchor or alias, a merge key, a nested list, a plain value holding a colon and a space, a backslash escape in double quotes, in a key or a value, a tab in the indentation, resources under `projects` or `ungrouped`) is one SKIP for the whole file. The SKIP names the line number and the form, never what the line holds: `ci / floor-check` publishes it as an annotation, and the line may hold a secret. Railway and Fly files are not read |
-| JSON logs | For a service archetype (`backend`, `data-ml`, `web`), the Python under `src/`: a `logging.Formatter` subclass that calls `json.dumps`, structlog's `JSONRenderer`, python-json-logger, or loguru with `serialize=True`; comments are ignored, string literals are not | Anything at run time: the application is never started, so the PASS line says "static hint", not proof of what the process prints. Logging it does not recognise is a SKIP; only a source tree with no logging at all is a WARN. Other archetypes are not asked |
-
-## The ci job
-
-One item reads `.github/workflows/ci.yml` and asks whether its `ci` job still
-calls `coolbress/plinth/.github/workflows/python-ci.yml` pinned to a full
-commit SHA (#325). The `ci / <job>` check names come from that call; a pull
-request that replaces it with plain jobs of the same names turns every
-required check green without running them. With a repository name it reads
-the file from the default branch through the API, not from the checkout, so
-the answer is about what merged. Offline or without one it reads the
-checkout and says so in the line. A `ci` job that is missing, runs its own
-steps, calls another repository, a fork or a local file, pins a tag or a
-branch, or carries any key but `uses:`, `with:`, `secrets:` and
-`permissions:` (an `if:`, `needs:`, `name:` or `strategy:` can get it
-skipped, renamed or cut short while plain jobs report its check names) is a
-FAIL. The INFO line under it is a `gh api` command that prints
-the SHA to pin: the pinned tag's or branch's commit, or otherwise the commit
-of plinth's latest release. A file or job the line reader cannot
-read is a SKIP: flow style, an anchor, an alias, a merge key, a
-double-quoted key with an escape, or any top-level line that is not a plain or
-quoted `key: …` (a tag, an explicit `?` key, a `---` marker that starts a
-second document; one opening the file is read past). plinth itself
-calls `./.github/workflows/plinth-ci.yml`, accepted for `coolbress/plinth`
-only; no other local workflow is.
-
-When the job calls plinth's workflow, the same item reads two values of its
-`with:` block, the inputs that set how much a check holds (#435):
-`max-diff-lines` of 0 or less (measured, never fails) or above plinth's default of
-400, and `deps-fail-on-severity: critical` (plinth's default is `high`), are
-each a WARN naming the input, its value and the default, on every run. A
-project may choose the value; the line keeps the choice visible after the
-pull request that set it. A stricter value or none prints nothing, and
-neither WARN changes the exit code. A value it cannot read (an expression
-such as `${{ vars.X }}`, a value continued on the next line, a limit that
-is not a whole number, a severity spelled other than `critical`, `high`,
-`moderate` or `low`) is a SKIP, and so is a `with:` line it cannot name (an
-explicit `?` key, a merge key) or a second `with:` on the job. The
-other inputs (`diff-size-exclude`, `extra-python-versions`,
-`working-directory`) are not judged: no direction of "looser" is agreed for
-them.
-
-`ci / floor-check` runs the same item on the pull request's own `ci.yml`
-(`--caller-from-checkout`): a pull request that keeps the call but weakens it
-fails there, before the merge, and one that repairs a broken default branch
-can merge. A pull request that removes the call removes `ci / floor-check`
-with it, so that one is seen only after the merge, from outside the pull
-request: here, run by a person, or by the e2e runner.
-
-## Push protection
-
-One item reads whether GitHub's push protection is on (#303): it refuses a
-push that carries a secret in a format GitHub knows, where `ci / secrets`
-reports one only after it is on GitHub. On is a PASS that says that much and
-no more, and it says so: anyone with write access can push a secret past
-the block by giving a reason, and a format GitHub does not know passes. The
-WARN's fix lines say the same of the setting once it is on. Off is a WARN, never a FAIL, and the INFO line under it
-is one `gh api` call that sends what the door sends. It needs repository
-administration, and on a private repository GitHub Secret Protection too:
-relay it as printed for the user to run, behind `with-admin-token.sh` in a
-separate terminal when their login cannot administer the repository, and
-never run it. The status
-sits in the repository's security settings, which a token without repository
-administration does not get: that is a SKIP, and so is a repository GitHub
-reports no status for. A private repository that answers no settings even
-to a login that administers it is a SKIP of its own: GitHub Secret Protection
-not on its plan, or a token without the Administration permission (measured
-on a personal account's private repository, #811; the login's role is in the
-answer, the token's permissions are not). When the same token reads the
-repository's Actions permissions, which need Administration, the plan is the
-cause and the SKIP ends `[cannot be read here]`; otherwise it stays plain, with
-an INFO naming a token with Administration as the way to read it. The CodeQL
-rule and its default setup languages on such a repository follow the same
-split. `ci / floor-check` passes `--actions-token`, which
-turns the first of those into an INFO, because the Actions token never gets
-them and no consumer could clear that SKIP: this skill, with the user's
-login, is the run that reads the item. Never pass that flag here.
-
-## The Actions allowlist and private vulnerability reporting
-
-Three more items read the repository with `--repo` (#747), each a WARN,
-never a FAIL, with the call under it; relay the call as printed, behind
-`with-admin-token.sh` when the user's login cannot administer the
-repository, and never run it.
-
-- **The Actions allowlist.** The door lets only GitHub-owned actions,
-  `coolbress/plinth/*` and each archetype's named release actions run. A
-  `uses:` in `.github/workflows/` outside them ends its run in
-  `startup_failure`, with no job and no message saying why. The WARN names
-  each such action, file and line; the INFO is one `gh api -X PUT` that
-  keeps what is allowed and adds `<owner>/<repo>@*` for each. `copier update`
-  never changes this setting, so a repository made before its template used
-  an action learns of it here. A `docker://` image is a SKIP: not judged.
-  A `uses` written in a form the checker does not read (flow style, an
-  anchored key) is a SKIP naming its line, and the PASS is not printed
-  beside it, as for the pins. An allowlist with a `!` pattern (one that
-  blocks what it matches, written by hand; the door writes none) is a SKIP
-  naming that pattern, never the PASS: GitHub documents no order between
-  blocking and allowing patterns.
-- **Private vulnerability reporting.** `SECURITY.md` sends a reporter to
-  Security → Report a vulnerability, which is off until turned on; the door
-  turns it on for a public repository. Off is the WARN; the call is
-  `gh api -X PUT repos/<owner>/<name>/private-vulnerability-reporting`. A
-  private repository is not offered it (GitHub answers 404), so there it is
-  an INFO.
-- **SECURITY.md's route.** A WARN when the file names the form on a private
-  repository, or an issue on a public one, with the `copier update` that
-  re-renders it. An instance made before the template asked `visibility`
-  and updated with `--defaults` gets `public`, the form, whatever the
-  repository is. A file naming neither route is the user's own: not judged.
-
-Both read settings a token without repository administration does not get:
-a SKIP here, and under `--actions-token` an INFO left to this skill.
-
-## What the door sets beside the wall, and the project's own answers
-
-These items (#772) are each a WARN, never a FAIL, with the fix under it;
-relay the call as printed, behind `with-admin-token.sh` when the user's
-login cannot administer the repository, and never run it.
-
-- **The Actions token.** With `--repo`: the token a workflow gets when it
-  names no permissions reads only, and no workflow can approve a pull
-  request, which the door sets. Either one otherwise is the WARN, with one
-  `gh api -X PUT …/actions/permissions/workflow`. It needs repository
-  administration to read: a SKIP here, an INFO left to this skill under
-  `--actions-token`.
-- **The tag ruleset.** With `--repo`, for `cli`, `library`, `backend` and
-  `data-ml`, which release from a `v*` tag: an active tag ruleset that
-  includes every `v*` tag (`refs/tags/v*`, `refs/tags/*` or `~ALL`, not a
-  sample tag), excludes none of them, blocks deletion and update, and lets
-  no actor bypass it. Bypass actors are read only with repository
-  administration: a ruleset otherwise right whose actors are unread is a
-  SKIP, an INFO left to this skill under `--actions-token`. None, or one that leaves a gap (a
-  `non_fast_forward` rule in place of `update` lets a tag move to a later
-  commit), is the WARN naming the gap, with the `gh api -X POST` that adds
-  the door's. Rulesets are read with read access. A uv workspace member
-  that `pyproject.toml` lists under `[tool.plinth.release] own-tags` is
-  released on its own `<prefix>v*` tags, and each listed prefix is one
-  more item judged the same way: the door's ruleset covers it
-  (`refs/tags/*-v*`), one made before covers `v*` only, and the WARN's
-  `gh api -X POST` adds a ruleset for that prefix alone. A list that
-  cannot be read here is a SKIP.
-- **The description.** With `--repo`: one is a PASS, none an INFO with the
-  `gh repo edit` that sets one. It is asked at creation and skippable, and
-  not recorded, so none is never a miss.
-- **The project's answers.** Each answer in `.copier-answers.yml` that turns
-  something on is held against the repository: `third_party_review: true`
-  and `.github/workflows/third-party.yml`; `code_of_conduct: true` and
-  `CODE_OF_CONDUCT.md`; `owner_has_code_of_conduct: true` (and `owner_has_pr_template: true`) and
-  the owner's `.github` repository still public and still publishing one (a
-  WARN when it is private or gone, since GitHub inherits only from a public
-  one; a SKIP when its visibility cannot be read) (a SKIP when it cannot be read,
-  a PASS when the repository has its own). An answer that turns something
-  off, or one not recorded, is not read. `owner_has_security_policy` needs
-  no item of its own: `SECURITY.md`, local or inherited, is in the document
-  set above.
-
-## A private repository
-
-A private repository's wall is read against what its licences allow (#351).
-The `code_scanning` rule is expected only where GitHub Code Security is
-enabled on the repository, and push protection only where GitHub Secret
-Protection is: both are paid products for Team and Enterprise. Every other
-item, the required check names first, is expected as on a public repository.
-
-| The repository's security settings say | CodeQL rule missing | Push protection off |
-| --- | --- | --- |
-| The product is enabled | FAIL, as on a public repository | WARN with its call, as on a public repository |
-| The product is disabled | INFO naming the gap; `ci / lint`'s security rules stand in its place | INFO naming the gap; `ci / secrets` stands in its place |
-| No answer (a token without repository administration, or no status in the answer) | SKIP | SKIP |
-
-The two gap lines are INFO at the normal indent: facts about the plan, not
-defects. Leave them out of the FAIL and WARN list and write no fix under
-them. They say where the product is turned on and that it may be billed;
-that is the user's purchase to make, never a step to run or to recommend as
-a repair. A SKIP here goes in the not-verified line with what verifies it,
-which the line itself names: a login that administers the repository when
-the token did not read the security settings; the repository's Settings >
-Advanced Security page when GitHub gave no status for the product, because
-no login changes that answer. What a private repository answers on each plan
-is not measured yet (#352). `ci / floor-check` reads a private
-repository with the Actions token, which never gets the security settings: a
-missing rule is an INFO there, outside the not-verified count, saying the
-licence state is judged when this skill is run with a login that administers
-the repository. So a private repository that has Code Security and lost its
-rule fails here and not in CI. Never pass `--actions-token` here.
-
-## Template drift
-
-One item compares the template tag this repository was rendered from
-(`.copier-answers.yml`'s `_commit`) with the tag plinth is tested with today
-(`scripts/new-project.sh`'s `template_ref`). Equal is a PASS, worded as
-"the recorded tag is the target tag" and nothing more: it does not mean this
-repository's own render matches the template file for file, only that it was
-made from the current tag. Behind is a WARN, never a FAIL, naming both tags,
-the template's own files that changed between them (one GitHub compare call,
-and a diff of `AGENTS.md`, `CONTRIBUTING.md` and `.gitignore` if they are
-among them — the template's own change, not necessarily this repository's:
-another archetype, inherited forms or a hand-made edit can mean some of it
-was never rendered here), and a `copier update` line carrying the commit of
-plinth this repository's own workflows call today, read from their `uses:`
-lines so the update does not move that pin under it, and, on GitHub, the
-owner's two answers `/plinth:new-project` gave the first render: whether the
-owner's public `.github` repository publishes a pull-request template and
-issue forms, read the same way, each true only while this repository has
-none of its own (its own already replace the owner's, and true would delete
-them). Without them an update reads both as false and can write one local
-form that hides every shared one (#726). They need `--repo`; without it, or
-when a read fails, the item prints the tags and files with no command and
-says what was not read. When the target tag was
-tested with a newer plinth commit (its `copier.yml` `plinth_sha` default,
-compared with the live pin on GitHub), a second line carries that one, under
-a line naming both SHAs, their release tags and the compare URL: the person
-chooses, the item never does. A live pin newer than the tested one is kept
-and said so, with no second line; a comparison that could not be read is
-said so too, with only the first line (#511). Each line is printed only
-while the target tag still names the commit plinth was tested with
-(`scripts/new-project.sh`'s `template_sha`): a tag that names another commit
-is a WARN naming both, with no line, and so is a repository already on that
-tag, in place of the PASS; a tag whose commit could not be read
-still shows the line, said to be not verified, and `/plinth:template-update`
-refuses to run it until it is (#519). When that pin cannot be
-established (no such `uses:` line, or two that disagree) the tags and file
-list still print, with no command. A repository the door did not make, or
-whose recorded tag is not an exact release tag, is a SKIP, not a PASS. It
-never runs `copier update`; `/plinth:template-update` runs that line, the
-user's to start, and resolves a conflict only on a person's word for that
-file before it opens a draft pull request.
-
-Beside that item, a WARN when this installed plinth targets an older tag than
-the latest plinth release's, or than the tag the repository's CI pin was tested
-with: the same stop `/plinth:template-update` makes, with the commands the
-person types, in order, the last of them `/plinth:template-update` on GitHub
-and GitLab alike. A tag only the pin carries is said to be in no release
-yet: the commands may find nothing until one ships. A release that cannot be
-read is an INFO naming the target. `ci / floor-check` says neither: its
-checker is the pin's (#843).
-
-A repository made before this item shipped hears about it two ways: an agent
-running an updated plugin's `/plinth:floor-check` by hand, or its own
-`ci / floor-check` once its workflow pin is raised (Dependabot proposes
-that) — CI downloads the checker from the plinth commit its own workflow is
-pinned to, so an older pin keeps running the older checker until then.
-
 Do not fix anything in this session, and do not run anything that writes.
 
 End the report with one line in the person's language: try typing
@@ -575,3 +192,10 @@ what is open and what happened so far, and, before the first merge, how to
 use the tools of that step and the next; `/plinth:guide map` shows the whole
 way on one screen, and `/plinth:guide map <step>` one step in depth. On a repository plinth did not make,
 it points back here.
+
+## What each item reads
+
+`${CLAUDE_PLUGIN_ROOT}/skills/floor-check/reference.md` says, item by item,
+what the checker reads and what it does not, and why each verdict is worded
+as it is. The report does not need it: open it only when the person asks why
+an item says what it says, or what a check covers.

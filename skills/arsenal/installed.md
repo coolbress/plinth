@@ -1,7 +1,7 @@
 # Installed by default
 
 What plinth installs with itself, what each plugin costs, and the Claude Code
-built-ins the arsenal's table names.
+built-ins plinth points to.
 
 | Plugin | What | When | Cost | Source |
 | --- | --- | --- | --- | --- |

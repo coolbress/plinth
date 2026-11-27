@@ -10,7 +10,11 @@ disallowed-tools: Edit, Write, NotebookEdit
 A tour for a beginner or a non-engineer starting or picking up a project.
 It reads the project and never writes. Its steps and tools are the rows of
 `/plinth:arsenal`'s "Where you are, and what to do next" table: the guide
-picks from that catalog for the step the project is at. Which tool for a task
+picks from that catalog for the step the project is at. What it says of each
+step, the Next action, How to use it and It leaves cells, is its own, in
+`steps.md` beside this file, joined to the arsenal's row by the step's name;
+the script prints the two as one row, its tool cell the arsenal's Tool,
+plinth piece, Also and Class. Which tool for a task
 in general, every tool plinth installs or lists, and what each costs, is
 `/plinth:arsenal`.
 
@@ -199,8 +203,8 @@ What to keep to:
   you have no reason to give.
 - Name a step or tool only when it is in the table or on a line the script
   printed. A tool that is not there is not mentioned, however well known.
-- A tool the table marks listed is not installed: say so; `/plinth:arsenal`
-  has its install line.
+- A tool whose class (after `class:` in its tool cell) is listed is not
+  installed: say so; `/plinth:arsenal` has its install line.
 - A skill on the list "Skills only the person can start", in
   `${CLAUDE_PLUGIN_ROOT}/skills/arsenal/SKILL.md`, is typed as `/` and picked
   from the list, not pasted. Do not run the command yourself.
