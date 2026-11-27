@@ -117,7 +117,9 @@ status of anything is one of four words, each beside its fixed-width symbol:
 `✓ done`, `… in progress`, `‖ waiting`, `✗ failed`. A symbol never stands
 alone, and no emoji stands in for one. There is no progress bar:
 no bar, no fraction of the steps. The steps are a loop a ticket goes round
-again, not a line to the end.
+again, not a line to the end. A terminal answer prefers a list of short lines
+to a table wider than four columns: a wide table wraps at 200% zoom and in
+`-p` output.
 
 1. **The header line.** The project (`repository:`), the `started:` line's
    start date and days since, and its last activity as the absolute date
@@ -273,16 +275,18 @@ What to keep to:
 
 On `map`, the answer is the map, from the printed `map:` lines, in their
 order, and none of the seven parts: the title, the legend, the three groups,
-the `↻` return line, the next command, and the two footer lines. Keep each
-line's mark, number and command exactly as printed; say each name, the
+the `repeat ↻` return line, the next command, and the two footer lines. Keep each
+line's mark, its word, number and command exactly as printed; say each name, the
 `why now:` line and the footer in the person's language. The marks are the
-legend's four: `▶ you are here`, `✓ done`, `✗ needs attention`, `· not yet`.
+legend's four, and each mark is printed with its word, so a screen reader
+that skips the symbol still says the state: `▶ you are here`, `✓ done`,
+`✗ needs attention`, `· not yet`.
 A line printed with no mark has none because no read covers it: add none,
 and never mark a step done that the map does not. The lines under
 `next command:` go in the one code block, `/clear` first where it is
 printed, with part 3's line on what `/clear` does; a `next command:` that
 says `none:` or `not read` is said in words. There is no drawn cycle, no
-progress bar and no box-drawing characters: the `↻` line is the return, in
+progress bar and no box-drawing characters: the `repeat ↻` line is the return, in
 words. A
 `✗` on the token line or on step 9 says what needs attention: under the map,
 one line each from the `token step:` or `step 9:` line, the `template:` and

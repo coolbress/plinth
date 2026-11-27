@@ -230,6 +230,20 @@ case "${MOCK_COPIER:-clean}" in
       | git update-index --index-info
     printf '<<<<<<< before updating\nours\n=======\ntheirs\n>>>>>>> after updating\n' > CONTRIBUTING.md ;;
   rej) printf -- '--- a\n+++ b\n' > CONTRIBUTING.md.rej ;;
+  # MOCK_CONFLICT_DIR (#1186): a conflict in each file `list` names (`<path>\t<key>`),
+  # written as copier writes one: <key>.head, the markers around <key>.ours
+  # and <key>.theirs, then <key>.tail; the index holds the three stages.
+  custom)
+    while IFS=$'\t' read -r cp ck; do
+      [ -n "$cp" ] || continue
+      cd_="$MOCK_CONFLICT_DIR/$ck"
+      cb="$(git hash-object -w "$cp")"
+      cat "$cd_.head" "$cd_.ours" "$cd_.tail" > .o; cat "$cd_.head" "$cd_.theirs" "$cd_.tail" > .t
+      co="$(git hash-object -w .o)"; ct="$(git hash-object -w .t)"; rm .o .t
+      git update-index --force-remove "$cp"
+      printf '100644 %s 1\t%s\n100644 %s 2\t%s\n100644 %s 3\t%s\n' "$cb" "$cp" "$co" "$cp" "$ct" "$cp" | git update-index --index-info
+      { cat "$cd_.head"; echo "<<<<<<< before updating"; cat "$cd_.ours"; echo "======="; cat "$cd_.theirs"; echo ">>>>>>> after updating"; cat "$cd_.tail"; } > "$cp"
+    done < "$MOCK_CONFLICT_DIR/list" ;;
   # A template that names GLOSSARY.md, as plinth-template's domain docs do
   # from the release that follows mattpocock/skills v1.3.2 (#714).
   glossary) mkdir -p docs/agents && printf -- '- Root **`GLOSSARY.md`**: the glossary.\n' > docs/agents/domain.md ;;
@@ -493,6 +507,128 @@ q_run -- --apply "$base" --answer records_language Korean --answer records_langu
 if [ "$rc" = 2 ]; then ok "--answer naming one question twice is refused (usage)"; else bad "--answer twice (rc=$rc)"; fi
 rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
 repo="$repo_was"; BARE="$bare_was"; export BARE
+
+# ── conflicts: a combination that keeps this repository's lines (#1186) ─
+# A conflict whose "before" side holds a line this repository added to the
+# template's render offers no one side as the recommendation: the
+# combination, the template's side with that line kept, is written beside
+# the record. A conflict with no such line may still take the template's
+# side. The description names each kept line and where it is now.
+repo_was="$repo"; bare_was="$BARE"
+cx="$work/conflicts"; mkdir -p "$cx" "$work/comb-old"
+part() { printf '%b' "$2" > "$cx/$1"; } # <key.part> <text>
+part agents.head '# Agents\n\n## Always\n\n'; part agents.old '- a template rule\n'
+part agents.ours '- a template rule\n- Our own rule\n'; part agents.theirs '- a rewritten template rule\n- another template rule\n'
+part agents.tail "\n## This project\n\nThis project's own rules: a template update never changes this section.\n"
+part yml.head 'jobs:\n  ci:\n    with:\n'; part yml.old '      versions: "3.13"\n'
+part yml.ours '      timeout: 20\n      # no second run here\n      versions: ""\n'; part yml.theirs '      # the newer version\n      versions: "3.14"\n'
+part yml.tail '    permissions: {}\n'
+part contrib.head '# Contributing\n\n'; part contrib.old '- keep it short\n'; part contrib.ours '- keep it short\n'
+part contrib.theirs '- keep it brief\n'; part contrib.tail ''
+printf 'AGENTS.md\tagents\nsettings.yml\tyml\nCONTRIBUTING.md\tcontrib\n' > "$cx/list"
+fixture combine
+while IFS=$'\t' read -r cp ck; do
+  cat "$cx/$ck.head" "$cx/$ck.ours" "$cx/$ck.tail" > "$repo/$cp"
+  cat "$cx/$ck.head" "$cx/$ck.old" "$cx/$ck.tail" > "$work/comb-old/$cp"
+done < "$cx/list"
+git -C "$repo" add -A && git -C "$repo" commit -q -m "our lines" && git -C "$repo" push -q origin main
+base="$(git -C "$BARE" rev-parse main)"; reset_logs
+out="$(cd "$repo" && MOCK_COPIER=custom MOCK_CONFLICT_DIR="$cx" MOCK_OLD_RENDER="$work/comb-old" PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" UVX_LOG="$work/uvx.log" "$script" --apply "$base" 2>&1)"; rc=$?
+wt="$(wt_of combine)"
+comb_of() { sed -n "s|^    The combination, the template's side with those lines kept: \(.*/$1\)\$|\1|p" <<<"$out"; }
+ca="$(comb_of AGENTS.md)"; cy="$(comb_of settings.yml)"
+if [ "$rc" = 3 ] && grep -qxF "  AGENTS.md: 1; neither side whole keeps both, so neither is the recommendation." <<<"$out" \
+   && grep -qxF "      + - Our own rule    (no old place; propose: under ## This project, the file's last section)" <<<"$out" \
+   && [ -f "$ca" ] && grep -qxF -- "- Our own rule" "$ca" && grep -qxF -- "- a rewritten template rule" "$ca" && ! grep -q '^<<<<<<<\|^>>>>>>>' "$ca" \
+   && case "$ca" in "$wt"/*) false ;; *) true ;; esac
+then ok "a conflict whose before side holds a line this repository added offers no one side; the combination keeps the line, outside the worktree"
+else bad "combination, Markdown (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$ca" 2>/dev/null | sed 's/^/        /'; fi
+if [ -f "$cy" ] && grep -qxF '      versions: ""' "$cy" && ! grep -qF '"3.14"' "$cy" && ! grep -qF "the newer version" "$cy" \
+   && grep -qxF '      timeout: 20' "$cy" && grep -qxF '      # no second run here' "$cy" && grep -qxF '    permissions: {}' "$cy" \
+   && grep -qxF '      +       versions: ""    (replaces versions: "3.14")' <<<"$out"
+then ok "a key this repository set that the template's side sets too: this repository's value replaces the template's, with its own comment"
+else bad "combination, YAML"; cat "$cy" 2>/dev/null | sed 's/^/        /'; fi
+if grep -qxF "  CONTRIBUTING.md: none; the template's side keeps every line this repository added" <<<"$out"
+then ok "a conflict with no line this repository added may still take the template's side"
+else bad "combination, no added line"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+# The person's word: AGENTS.md as combined, with the line moved under
+# `## This project`; settings.yml as combined; CONTRIBUTING.md the template's side.
+grep -vxF -- "- Our own rule" "$ca" > "$wt/AGENTS.md"; printf -- '- Our own rule\n' >> "$wt/AGENTS.md"
+cp "$cy" "$wt/settings.yml"; cat "$cx/contrib.head" "$cx/contrib.theirs" > "$wt/CONTRIBUTING.md"
+git -C "$wt" add AGENTS.md settings.yml CONTRIBUTING.md
+reset_logs
+run --finish "$wt" --resolved AGENTS.md "the combination, the line moved under ## This project, on the person's word" \
+  --resolved settings.yml "the combination, on the person's word" --resolved CONTRIBUTING.md "the template's side, on the person's word"
+body="$(cat "$work/gh.log.body" 2>/dev/null)"
+kept="$(awk '/^Lines this repository added that the template.s side dropped/ { f = 1; next } f && /^$/ && n++ { exit } f && /^- /' <<<"$body")"
+if [ "$rc" = 0 ] && grep -qxF -- "- \`AGENTS.md\`, under \`## This project\`, line 11: \`- Our own rule\`" <<<"$kept" \
+   && grep -qxF -- "- \`settings.yml\`, under \`jobs.ci.with\`, line 6: \`timeout: 20\`" <<<"$kept" \
+   && grep -qxF -- "- \`settings.yml\`, under \`jobs.ci.with\`, line 5: \`versions: \"\"\`" <<<"$kept" && ! grep -qF CONTRIBUTING <<<"$kept"
+then ok "the description lists each kept line and the file and section it is in now"
+else bad "the description's kept lines (rc=$rc)"; printf '%s\n' "$out" "$body" | sed 's/^/        /'; fi
+rm -f "$work"/uvx.log.cwd.* "$work/uvx.log.recopy"
+repo="$repo_was"; BARE="$bare_was"; export BARE
+
+# The helper itself, on the shapes the review on #1186 found (each failed
+# before its fix): a parent key keeps the template's children; a key is
+# matched only under its own table; a line starting with a tab is reported
+# whole; a line the template's side already holds is not counted as kept.
+combine_py="$root/scripts/template-update-combine.py"; hx="$work/helper"; mkdir -p "$hx"
+printf 'jobs:\n  t:\n    steps:\n      - name: Test\n<<<<<<< before updating\n        run: pytest\n        timeout-minutes: 20\n=======\n        run: pytest -q --strict\n>>>>>>> after updating\n' > "$hx/a.yml"
+printf 'jobs:\n  t:\n    steps:\n      - name: Test\n        run: pytest\n        timeout-minutes: 20\n' > "$hx/a.base"
+printf 'jobs:\n  t:\n    steps:\n      - name: Test\n        run: pytest\n' > "$hx/a.old"
+python3 "$combine_py" combine "$hx/a.yml" "$hx/a.base" "$hx/a.old" "$hx/out/a.yml" > "$hx/a.report"
+if grep -qxF '        run: pytest -q --strict' "$hx/out/a.yml" && grep -qxF '        timeout-minutes: 20' "$hx/out/a.yml" && ! grep -qxF '        run: pytest' "$hx/out/a.yml"
+then ok "the combination keeps the template's change to a sibling of a line this repository added"
+else bad "helper, a parent key"; cat "$hx/out/a.yml" "$hx/a.report" 2>/dev/null | sed 's/^/        /'; fi
+printf '<<<<<<< before updating\n[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\n=======\n[tool.a]\ntimeout = 15\n[tool.b]\ntimeout = 10\n>>>>>>> after updating\n' > "$hx/b.toml"
+printf '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\n' > "$hx/b.base"; printf '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 10\n' > "$hx/b.old"
+python3 "$combine_py" combine "$hx/b.toml" "$hx/b.base" "$hx/b.old" "$hx/out/b.toml" > "$hx/b.report"
+if [ "$(cat "$hx/out/b.toml")" = "$(printf '[tool.a]\ntimeout = 15\n[tool.b]\ntimeout = 20')" ]
+then ok "a key is replaced only under its own table: the template's [tool.a] change and this repository's [tool.b] value both stay"
+else bad "helper, a key in two tables"; cat "$hx/out/b.toml" "$hx/b.report" 2>/dev/null | sed 's/^/        /'; fi
+printf 'test:\n<<<<<<< before updating\n\tpytest\n\tmypy .\n=======\n\tpytest -q\n>>>>>>> after updating\n' > "$hx/Makefile"
+printf 'test:\n\tpytest\n\tmypy .\n' > "$hx/m.base"; printf 'test:\n\tpytest\n' > "$hx/m.old"
+python3 "$combine_py" combine "$hx/Makefile" "$hx/m.base" "$hx/m.old" "$hx/out/Makefile" > "$hx/m.report"
+if [ "$(cut -f4- "$hx/m.report")" = "$(printf '\tmypy .')" ] && grep -qxF "$(printf '\tmypy .')" "$hx/out/Makefile"
+then ok "a line that starts with a tab is reported and kept whole"
+else bad "helper, a tab"; cat -t "$hx/m.report" 2>/dev/null | sed 's/^/        /'; fi
+printf 'a:\n  x: 1\nb:\n  x: 1\n' > "$hx/w.yml"
+if ! python3 "$combine_py" where "$hx/w.yml" "  x: 1" 2 >/dev/null && [ "$(python3 "$combine_py" where "$hx/w.yml" "  x: 1" 1)" = "$(printf 'b\t4')" ]
+then ok "a line the template's side already holds as often is not counted as kept; one more is found where it is"
+else bad "helper, where with a count"; fi
+
+# Round 2 of the review on #1224, each as the reviewer reproduced it.
+hc() { # <name> <file name> <ours> <theirs> <old> [<head>]: combine; sets $hout and $hrep
+  local d="$hx/$1"; mkdir -p "$d"
+  { printf '%b' "${6:-}"; echo "<<<<<<< before updating"; printf '%b' "$3"; echo "======="; printf '%b' "$4"; echo ">>>>>>> after updating"; } > "$d/$2"
+  printf '%b%b' "${6:-}" "$3" > "$d/base"; printf '%b%b' "${6:-}" "$5" > "$d/old"
+  python3 "$combine_py" combine "$d/$2" "$d/base" "$d/old" "$d/out/$2" > "$d/report"
+  hout="$(cat "$d/out/$2" 2>/dev/null)"; hrep="$(cat "$d/report")"
+}
+hc steps ci.yml '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest --custom\n' \
+  '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest -q\n' \
+  '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest\n' 'jobs:\n  t:\n    steps:\n'
+if [ "$hout" = "$(printf 'jobs:\n  t:\n    steps:\n      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest --custom')" ]
+then ok "a YAML key is matched within its own sequence item: the Test step's run is replaced, the Setup step's kept"
+else bad "helper, sequence items"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc scope a.toml '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\n' '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 30\n' '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 10\n'
+if [ "$hout" = "$(printf '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 20')" ] && grep -qF 'replaces timeout = 30' <<<"$hrep"
+then ok "a line the template's side holds under another table is not counted as kept: [tool.b]'s value stays the project's"
+else bad "helper, kept within its scope"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc order build.sh 'set -eu\nmkdir -p build\ncd build\nmake\n' 'set -eu\nmake -j4\n' 'set -eu\nmake\n'
+if [ "$hout" = "$(printf 'set -eu\nmkdir -p build\ncd build\nmake -j4')" ]
+then ok "consecutive additions after one shared line keep their order"
+else bad "helper, order"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc owner p.toml 'dependencies = [\n  "a",\n  "custom",\n]\n' 'dependencies = ["b"]\n' 'dependencies = [\n  "a",\n]\n' '[project]\n'
+if [ "$(grep -c '^dependencies' <<<"$hout")" = 1 ] && grep -qxF '  "custom",' <<<"$hout" && grep -qF 'replaces dependencies = ["b"]' <<<"$hrep"
+then ok "an item added inside a multi-line value is matched by the key that owns it: one assignment, the project's"
+else bad "helper, the owning key"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc tabs t.toml 'timeout = 20\n' 'timeout\t=\t30\n' 'timeout = 10\n'
+if [ "$(cut -f3 <<<"$hrep")" = 0 ] && [ "$(cut -f4- <<<"$hrep")" = "timeout = 20" ] && grep -qF 'replaces timeout\t=\t30' <<<"$hrep"
+then ok "a template line with tabs in the placement is shown with \\t, and the fields stay in place"
+else bad "helper, tabs in the placement"; printf '%s\n' "$hrep" | cat -t | sed 's/^/        /'; fi
+
 
 # ── the base must be the verified default branch ────────────────────────
 reset_logs
