@@ -1819,6 +1819,23 @@ rm -rf "$web.empty"; cp -R "$web" "$web.empty"; sed -i.bak 's/^archetype: web$/a
 git -C "$web.empty" add -A; out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"
 if is "$out" FC-C03 info && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "another archetype is not asked for render.yaml"
 else bad "a cli instance was asked for render.yaml"; fi
+# A dashboard (#1069): plain, no image, and asked for render.yaml only when
+# its answers say hosting: render; on its own computer, nothing is asked.
+dash="$work/dash"; rm -rf "$dash"; cp -R "$web.empty" "$dash"
+sed -i.bak 's/^archetype: cli$/archetype: dashboard/' "$dash/.copier-answers.yml"; rm "$dash/.copier-answers.yml.bak"
+printf 'hosting: local\n' >> "$dash/.copier-answers.yml"; git -C "$dash" add -A
+out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
+if is "$out" FC-C03 info && grep -q -- '-- 0 failed' <<<"$out" && ! grep -q 'render.yaml' <<<"$out"; then ok "a dashboard on its own computer is not asked for render.yaml"
+else bad "a dashboard with hosting: local"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
+sed -i.bak 's/^hosting: local$/hosting: render/' "$dash/.copier-answers.yml"; rm "$dash/.copier-answers.yml.bak"; git -C "$dash" add -A
+out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
+if is "$out" FC-C12 fail && is "$out" FC-C12 info && grep -q 'render.yaml missing: a dashboard with hosting: render deploys from it' <<<"$out" \
+   && grep -q -- '-- 1 failed' <<<"$out"; then ok "a dashboard on Render without render.yaml: one FAIL, in a dashboard's words, with its fix"
+else bad "a dashboard on Render without render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
+printf 'services: []\n' > "$dash/render.yaml"; git -C "$dash" add -A
+out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
+if is "$out" FC-C12 pass && grep -q -- '-- 0 failed' <<<"$out"; then ok "a dashboard on Render with render.yaml passes, and no image is asked"
+else bad "a dashboard on Render with render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
 # What render.yaml says (#811), read when the file is there: each web
 # service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
 # other than free, and secret-named envVars set without a literal value. Each
@@ -2343,6 +2360,10 @@ for arch in backend data-ml; do
   then ok "--print-ruleset for $arch is the wall plus image, from one app (check-ruleset.sh passes with image)"
   else bad "--print-ruleset for $arch fails the wall's invariants:"; "$root/scripts/check-ruleset.sh" "$work/$arch-ruleset.json" image | grep FAIL -A2 | sed 's/^/        /'; fi
 done
+# A dashboard ships no container (#1069): its wall is ruleset.json's, no image.
+python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype dashboard > "$work/dashboard-ruleset.json"
+if cmp -s <(jq -S . "$work/dashboard-ruleset.json") <(jq -S . "$root/ruleset.json")
+then ok "--print-ruleset for dashboard is ruleset.json, unchanged: no image check"; else bad "--print-ruleset for dashboard changed the wall"; fi
 python3 "$checker" --print-ruleset --ruleset "$root/ruleset.json" --archetype web > "$work/web-ruleset.json"
 if "$root/scripts/check-ruleset.sh" "$work/web-ruleset.json" "image,ci / migrations,ci / deploy-check" >/dev/null 2>&1
 then ok "--print-ruleset for web is the wall plus image and the two web checks, from one app (#615)"
@@ -2654,6 +2675,7 @@ move "$mcopy" "$pinned_api" --move-archetype library
 if [ "$rc" = 0 ] && ! grep -qE "^check-(add|drop): " "$work/print-err"; then ok "cli to library: no required check changes"
 else bad "cli to library (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
 for why in "backend|the recorded archetype is already backend" "web|web is not moved to or from here" \
+           "dashboard|dashboard is not moved to or from here: its hosting answer (local or render)" \
            "cli --x|'cli --x' is not an archetype's name" "CLI|'CLI' is not an archetype's name"; do
   move "$good" "$pinned_api" --move-archetype "${why%%|*}"
   if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: ${why#*|}" "$work/print-err"; then ok "--move-archetype ${why%%|*}: no line, exit 1, says why"
@@ -2674,6 +2696,10 @@ wcopy="$work/move-from-web"; rm -rf "$wcopy"; cp -R "$good" "$wcopy"; sed -i.bak
 move "$wcopy" "$pinned_api" --move-archetype cli
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: web is not moved to or from here" "$work/print-err"; then ok "--move-archetype from web: no line"
 else bad "--move-archetype from web (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
+dcopy="$work/move-from-dashboard"; rm -rf "$dcopy"; cp -R "$good" "$dcopy"; sed -i.bak 's/^archetype: backend/archetype: dashboard/' "$dcopy/.copier-answers.yml" && rm "$dcopy/.copier-answers.yml.bak"
+move "$dcopy" "$pinned_api" --move-archetype cli
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: dashboard is not moved to or from here" "$work/print-err"; then ok "--move-archetype from dashboard: no line (#1069)"
+else bad "--move-archetype from dashboard (rc=$rc)"; sed 's/^/        /' "$work/print-err"; fi
 move "$pcopy" "$pinned_api" --move-archetype cli
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -qF "no move command: the recorded tag v1.0.0 is not $target_ref, the tag plinth targets; update the template first (/plinth:template-update), then move" "$work/print-err"
 then ok "--move-archetype behind the target tag: no line, update first"

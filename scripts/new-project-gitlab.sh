@@ -58,8 +58,8 @@ git_floor="${PLINTH_DOOR_GIT_FLOOR:?run it as new-project.sh <name> --host gitla
 glab_floor="1.122.0"
 gitlab="gitlab.com"
 
-usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--preflight] [--check]"
-preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""; desc=""; desc_said=""; lang=""
+usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--hosting=local] [--preflight] [--check]"
+gl_place=""; preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""; desc=""; desc_said=""; lang=""
 for a in "$@"; do case "$a" in
   --preflight)   preflight=1 ;;
   --check)       check=1 ;;
@@ -82,6 +82,10 @@ for a in "$@"; do case "$a" in
   --no-code-of-conduct) ;;
   --code-of-conduct*) echo "--code-of-conduct is for GitHub only for now: the GitLab door does not render a code of conduct; nothing was read or created"$'\n'"  fix: drop --code-of-conduct" >&2; exit 2 ;;
   # A web project's user model (#1092): web is made on GitHub only.
+  # Where a dashboard runs (#1069): on GitLab, only on the person's computer,
+  # the template's default; Render is GitHub only. Checked below, once the
+  # archetype is known.
+  --hosting=*)   gl_place="${a#*=}" ;;
   --custom-user-model|--no-custom-user-model) echo "$a is for --archetype=web, which is made on GitHub only; nothing was read or created"$'\n'"  fix: drop $a, or drop --host gitlab" >&2; exit 2 ;;
   -*)            echo "unknown option for --host gitlab: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
@@ -96,6 +100,12 @@ answers_fit "$usage" "$desc" "$lang"
 # template's own validator says the same, later (#615).
 [ "$arch" != web ] || stop "the web archetype is GitHub only: its deployment and checks are built for GitHub" \
   "  fix: drop --host gitlab to make it on GitHub, or choose another archetype for GitLab"
+case "$arch:$gl_place" in
+  *:|dashboard:local) ;;
+  dashboard:*) stop "a dashboard on GitLab runs on the person's computer only: Render (--hosting=$gl_place) was not tried on GitLab" \
+    "  fix: drop --hosting, or drop --host gitlab to put it on Render from GitHub" ;;
+  *) echo "--hosting is not asked on GitLab for --archetype=$arch; nothing was read or created"$'\n'"  fix: drop --hosting" >&2; exit 2 ;;
+esac
 # The name's length, as on GitHub: the last path segment, before glab is read (#1053).
 [ -z "$target" ] || name_fits "${target##*/}"
 

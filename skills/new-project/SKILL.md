@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web] [--hosting=render|railway|digitalocean|fly|vps|home] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web|dashboard] [--hosting=render|railway|digitalocean|fly|vps|home|local] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -143,7 +143,9 @@ it before the first question. In order:
 4. **The archetype recommendation**: the person always picks.
 5. **Where a web app runs**, for `web` on GitHub with no `--hosting=`; the
    person can read `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`
-   first.
+   first. **Where a dashboard runs**, for `dashboard` on GitHub with no
+   `--hosting=`: on the person's computer, or on Render, where anyone with
+   its address can read the page.
 6. **The name**, when the arguments carry none, each checked with `--check`.
 7. **Who may see the project**, when neither `--public` nor `--private` is given.
 8. **Every answer in one table, before anything is created**, checked once
@@ -207,6 +209,12 @@ the script refuses before it reads anything on GitLab, and says why. Render is
 the one place plinth builds and checks; where else the app can run, and what
 each place leaves to the person, is in
 `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`.
+
+`--archetype=dashboard` is a Streamlit page of tables and charts, with no
+login and no database. `--hosting=local` (the default) renders nothing to
+deploy; `--hosting=render` renders a `render.yaml` for one web service, on
+GitHub only: with `--host gitlab` the script refuses Render before it reads
+anything on GitLab. It has no release workflow, so no tag ruleset.
 
 With `--host gitlab` the target is a GitLab.com project. It checks `glab`
 (installed, recent enough, logged in to gitlab.com, with the api scope where

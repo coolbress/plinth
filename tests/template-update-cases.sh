@@ -1922,6 +1922,9 @@ else bad "--apply --archetype web (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/   
 run --archetype web
 if [ "$rc" = 1 ] && grep -qF "no move command: web is not moved to or from here" <<<"$out"; then ok "a move to web stops with the checker's reason"
 else bad "move to web (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+run --archetype dashboard
+if [ "$rc" = 1 ] && grep -qF "no move command: dashboard is not moved to or from here" <<<"$out"; then ok "a move to dashboard stops with the checker's reason (#1069)"
+else bad "move to dashboard (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 fixture move-old; reset_logs
 run --archetype library
 if [ "$rc" = 1 ] && grep -qF "update the template first" <<<"$out" && [ ! -e "$work/uvx.log" ]; then ok "a move behind the target tag stops before copier: update first"

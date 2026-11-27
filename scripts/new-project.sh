@@ -8,7 +8,8 @@
 #                  [--records-language=<language in English>]
 #                  [--custom-user-model|--no-custom-user-model]   (web only)
 #                  [--force-defaults] [--host=github|gitlab]
-#                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web only)
+#                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web)
+#                  [--hosting=local|render]   (dashboard)
 #   new-project.sh --preflight [<the same arguments>]
 #   new-project.sh [<owner>/]<name> --check [<the same arguments>]
 #   new-project.sh --readiness
@@ -551,8 +552,19 @@ if [ "$arch" = web ]; then
     place_name="$(sed -n "/^hosting_elsewhere:/,/^[a-z_]/p" <<<"$copier_yml" | sed -n "s/^    \(.*\): $place\$/\1/p")"
     place_name="${place_name:-$place}"
   fi
+elif [ "$arch" = dashboard ]; then
+  # Where a dashboard runs (#1069): on the person's computer (`local`, the
+  # template's default for it) or on Render, GitHub only. The template that
+  # knows `dashboard` asks it; the archetype check above stops any other.
+  place="${place:-local}"
+  case "$place" in
+    local) place_name="this computer" ;;
+    render) place_name=Render ;;
+    *) stop "unknown place for --hosting with --archetype=dashboard: $place" "  the template accepts: local render" ;;
+  esac
+  hosting_data=(--data "hosting=$place")
 elif [ -n "$place" ]; then
-  stop "--hosting is for --archetype=web only (got --archetype=$arch); nothing was created" "  fix: drop --hosting"
+  stop "--hosting is for --archetype=web or dashboard only (got --archetype=$arch); nothing was created" "  fix: drop --hosting"
 fi
 # The third-party reviewer (#765): the template renders its caller when asked
 # `third_party_review`. copier takes a --data answer to a question the
@@ -729,11 +741,12 @@ own_note=""; own() { own_note="${own_note:+$own_note,} $1"; }
 wall_words="ruleset + CodeQL"
 [ "$private" = 0 ] || wall_words="ruleset, with CodeQL and push protection only where the repository has GitHub Code Security and Secret Protection enabled (plan: ${plan:-not verified})"
 # The archetypes that release from a `v*` tag (every one but `web`, which
-# deploys on green) get the tag ruleset below (#772).
-case "$arch" in web) tag_ruleset=0 ;; *) tag_ruleset=1; wall_words="$wall_words + v* tags kept" ;; esac
+# deploys on green, and `dashboard`, which runs where it is started or
+# deploys on green, #1069) get the tag ruleset below (#772).
+case "$arch" in web|dashboard) tag_ruleset=0 ;; *) tag_ruleset=1; wall_words="$wall_words + v* tags kept" ;; esac
 arch_words="$arch"
-[ "$arch" != web ] || arch_words="web on $place_name"
-[ "${place:-render}" = render ] || arch_words="$arch_words, which plinth does not deploy to or check"
+case "$arch" in web|dashboard) arch_words="$arch on $place_name" ;; esac
+case "$arch:${place:-render}" in *:render|dashboard:local) ;; *) arch_words="$arch_words, which plinth does not deploy to or check" ;; esac
 [ "$review" = 0 ] || arch_words="$arch_words, third-party review reporting and not required"
 [ "$coc" = 0 ] || arch_words="$arch_words, a code of conduct with reports to $coc_contact"
 [ "$cum" != 1 ] || arch_words="$arch_words, its own user model (accounts.User)"
@@ -1369,7 +1382,14 @@ esac
 # not carry, with the reason and what stands in its place.
 # A place plinth lists and does not build: said in the closing lines (#677).
 place_line=""
-[ "${place:-render}" = render ] || place_line="  where it runs: $place_name. plinth did not deploy the app there and has not checked that place; the steps, and what they leave to you, are in README.md under \"Where it runs\""
+# A dashboard (#1069): on this computer, nothing goes online; on Render, the
+# page has no login, which the person was told before choosing it.
+case "$arch:${place:-render}" in
+  dashboard:local) place_line="  where it runs: this computer only; README.md under \"Run it on your computer\" has the command, and nothing is put online" ;;
+  dashboard:render) place_line="  where it runs: Render, about US\$7 a month once set up as README.md under \"Where it runs\" says; the page has no login, so anyone with its address can read it" ;;
+  *:render) ;;
+  *) place_line="  where it runs: $place_name. plinth did not deploy the app there and has not checked that place; the steps, and what they leave to you, are in README.md under \"Where it runs\"" ;;
+esac
 private_lines=""
 [ "$private" = 0 ] || private_lines="  private: $private_note"$'\n'
 [ -z "$gaps" ] || private_lines="$private_lines$(printf '%s' "$gaps" | sed -e 's/^Not raised/  not raised/' -e 's/^Not verified/  not verified/')"$'\n'
