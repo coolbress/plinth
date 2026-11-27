@@ -140,7 +140,8 @@ expect() {  # expect <plugin> <needle>...
   echo "  PASS  $1: ${*:2}"
 }
 expect plinth@plinth "Skills (6)" "arsenal" "floor-check" "guide" "new-project" "records-check" "template-update" "Hooks (0)"
-expect taste-skill@plinth "Skills (1)  design-taste-frontend" "Hooks (0)"
+# Anthropic's frontend-design, one skill, in place of taste-skill (#1082).
+expect frontend-design@plinth "Skills (1)  frontend-design" "Hooks (0)"
 # 15 of the 27 skills upstream ships (#520, #593, #704, #714): 6 more are listed
 # in mattpocock-skills-extra, and six are in neither (#475, #477, #714).
 added=(to-spec to-tickets wayfinder improve-codebase-architecture handoff retro writing-for-agents)
@@ -266,6 +267,13 @@ done
 # of its tag, then replaced by this checkout's files, its version raised so that
 # `update` sees a newer one (a pull request carries the released version).
 upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
+# A dependency that left plinth for another (taste-skill for frontend-design,
+# #1082): `update` installs neither the new one nor removes the old, and
+# `prune` cannot tell an orphan while the old one is "not found" (measured for
+# #468). The README names install, then uninstall of the old one.
+swap_cmds=("claude plugin install plinth@plinth" "claude plugin uninstall taste-skill@plinth")
+grep -qF "\`${swap_cmds[0]}\` and then \`${swap_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/README.md")" \
+  || { echo "  FAIL  README.md does not name \`${swap_cmds[0]}\` and then \`${swap_cmds[1]}\`"; exit 1; }
 # The docs name them in this order; the other order leaves no mattpocock-skills
 # skill until `install` runs.
 # The README is their one source (#835); tests/doc-consistency.sh holds the
@@ -309,7 +317,16 @@ rm -rf "$up/mkt/.git"
   claude plugin list --json | python3 -c 'import json, sys
 for p in json.load(sys.stdin):
     print("  INFO  after update alone: %s errors=%s" % (p["id"], p.get("errors", [])))'
-  for c in "${upgrade_cmds[@]}"; do echo "+ $c -y"; read -ra cmd <<<"$c"; "${cmd[@]}" -y; done
+  # What `update` alone left of the swap, recorded as it is (#1082).
+  claude plugin list --json | python3 -c 'import json, sys
+ids = {p["id"]: p for p in json.load(sys.stdin)}
+for n in ("taste-skill@plinth", "frontend-design@plinth"):
+    print("  INFO  after update alone, %s: %s" % (n, ("installed, errors=%s" % ids[n].get("errors", [])) if n in ids else "not installed"))'
+  # install plinth@plinth, then the old dependency's uninstall when the
+  # release installed it, then prune.
+  for c in "${swap_cmds[0]}" "${swap_cmds[1]}" "${upgrade_cmds[1]}"; do
+    case "$c" in *" uninstall "*) claude plugin list --json | grep -qF '"taste-skill@plinth"' || { echo "  INFO  taste-skill@plinth not installed by $tag: no uninstall"; continue; } ;; esac
+    echo "+ $c -y"; read -ra cmd <<<"$c"; "${cmd[@]}" -y; done
   for c in "${dep_cmds[@]}"; do echo "+ $c"; read -ra cmd <<<"$c"; "${cmd[@]}"; done
   # check_list holds no ponytail-skills here: the release installed it as a
   # dependency, and `prune` removed it once plinth no longer names it (#598).
@@ -325,5 +342,28 @@ for p in json.load(sys.stdin):
   not_expect mattpocock-skills-extra@plinth "${added[@]}"
   # /ponytail-audit comes back the same way, from the entry the marketplace keeps (#598).
   echo "+ claude plugin install ponytail-skills@plinth -y"; claude plugin install ponytail-skills@plinth -y
+  expect frontend-design@plinth "Skills (1)  frontend-design" "Hooks (0)"
   expect ponytail-skills@plinth "Skills (1)" "ponytail-audit" "Hooks (0)"
+)
+
+# A person who installed Anthropic's frontend-design from the official
+# marketplace before plinth (#1082): both copies install under their own
+# marketplaces. Recorded, not judged: which one a session's `/frontend-design`
+# runs is a session's to say, and the release note says what to do.
+both="$CLAUDE_CONFIG_DIR/both-copies"
+mkdir -p "$both"
+(
+  export CLAUDE_CONFIG_DIR="$both"
+  echo "-- frontend-design from the official marketplace first, then plinth"
+  claude plugin marketplace add anthropics/claude-plugins-official >/dev/null
+  echo "+ claude plugin install frontend-design@claude-plugins-official -y"; claude plugin install frontend-design@claude-plugins-official -y
+  claude plugin marketplace add "$root" >/dev/null
+  echo "+ claude plugin install plinth@plinth -y"; claude plugin install plinth@plinth -y
+  claude plugin list --json | python3 -c 'import json, sys
+for p in json.load(sys.stdin):
+    if p["id"].startswith(("frontend-design@", "plinth@")):
+        print("  INFO  both copies: %s enabled=%s errors=%s" % (p["id"], p.get("enabled"), p.get("errors", [])))'
+  for p in frontend-design@claude-plugins-official frontend-design@plinth; do
+    echo "  INFO  $p: $(claude plugin details "$p" 2>&1 | grep -E '^ *Skills \(' | sed 's/^ *//')"
+  done
 )

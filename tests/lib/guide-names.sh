@@ -21,8 +21,9 @@ awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on 
 [ -s "$table" ] || { echo "  FAIL  no 'Where you are, and what to do next' table in $arsenal"; exit 1; }
 known="$(commands "$table")"
 
-# What #711 compared and decided not to add or list.
-left_out='spec[ -]?kit|openspec|bmad|superpowers|taskmaster|everything-claude-code|claude-mem|context7|security-guidance|frontend-design'
+# What #711 compared and decided not to add or list; frontend-design left
+# this list when #1082 made it the default page-design skill.
+left_out='spec[ -]?kit|openspec|bmad|superpowers|taskmaster|everything-claude-code|claude-mem|context7|security-guidance'
 
 fail=0
 for f in "$@"; do

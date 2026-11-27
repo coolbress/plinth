@@ -1227,14 +1227,14 @@ then ok "--sandbox: sandbox.enabled true is an INFO, and the measured macOS line
 # commit its entry pins (#743): `update plinth@plinth` leaves a dependency at
 # its old commit (#714). The files are in the shape Claude Code 2.1.314 writes.
 pin=d1478fcb140db0b93c0c8df17bcfd311844749d0; old=c55ee46073ed923f86ce59a5eb3b6d895095d1b7
-tpin=ccbc15639c97057cbfcf32ecebc38ef716e4bb37
+tpin=30202c767cfaf325212b3921ab484f83adaec850
 pc="$work/pconf"; pm="$work/pmarket"
 plugins_fixture() { # <mattpocock-skills commit> [extra JSON entries]: a fresh config and marketplace copy
   rm -rf "$pc" "$pm"; mkdir -p "$pc/plugins" "$pm/.claude-plugin"
-  printf '{"name":"plinth","plugins":[{"name":"plinth","source":"./"},{"name":"mattpocock-skills","source":{"source":"git-subdir","url":"u","path":"skills","sha":"%s"}},{"name":"taste-skill","source":{"source":"git-subdir","url":"u","path":"skills","sha":"%s"}},{"name":"last30days","source":{"source":"url","url":"u","ref":"main"}}]}\n' "$pin" "$tpin" > "$pm/.claude-plugin/marketplace.json"
+  printf '{"name":"plinth","plugins":[{"name":"plinth","source":"./"},{"name":"mattpocock-skills","source":{"source":"git-subdir","url":"u","path":"skills","sha":"%s"}},{"name":"frontend-design","source":{"source":"git-subdir","url":"u","path":"plugins/frontend-design/skills","sha":"%s"}},{"name":"last30days","source":{"source":"url","url":"u","ref":"main"}}]}\n' "$pin" "$tpin" > "$pm/.claude-plugin/marketplace.json"
   printf '{"name":"plinth","version":"2.19.1"}\n' > "$pm/.claude-plugin/plugin.json"
   printf '{"plinth":{"source":{"source":"git","url":"u"},"installLocation":"%s"}}\n' "$pm" > "$pc/plugins/known_marketplaces.json"
-  printf '{"version":2,"plugins":{"plinth@plinth":[{"scope":"user","version":"2.19.1","gitCommitSha":"%040d"}],"mattpocock-skills@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}],"taste-skill@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}]%s}}\n' 0 "$1" "$tpin" "${2:-}" > "$pc/plugins/installed_plugins.json"
+  printf '{"version":2,"plugins":{"plinth@plinth":[{"scope":"user","version":"2.19.1","gitCommitSha":"%040d"}],"mattpocock-skills@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}],"frontend-design@plinth":[{"scope":"user","version":"x","gitCommitSha":"%s"}]%s}}\n' 0 "$1" "$tpin" "${2:-}" > "$pc/plugins/installed_plugins.json"
 }
 plugins_run() { out="$(CLAUDE_CONFIG_DIR="$pc" python3 "$checker" --root "$good" --no-network --plugins 2>&1)"; rc=$?; }
 behind_line='WARN  mattpocock-skills@plinth (user) is behind its pin: installed commit c55ee46073ed, the plinth marketplace pins d1478fcb140d'
@@ -1253,7 +1253,7 @@ for have in "${pin:0:12}0000000000000000000000000000" "${pin:0:12}" "$(tr a-f A-
 done
 plugins_fixture "$pin"; plugins_run
 if [ "$rc" = 0 ] && ! grep -qE '(WARN|SKIP|FAIL).*@plinth' <<<"$out" && ! grep -q 'plugins not checked' <<<"$out" \
-   && grep -qF 'at the plinth marketplace'"'"'s pin: mattpocock-skills@plinth (user), plinth@plinth (user), taste-skill@plinth (user)' <<<"$out"
+   && grep -qF 'at the plinth marketplace'"'"'s pin: frontend-design@plinth (user), mattpocock-skills@plinth (user), plinth@plinth (user)' <<<"$out"
 then ok "--plugins: every plugin at its pin reports nothing to do"
 else bad "--plugins up to date"; grep -E 'plugin|@plinth' <<<"$out" | sed 's/^/        /'; fi
 # A project or local install is updated with its scope, from its project folder:
@@ -1284,16 +1284,16 @@ is "$out" FC-G02 warn \
 plugins_fixture "$pin" ',"codex@openai-codex":[{"scope":"user","gitCommitSha":"'"$pin"'"}],"last30days@plinth":[{"scope":"project","projectPath":"/p","gitCommitSha":"'"$pin"'"}],"gone@plinth":[{"scope":"user","gitCommitSha":"'"$pin"'"}]'
 python3 - "$pc/plugins/installed_plugins.json" <<'PY'
 import json, sys
-p = sys.argv[1]; d = json.load(open(p)); del d["plugins"]["taste-skill@plinth"][0]["gitCommitSha"]; json.dump(d, open(p, "w"))
+p = sys.argv[1]; d = json.load(open(p)); del d["plugins"]["frontend-design@plinth"][0]["gitCommitSha"]; json.dump(d, open(p, "w"))
 PY
 plugins_run
 for want in 'INFO  plugins from another marketplace, outside what plinth compares: codex@openai-codex' \
             'SKIP  last30days@plinth (project in /p) not checked: its entry pins no full commit' \
-            'SKIP  taste-skill@plinth (user) not checked: its install records no full commit' \
+            'SKIP  frontend-design@plinth (user) not checked: its install records no full commit' \
             'SKIP  gone@plinth (user) not checked: the plinth marketplace has no entry for it'; do
   grep -qF -- "$want" <<<"$out" || { bad "--plugins: expected '$want'"; grep -E 'plugin|@' <<<"$out" | sed 's/^/        /'; }
 done
-grep -qE 'at the plinth.*(codex|last30days|taste-skill|gone)' <<<"$out" && bad "--plugins: a plugin not compared was reported at the pin" \
+grep -qE 'at the plinth.*(codex|last30days|frontend-design|gone)' <<<"$out" && bad "--plugins: a plugin not compared was reported at the pin" \
   || ok "--plugins: another marketplace, no pinned commit, no installed commit and no entry are not checked, never at the pin"
 # Another marketplace's plugin is outside what floor-check compares, not a read
 # that failed (#1002): an INFO, out of the not-verified count.

@@ -400,10 +400,10 @@ for rel in ("docs/tutorials/getting-started.md", "docs/how-to/cut-a-release.md")
     if not on("onetime", rel):
         continue
     text = (docs / rel).read_text(encoding="utf-8")
-    if "README.md#install-in-detail" in text and "taste-skill@plinth" not in text:
+    if "README.md#install-in-detail" in text and "uninstall taste-skill@plinth" not in text:
         ok()
     else:
-        i = text.find("taste-skill@plinth")
+        i = text.find("uninstall taste-skill@plinth")
         fail(f"{rel}:{text.count(chr(10), 0, i) + 1 if i >= 0 else 1} must link README.md#install-in-detail and not repeat the one-time commands")
 
 # 8. The three questions (#921): step 5 of run-a-project.md lists them under
@@ -1114,7 +1114,7 @@ planted ¦ a copy with an upstream total other than the lists add to fails: {} �
 planted ¦ a copy with a marketplace count other than its list fails: {} ¦ .claude-plugin/marketplace.json ¦ sed ¦ s/15 of the 27 upstream ships/14 of the 27 upstream ships/ ¦ line:1
 planted ¦ a copy with a NOTICE count other than the manifest's fails: {} ¦ NOTICE ¦ sed ¦ s/15 skills installed, 6 listed/15 skills installed, 7 listed/ ¦ grep:7 listed in
 planted ¦ a copy with "adds its seven" for six fails: {} ¦ skills/arsenal/listed.md ¦ sed ¦ s/adds its six$/adds its seven/ ¦ grep:adds its seven
-planted ¦ a copy with a one-time command repeated outside the README fails: {} ¦ docs/how-to/cut-a-release.md ¦ append ¦ claude plugin update taste-skill@plinth ¦ end
+planted ¦ a copy with a one-time command repeated outside the README fails: {} ¦ docs/how-to/cut-a-release.md ¦ append ¦ claude plugin uninstall taste-skill@plinth ¦ end
 planted ¦ a copy with a squash-merge command that differs fails: {} ¦ docs/how-to/run-a-project.md ¦ sed ¦ s/--squash --match-head-commit <sha> --body/--squash --body/ ¦ grep:gh pr merge <n> --squash
 planted ¦ a copy with a step 5 that lists two of the three questions fails: {} ¦ docs/how-to/run-a-project.md ¦ sed ¦ /^  2\. "Can I see it?"$/d ¦ grep:^### 5\.
 planted ¦ a copy with an arsenal cell that names the three questions and says two fails: {} ¦ docs/reference/arsenal-evidence.md ¦ sed ¦ s/"Can I see it?", "What did the reviewer say?" |/"Can I see it?" |/ ¦ grep:"Can I see it?" |

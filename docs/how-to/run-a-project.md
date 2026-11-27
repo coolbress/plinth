@@ -145,9 +145,8 @@ see these: guidance only.
   reviewed and commits; then a new subagent that never saw the session
   reviews the diff (what it is given: step 5), and the agent opens the pull
   request. For a page a person
-  will look at, name `taste-skill` in the ticket or type
-  `/design-taste-frontend` (unnamed, the agent did not reach for it, one run,
-  [#469](https://github.com/coolbress/plinth/issues/469)); for dashboards and dense product UI, `/design` first.
+  will look at, name `frontend-design` in the ticket or type
+  `/frontend-design`; for dashboards and dense product UI, `/design` first.
 - **Look at:** the commit and the pull request's description: that the
   description says which review ran and what it found, and that the `Assisted-by`
   line the repository's `CONTRIBUTING.md` asks for ends both the commit and
