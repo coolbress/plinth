@@ -25,8 +25,9 @@
 # With `map`, a word that names a step is the step, before or after the
 # folder; one that names no step and no folder is exit 2.
 #
-# The rows are copied from skills/arsenal/SKILL.md as they stand, never from
-# a list of its own, so the guide cannot name a step or tool the table does
+# The rows are copied from skills/arsenal/SKILL.md as they stand, joined
+# with the guide's own cells in skills/guide/steps.md, never from a list of
+# its own, so the guide cannot name a step or tool the table does
 # not have. A row it looks for and does not find is an error (exit 1), not a
 # guess. Issue and pull request titles are printed as they are: data.
 set -uo pipefail
@@ -34,6 +35,9 @@ plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/admin-reach.sh
 . "$plugin/scripts/lib/admin-reach.sh" 2>/dev/null || { echo "guide-state: no $plugin/scripts/lib/admin-reach.sh" >&2; exit 1; }
 arsenal="$plugin/skills/arsenal/SKILL.md"
+steps="$plugin/skills/guide/steps.md"
+# shellcheck source=scripts/lib/stage-table.sh
+. "$plugin/scripts/lib/stage-table.sh" 2>/dev/null || { echo "guide-state: no $plugin/scripts/lib/stage-table.sh" >&2; exit 1; }
 dir="."; map=""; step=""; features=""
 # With `map` anywhere, a word that names a step (1 to 9, or a name below) is
 # the step, before or after the folder, even where a folder has that name;
@@ -71,10 +75,14 @@ if [ -n "$features" ]; then
   exit 0
 fi
 
-# The table names files under ${CLAUDE_PLUGIN_ROOT}; the person gets the path.
-table="$(awk '/^## Where you are, and what to do next/{on=1; next} on && /^## /{exit} on && /^\| /' "$arsenal" |
-  awk -v r="$plugin" '{ gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r); print }')"
-[ -n "$table" ] || { echo "guide-state: no table under 'Where you are, and what to do next' in $arsenal" >&2; exit 1; }
+# The arsenal's stage table joined with the guide's own cells for each step
+# (#1086), as six cells a row. The table names files under
+# ${CLAUDE_PLUGIN_ROOT}; the person gets the path.
+grep -q '^## Where you are, and what to do next' "$arsenal" ||
+  { echo "guide-state: no table under 'Where you are, and what to do next' in $arsenal" >&2; exit 1; }
+table="$(stage_table "$arsenal" "$steps")" || exit 1
+table="$(awk -v r="$plugin" '{ gsub(/\$\{CLAUDE_PLUGIN_ROOT\}/, r); print }' <<<"$table")"
+[ "$(grep -c . <<<"$table")" -gt 2 ] || { echo "guide-state: no table under 'Where you are, and what to do next' in $arsenal" >&2; exit 1; }
 
 # step_rows <step>: the Where cell of each row `map <step>` prints, one per
 # line: for 1 to 9 the rows marked "(step N)"; for a name, the step it is

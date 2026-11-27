@@ -696,6 +696,8 @@ stale_claims() {
   local adir="$1" tdir="$2" pdir="$3" cell issue repo n state rc=0 name inst
   arsenal_files "$adir" 2>&1 || return 1
   inst="$(installed "$pdir")"
+  # The guide's own cells for each step (#1086) are read with the catalog.
+  local guide_steps=(); [ ! -f "$adir/../guide/steps.md" ] || guide_steps=("$adir/../guide/steps.md")
   while IFS= read -r cell; do
     if grep -qiE 'planned|not built yet|nothing yet' <<<"$cell"; then
       if grep -qiE 'release|publish' <<<"$cell" && [ -n "$(release_sources "$tdir")" ]; then
@@ -726,7 +728,7 @@ stale_claims() {
         echo "marks \`$name\` listed, and the plugin installs it: $cell"; rc=1
       fi
     done
-  done < <(cells "$adir/SKILL.md" "$adir/installed.md" "$adir/listed.md" ${evidence:+"$evidence"})
+  done < <(cells "$adir/SKILL.md" "$adir/installed.md" "$adir/listed.md" ${evidence:+"$evidence"} ${guide_steps[@]+"${guide_steps[@]}"})
   while IFS= read -r name; do
     if grep -qxF -- "$name" <<<"$inst"; then
       echo "the \"Listed, not installed\" table names \`$name\`, and the plugin installs it"; rc=1
@@ -738,9 +740,13 @@ stale_claims() {
 # missing_facts <arsenal dir> <run-a-project> <template dir>: what the template
 # has and the release row, the reminder row or step 9 does not say.
 missing_facts() {
-  local arsenal="$1/SKILL.md" howto="$2" tdir="$3" row src arch archs all_archs="" dest rc=0 step9 reminder title
+  local arsenal="$1/SKILL.md" howto="$2" tdir="$3" row src arch archs all_archs="" dest rc=0 step9 reminder title steps
   row="$(grep -F -- "$release_row" "$arsenal" | head -1)"
   [ -n "$row" ] || { echo "the arsenal has no row starting '$release_row'"; rc=1; }
+  # The row's facts, wherever they are (#1086): the arsenal's stage row and,
+  # where the plugin has it, the guide's own row for the step beside it.
+  steps="$1/../guide/steps.md"
+  [ ! -f "$steps" ] || row="$row $(grep -F -- "$release_row" "$steps" | head -1)"
   if [ -z "$(release_sources "$tdir")" ]; then
     echo "the template has no release workflow; the release row needs rewriting"; rc=1
   fi
@@ -756,9 +762,9 @@ missing_facts() {
       grep -qE "\`$arch\`[^,;]*$dest" <<<"$row" || { echo "the release row does not say \`$arch\` goes to $dest: $row"; rc=1; }
     done
   done < <(release_sources "$tdir")
-  # The other way round: the row's next-action cell names no archetype beyond
-  # those with a workflow (`web` deploys, `main` is the branch).
-  for arch in $(awk -F ' \\| ' '{ print $2 }' <<<"$row" | grep -oE '`[a-z-]+`' | tr -d '`'); do
+  # The other way round: the row names no archetype beyond those with a
+  # workflow (`web` deploys, `main` is the branch).
+  for arch in $(grep -oE '`[a-z-]+`' <<<"$row" | tr -d '`'); do
     case "$arch" in web|main) continue ;; esac
     case " $(echo $all_archs) " in *" $arch "*) ;; *) echo "the release row names \`$arch\`, and the template has no release workflow for it"; rc=1 ;; esac
   done

@@ -3,7 +3,9 @@
 # recommends and carries no issue numbers, which mean nothing on a user's
 # machine:
 #
-#   - each skills/*/SKILL.md is at most 500 lines and 20,000 bytes;
+#   - each skills/*/SKILL.md is at most 500 lines and 20,000 bytes, and the
+#     arsenal's at most 250 lines and 12,000 bytes: it loads on every call
+#     an agent makes to choose a tool;
 #   - AGENTS.md is at most 110 lines and 7,500 bytes, so rule text does not
 #     grow back one incident at a time;
 #   - it has no issue number (`#` and digits not after a letter or a slash);
@@ -34,6 +36,8 @@ cap() {
 }
 max_lines="$(cap SKILL_MAX_LINES)" || exit 1
 max_bytes="$(cap SKILL_MAX_BYTES)" || exit 1
+arsenal_lines="$(cap ARSENAL_MAX_LINES)" || exit 1
+arsenal_bytes="$(cap ARSENAL_MAX_BYTES)" || exit 1
 agents_lines="$(cap AGENTS_MAX_LINES)" || exit 1
 agents_bytes="$(cap AGENTS_MAX_BYTES)" || exit 1
 
@@ -65,9 +69,11 @@ for f in "$root"/skills/*/SKILL.md; do
     ok "$rel: an exception until $ticket ($lines lines, $bytes bytes, $numbers issue numbers)"
     continue
   fi
-  if [ "$lines" -le "$max_lines" ] && [ "$bytes" -le "$max_bytes" ]
+  limit_lines="$max_lines"; limit_bytes="$max_bytes"
+  [ "$name" != arsenal ] || { limit_lines="$arsenal_lines"; limit_bytes="$arsenal_bytes"; }
+  if [ "$lines" -le "$limit_lines" ] && [ "$bytes" -le "$limit_bytes" ]
   then ok "$rel: $lines lines, $bytes bytes"
-  else bad "$rel: $lines lines and $bytes bytes; the limits are $max_lines lines and $max_bytes bytes: move reference one level down, beside it"; fi
+  else bad "$rel: $lines lines and $bytes bytes; the limits are $limit_lines lines and $limit_bytes bytes: move reference one level down, beside it"; fi
   if [ "$numbers" = 0 ]
   then ok "$rel: no issue numbers"
   else bad "$rel: $numbers lines carry an issue number; a source goes under docs/reference/, not into the skill:"
