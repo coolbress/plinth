@@ -15,7 +15,8 @@
   `claude plugin update plinth@plinth`, then once, in this order,
   `claude plugin install plinth@plinth` and
   `claude plugin uninstall taste-skill@plinth`, then `/reload-plugins`.
-  `update` alone neither installs `frontend-design` nor removes `taste-skill`.
+  `update` does not remove taste-skill; before Claude Code 2.1.319 it does
+  not install frontend-design either.
   If you had already installed `frontend-design` from the official
   marketplace, keep one copy:
   `claude plugin uninstall frontend-design@claude-plugins-official`.

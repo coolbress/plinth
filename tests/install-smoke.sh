@@ -268,9 +268,11 @@ done
 # `update` sees a newer one (a pull request carries the released version).
 upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
 # A dependency that left plinth for another (taste-skill for frontend-design,
-# #1082): `update` installs neither the new one nor removes the old, and
-# `prune` cannot tell an orphan while the old one is "not found" (measured for
-# #468). The README names install, then uninstall of the old one.
+# #1082): `update` does not remove the old one, which stays "not found in
+# marketplace", and `prune` cannot tell an orphan while it is (measured for
+# #468). From Claude Code 2.1.319 `update` installs the new one; before it, it
+# did not (#468, on 2.1.296). The README names install, then uninstall of the
+# old one.
 swap_cmds=("claude plugin install plinth@plinth" "claude plugin uninstall taste-skill@plinth")
 grep -qF "\`${swap_cmds[0]}\` and then \`${swap_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/README.md")" \
   || { echo "  FAIL  README.md does not name \`${swap_cmds[0]}\` and then \`${swap_cmds[1]}\`"; exit 1; }
@@ -319,22 +321,33 @@ rm -rf "$up/mkt/.git"
 for p in json.load(sys.stdin):
     print("  INFO  after update alone: %s errors=%s" % (p["id"], p.get("errors", [])))'
   # What `update` alone does to the swap (#1082), held to what the README
-  # says: taste-skill stays (when the release installed it) and frontend-design
-  # is not installed. A Claude Code that does otherwise fails here, so the
-  # README's one-time commands are rewritten, not left stale.
+  # says: taste-skill stays, with an error, when the release installed it, and
+  # from 2.1.319 frontend-design is installed. Below 2.1.319 (the floor is
+  # 2.1.274) whether frontend-design is installed is recorded, not judged. A
+  # Claude Code that does otherwise fails here, so the README's one-time
+  # commands are rewritten, not left stale.
+  new_dep_v=2.1.319
+  new_dep=no; [ "$(printf '%s\n%s\n' "$new_dep_v" "$v" | sort -V | head -1)" = "$new_dep_v" ] && new_dep=yes
   claude plugin list --json | python3 -c 'import json, sys
 ids = {p["id"]: p for p in json.load(sys.stdin)}
-had = sys.argv[1] == "yes"
+had, new_dep, v, new_dep_v = sys.argv[1] == "yes", sys.argv[2] == "yes", sys.argv[3], sys.argv[4]
 for n in ("taste-skill@plinth", "frontend-design@plinth"):
     print("  INFO  after update alone, %s: %s" % (n, ("installed, errors=%s" % ids[n].get("errors", [])) if n in ids else "not installed"))
 bad = []
-if had and "taste-skill@plinth" not in ids:
-    bad.append("update removed taste-skill@plinth")
-if "frontend-design@plinth" in ids:
-    bad.append("update installed frontend-design@plinth")
+if had:
+    if "taste-skill@plinth" not in ids:
+        bad.append("update removed taste-skill@plinth")
+    elif not ids["taste-skill@plinth"].get("errors"):
+        bad.append("taste-skill@plinth has no error after update")
+else:
+    print("  INFO  the release did not install taste-skill@plinth: nothing to leave behind")
+if new_dep and "frontend-design@plinth" not in ids:
+    bad.append("update did not install frontend-design@plinth on claude %s (%s or later)" % (v, new_dep_v))
+if not new_dep:
+    print("  INFO  claude %s is below %s: frontend-design@plinth %s after update alone, recorded, not judged" % (v, new_dep_v, "installed" if "frontend-design@plinth" in ids else "not installed"))
 if bad:
-    print("  FAIL  " + "; ".join(bad) + ": the README says update does neither; rewrite its one-time commands"); sys.exit(1)
-print("  PASS  update alone left the swap as the README says")' "$had_taste"
+    print("  FAIL  " + "; ".join(bad) + ": the README says otherwise; rewrite its one-time commands"); sys.exit(1)
+print("  PASS  update alone left the swap as the README says")' "$had_taste" "$new_dep" "$v" "$new_dep_v"
   # Then the README's commands, in its order: install plinth@plinth, then the
   # old dependency's uninstall (no -y: without --prune it asks nothing, and the
   # floor may not take it), then prune for the moves of v1.11.0 and earlier.

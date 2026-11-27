@@ -118,7 +118,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Each pull request writes its changelog line as a fragment, and `make-release.sh` assembles the fragments into the version's section at release; the release pull request's pass rule changes with it. 2026-11-25, #1136
 - Released CHANGELOG sections stay as published; corrections go in the next section. 2026-10-13, #511
 - A dependency entry narrows its skills inside the entry and is never renamed or moved. 2026-10-10, #407
-- An update does not install a dependency under a new name, and a `renames` map drops the old one silently; so an entry keeps its name. 2026-10-10, #468
+- An update does not install a dependency under a new name, and a `renames` map drops the old one silently; so an entry keeps its name. Measured before Claude Code 2.1.319, which installs the new name; the old one still stays, failing. 2026-10-10, #468
 - An entry whose upstream root carries a `plugin.json` narrows its skills through a `git-subdir` source under the same name; installed copies need `claude plugin update <name>@plinth` once. 2026-10-10, #469
 - A move from another marketplace into plinth's under the same name needs `claude plugin install plinth@plinth` then `claude plugin prune`, named in the release note. 2026-10-10, #477
 - A raised marketplace pin is a pull request whose release note names `claude plugin update <name>@plinth`: `update plinth` does not fetch it. 2026-10-30, #714
