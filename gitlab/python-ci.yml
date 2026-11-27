@@ -481,7 +481,14 @@ secrets:
     - |
       plinth_get gitleaks plinth_gitleaks
       plinth_cd
-      step "gitleaks, the history included" gitleaks git . --no-banner --redact
+      # Exit 3 is a secret found, any other failure gitleaks' own error, as on
+      # GitHub: each gets its own next step.
+      leaks() { local rc=0; gitleaks git . --no-banner --redact --exit-code 3 || rc=$?; plinth_rc="$rc"; return "$rc"; }
+      step "gitleaks, the history included" leaks
+      if [ "$plinth_last" = failure ] && [ "$plinth_rc" != 3 ]; then
+        plinth_lines[${#plinth_lines[@]} - 1]="fail: gitleaks could not run (exit $plinth_rc), its own error and not a finding"
+        nx "re-run this job, and if it fails again read gitleaks' error above the Verdict"
+      fi
       onfail "revoke each secret gitleaks names above where it was issued, then remove it from the branch history (git rebase or git filter-repo) and push"
       verdict
 

@@ -914,7 +914,7 @@ echo "-- a failed job ends its log with failed:, next: and more: (#1101)"
 # uv and gitleaks stubbed to fail when their arguments hold $STUB_FAIL.
 mkdir -p "$tmp/failbin" "$tmp/fail-job"
 printf '#!/usr/bin/env bash\ncase " $* " in *" $STUB_FAIL "*) echo "stub: $*"; exit 1 ;; esac\nexit 0\n' > "$tmp/failbin/uv"
-printf '#!/usr/bin/env bash\necho "leaks found: 1"; exit 1\n' > "$tmp/failbin/gitleaks"
+printf '#!/usr/bin/env bash\necho "gitleaks $*"; exit "${GL_RC:-3}"\n' > "$tmp/failbin/gitleaks"
 chmod +x "$tmp/failbin/uv" "$tmp/failbin/gitleaks"
 fj() { # <job> <STUB_FAIL> [VAR=value...]: the job in $tmp/fail-job with the stubs
   local job="$1" f="$2"; shift 2
@@ -933,7 +933,9 @@ ends "typecheck: mypy" typecheck "mypy" "run uv run mypy . here, fix what it nam
 fj build build
 ends "build: uv build" build "uv build" "run uv build here, fix what it names, and push"
 fj secrets none
-ends "secrets: gitleaks" secrets "gitleaks, the history included" "revoke each secret gitleaks names above where it was issued"
+ends "secrets: a secret found (exit 3)" secrets "gitleaks, the history included" "revoke each secret gitleaks names above where it was issued"
+fj secrets none GL_RC=1
+ends "secrets: gitleaks' own error is not a secret" secrets "gitleaks could not run (exit 1), its own error and not a finding" "re-run this job, and if it fails again read gitleaks' error"
 fj lint none PLINTH_WORKDIR=missing
 ends "a working-directory that is not there names the input" lint "working-directory, 'missing' is not a directory in the repository" "set working-directory in the include's inputs"
 # The link at the commit the project's include line pins.
