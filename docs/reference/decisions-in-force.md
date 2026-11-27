@@ -187,7 +187,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 
 ## Agents and safety
 
-- The agent never sees the GitHub token: settings deny `gh auth token` and reading gh's config. 2026-09-04, coolbress/plinth-template#5
+- Settings deny `gh auth token` and reading gh's config, which closes the common ways of reading the GitHub token, not every one: a deny rule is not a boundary around the program. What a token the agent does reach can do is bounded by the everyday token's scope, one repository with no Workflows and no Administration. 2026-09-04, coolbress/plinth-template#5, #300
 - The agent's everyday credential is a fine-grained token for one repository, without Workflows or Administration. 2026-09-29, #300
 - Workflow permission stays off the agent's token; a refused workflow push goes to a person, never a wider token. 2026-10-07, #417
 - Ruleset changes are a person's, through `scripts/with-admin-token.sh`. 2026-09-11, #129

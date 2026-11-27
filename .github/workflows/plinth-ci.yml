@@ -173,6 +173,11 @@ jobs:
       - name: Floor checker output unchanged, its ids registered
         run: ./tests/floor-check-golden.sh
 
+      # The skill's short report, made from the checker's JSON, and its
+      # re-run note outside the repository (#1105).
+      - name: The floor-check report is short, names every finding, and says what changed since the last run
+        run: ./tests/floor-report-cases.sh
+
       # What the registry declares: one name per area letter, ids never
       # renamed, and the keepable, baseline and view lists (#1103).
       - name: Floor checker's registry holds its areas, ids, keepable, baseline and view

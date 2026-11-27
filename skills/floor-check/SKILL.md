@@ -24,8 +24,15 @@ the argument if the user gave one (`$ARGUMENTS`), otherwise the remote:
 repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"   # or the argument
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --sandbox --plugins --credentials \
   --ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset.json" --merge-ruleset "${CLAUDE_PLUGIN_ROOT}/ruleset-merge.json" \
-  ${repo:+--repo} ${repo:+"$repo"}
+  ${repo:+--repo} ${repo:+"$repo"} --format json \
+  | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-report.py" --root .
 ```
+
+The first command reads the repository; the second turns what it read into
+the short report below and keeps the last run in one note on this machine
+(`~/.cache/plinth/<host>-<owner>-<repo>/floor.json`), written only from a run
+on the default branch with a clean working tree, so a later run says what
+changed. Nothing is written in the repository.
 
 Without a repository name the checker says `no --repo: wall not checked` and
 checks only the files. It reads the GitHub API through `gh` with the user's
@@ -74,7 +81,8 @@ gitlab.com, run this instead of the command above, with the project's path
 
 ```bash
 repo="$(git remote get-url origin 2>/dev/null | sed -nE 's#^(https://gitlab\.com/|git@gitlab\.com:)(.+)$#\2#p' | sed 's#\.git$##')"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --host gitlab --sandbox --plugins --credentials ${repo:+--repo} ${repo:+"$repo"}
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-check.py" --root . --host gitlab --sandbox --plugins --credentials ${repo:+--repo} ${repo:+"$repo"} --format json \
+  | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/floor-report.py" --root .
 ```
 
 The wall is read through `glab api` with the user's own login; reading the
@@ -93,105 +101,62 @@ why; the summary counts them on their own, `K do not apply`.
 
 ## Report
 
-An item the run could not read is a SKIP line, never a PASS.
+Give the person the report `floor-report.py` printed, in their language, line
+for line and in its order: keep its numbers, file names and commands as
+printed, add no line, and drop none. It is already the short form:
 
-Lead with a summary in plain words, for a person who may not know the
-checker's terms yet. It comes before the checker's output and replaces none
-of it:
+- the first line is the verdict;
+- at most five action rows, those that cannot be undone or reach others
+  first, each one of three kinds: do it yourself (outside the repository,
+  the admin token, this machine); I can do it in one pull request (every file
+  item in one row, except one a pull request cannot undo, such as a tracked
+  secret, which has its own row and its lines); later, after what it names. A decision the person must
+  make is a question inside the row it gates, not a fourth kind;
+- one line naming every other finding;
+- what changed since the last run, when there is a note: fixed, still
+  missing, new;
+- whether "merge on your word" is guidance or a boundary for the login the
+  agent inherits, in those plain words;
+- what could not be read, which is not a failure, and what would read it;
+- what was not checked, which is not a problem;
+- the passes as one line;
+- one question, last. End with it: ask nothing else.
 
-1. How many items fail and how many were not verified, the two numbers on
-   the checker's last line, which starts `-- N failed, M not verified`, and
-   how many WARN lines there are. With no FAIL, say that no check failed in
-   what was verified, and that the not-verified count is what could not be
-   verified, whether or not the checker read it. When the line goes on
-   `(K cannot be read here)`, say how many of the M the person can clear
-   (M minus K) before the K that stay; never present the M as M problems.
-2. For each FAIL, one plain sentence on what it means for the person: what
-   can happen to their project or their merge while it stays, not what the
-   checker compared. For example, "a pull request can merge without the
-   secret scan running" rather than "required checks dropped".
-3. Which one to fix first, and why: the one that lets a change reach `main`
-   unchecked or reach other people comes before a missing document. With no
-   FAIL, name the WARN to look at first, or say there is none.
+Do not write a check's id (`FC-…`) in the chat.
 
-Then give the checker's output whole. Do not summarise it, shorten it, or
-drop PASS lines; the user reasons from the text they receive, and a FAIL you
-paraphrased is a FAIL they cannot hand to an agent. The summary above is the
-only paraphrase, and it says what a FAIL means, never that one is fixed.
+When the person asks to see everything, or for one area
+(`floor-check wall`, `floor-check machine`), run the same command with
+`--all`, or `--area <area>`, after `floor-report.py`, and give that output
+whole. `floor-check machine` is also where the sandbox's lines are: relay them
+as they are, and do not tell the person to turn the sandbox on or off.
 
-After the output, list every FAIL and WARN line again as a bulleted list, and
-under each one write one line that fixes it: a command, or a file and what to
-put in it. Nothing else under the item. The user pastes that line to an agent
-as is.
+The hand-off of each row, as the registry names it:
 
-```text
-- FAIL  CHANGELOG.md missing or empty
-  Create CHANGELOG.md in the Keep a Changelog format with an Unreleased section.
-- FAIL  main: required checks dropped: ['ci / secrets']
-  ${CLAUDE_PLUGIN_ROOT}/scripts/with-admin-token.sh ${CLAUDE_PLUGIN_ROOT}/scripts/upgrade-ruleset.sh owner/name 'ci / secrets:15368'
-```
+| Registry `handoff` | Row |
+| --- | --- |
+| `agent` | I can do it in one pull request |
+| `person` | Do it yourself |
+| `admin` | Do it yourself (the admin token) |
+| `ci` | Later, after the next `ci / floor-check` run on the default branch |
 
-Ruleset fixes need repository administration, so they go through
-`with-admin-token.sh` (spell out the plugin root path); tell the user to run
-that line in a separate terminal window, not with `!`: `!` runs it without a
-terminal, so the token prompt gets nothing. Never run it. The same holds for
-every `gh api -X` call printed under a repository setting (push protection,
-the Actions allowlist, private vulnerability reporting, the Actions token, the
-tag ruleset): relay it as printed, behind `with-admin-token.sh` in a separate
-terminal when the user's login cannot administer the repository.
+A command in a "do it yourself" row is the person's: relay it as printed.
+Ruleset fixes and every `gh api -X` call under a repository setting (push
+protection, the Actions allowlist, private vulnerability reporting, the
+Actions token, the tag ruleset) need repository administration: they go
+through `${CLAUDE_PLUGIN_ROOT}/scripts/with-admin-token.sh` (spell out the
+plugin root path) when the user's login cannot administer the repository.
+Tell the user to run that line in a separate terminal window, not with `!`:
+`!` runs it without a terminal, so the token prompt gets nothing. Never run
+it.
 
 An INFO naming a product the plan lacks (GitHub Code Security or Secret
 Protection on a private repository) is a fact about the plan: buying it is the
 user's choice, never a step to run or to recommend as a repair.
 
-INFO lines are facts, not defects; leave them where they are. INFO lines
-indented under a FAIL or WARN are the exception: they belong to that finding
-and carry its repair or what the repair needs (a command, a URL, the change it
-brings), so write the fix line under that item from them. SKIP lines are
-what the run could not check (offline, no `--repo`, an API error, a token
-that does not see the item); the summary counts them as `N not verified`.
-After the FAIL and WARN list, name what was not verified in one line, and
-what would verify it (a network, a login, an admin-read token): the SKIPs
-without the mark first, since the person can clear them. Then say in one line
-that the SKIPs ending `[cannot be read here]` cannot be read from this machine
-or repository whatever is changed there, and name what stands in for each
-where its line names it (`ci / secrets` for push protection, `ci / lint`'s
-security rules for CodeQL). Three kinds carry the mark: SSH keys (the
-account's settings say which push), the sandbox while Claude Code does not
-record its state, and a GitHub status a private repository's plan does not
-expose to its administrator (push protection, the CodeQL rule, the CodeQL
-default setup languages). That last kind is marked only when the token is
-shown to read an admin-only setting (the Actions permissions) and the
-security settings still come back empty: GitHub answers a fine-grained token
-without the Administration permission the same way, which is how the agent
-works after the first merge. Without that proof the SKIPs stay plain, with an
-INFO under them saying to run this again with a token that has
-Administration; relay that as a SKIP the person can clear. They stay listed, so the person knows what was not checked; they are counted
-inside M, never as a PASS. An exit code
-of 1 means at least one FAIL; 0 means no FAIL in what was checked, and the
-not-verified count says what was not.
-`N/A` lines (a JavaScript or TypeScript repository, above) are not defects
-either: leave them out of the FAIL and WARN list, write no fix under them, and
-in the summary say that plinth has no checks for that language rather than
-that those items pass.
-A third count, `K left to /plinth:floor-check`, appears only in a run with
-`--actions-token` (`ci / floor-check`) and only when K is above 0: INFO
-lines for reads that token cannot make and this skill, run with a login that
-administers the repository, does (push protection, private vulnerability
-reporting, the Actions allowlist, the Actions token settings, the ruleset's bypass actors, the CodeQL default setup languages, the squash commit settings, and
-a private repository's missing CodeQL rule). In that job's summary their
-`not yet confirmed` lines end `; left to /plinth:floor-check` and are not
-annotated; the other `not yet confirmed` lines are. This skill's own run
-never prints the count; without the flag those reads are SKIPs.
+When the report says the check stopped early, say so first: what it read
+before stopping is all there is, and the rest was not checked.
 
 Do not fix anything in this session, and do not run anything that writes.
-
-End the report with one line in the person's language: try typing
-`/plinth:guide`; it names in plain words the one command to type next, then
-what is open and what happened so far, and, before the first merge, how to
-use the tools of that step and the next; `/plinth:guide map` shows the whole
-way on one screen, and `/plinth:guide map <step>` one step in depth. On a repository plinth did not make,
-it points back here.
 
 ## What each item reads
 
