@@ -16,6 +16,9 @@
 # Breaks: <rule>.", its class "built in" or "installed by plinth" (a tool that
 # needs installing is not listed), true of the name, and the tool is named in
 # no row of the "Where you are" table.
+# No text gives the look back a cadence of its own (#1145): "every week or
+# two" is gone from the arsenal's pages, the how-to and the guide, since
+# /plinth:guide says when a look back is due.
 # Must-not-pass cases run first.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,7 +27,7 @@ import json, re, sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-BUILT_IN = {"clear", "design", "run", "context", "security-review", "resume", "recap", "insights", "doctor", "debug", "rewind"}
+BUILT_IN = {"clear", "design", "run", "context", "security-review", "resume", "recap", "insights", "doctor", "debug", "rewind", "usage"}
 plugin = json.loads((root / ".claude-plugin/plugin.json").read_text())
 entries = {e["name"]: e for e in json.loads((root / ".claude-plugin/marketplace.json").read_text())["plugins"]}
 default = {"plinth:" + d.name for d in (root / "skills").iterdir() if d.is_dir()}
@@ -141,6 +144,14 @@ arsenal = (root / "skills/arsenal/SKILL.md").read_text()
 not_used = (root / "skills/arsenal/not-used.md").read_text()
 howto = (root / "docs/how-to/run-a-project.md").read_text()
 guide = (root / "skills/guide/SKILL.md").read_text()
+pages = {f"skills/arsenal/{f.name}": f.read_text() for f in sorted((root / "skills/arsenal").glob("*.md"))}
+pages["docs/how-to/run-a-project.md"] = howto
+pages["skills/guide/SKILL.md"] = guide
+
+
+def cadence(texts):
+    return [f"{name} gives a cadence of its own: 'every week or two'" for name, t in texts.items()
+            if "every week or two" in t.lower()]
 row = "| Looking back on a piece of work (retrospective) |"
 fails = 0
 
@@ -230,6 +241,9 @@ case("must fail: a not-used.md with no entries",
      not_used_problems("# Not used with plinth\n\nNothing.\n", rows), "lists no tool")
 case("not-used.md: each entry has its class and its rule, and none is in the table",
      not_used_problems(not_used, rows), None)
+case("must fail: the how-to says every week or two again",
+     cadence({**pages, "docs/how-to/run-a-project.md": howto + "\nEvery week or two, look back.\n"}), "every week or two")
+case("no page gives the look back a cadence of its own", cadence(pages), None)
 print(f"-- {fails} failed")
 sys.exit(1 if fails else 0)
 PY
