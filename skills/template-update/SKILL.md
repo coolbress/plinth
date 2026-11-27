@@ -175,27 +175,46 @@ having created nothing, when the plinth pin is behind.
   and the path, then recommend, and resolve only on the user's word:
   1. For each file the script named, read it in the worktree (the markers,
      or the `.rej` beside its file) and say in plain words what the template
-     changed and what this repository changed. Recommend one resolution:
-     the template's side, the repository's side, or a combination you name
-     (which lines from each). Give its reason in one sentence. A plinth
-     `uses:` line the plan's `Pin conflict:` line named is that conflict:
-     recommend the side naming the pin the command carried.
-  2. Wait for the user's word on each file. Their word names the file, or
-     answers a question about that one file: "yes to CONTRIBUTING.md",
-     "the template's side for both". Silence, or a general "go ahead" or
-     "fix it" that does not name the files, is not a word on any of them:
-     ask again, file by file. They may choose another side than the one you
-     recommended, or resolve a file themselves; either is their word.
-  3. Apply exactly the resolution they chose, for that file only, in the
-     worktree: remove every marker, apply each `.rej` by hand and delete it,
+     changed and what this repository changed. On GitHub the script also
+     lists, per file, the lines this repository added to the template's
+     render that the template's side drops, and writes a combination that
+     keeps them (the template's side with each line where it belongs now; a
+     key both set takes this repository's value) at the path it prints. A
+     file with such lines has no one side to recommend, since either side
+     whole loses something: recommend the combination. A file with none may
+     take the template's side. A plinth `uses:` line the plan's
+     `Pin conflict:` line named is that conflict: recommend the side naming
+     the pin the command carried. Give the reason in one sentence.
+  2. Offer the six choices for the file, the recommendation first:
+     - the combination, shown in full (read the file at the path printed);
+     - the template's side;
+     - this repository's side;
+     - the full diff of the two sides, to read before choosing;
+     - the person edits the file themselves;
+     - stop here.
+     A line listed as `no old place` lost its neighbours: the combination
+     keeps it at the end of the block. Propose, for that line alone, where
+     it goes (in `AGENTS.md`, under `## This project`, its last section,
+     first), and move it only on the person's word for that line.
+  3. Wait for the user's word on each file. Their word names the file, or
+     answers a question about that one file: "the combination for
+     AGENTS.md", "the template's side for both". Silence, or a general "go
+     ahead" or "fix it" that does not name the files, is not a word on any
+     of them: ask again, file by file. They may choose another than the one
+     you recommended, or resolve a file themselves; either is their word.
+  4. Apply exactly the resolution they chose, for that file only, in the
+     worktree: copy the combination over the file, or remove every marker
+     for one side, or apply each `.rej` by hand and delete it; then
      `git add` the file. Nothing else in the worktree changes.
-  4. When every file has its word and is resolved, run the `--finish` line
+  5. When every file has its word and is resolved, run the `--finish` line
      the script printed, adding the same `--assisted-by` and one
      `--resolved <path> "<how>"` per file, its path exactly as the script
      named it (for a `.rej`, the `.rej` path).
      `<how>` says which side and on whose word, for example
      `--resolved CONTRIBUTING.md "the template's side, applied by the agent on the user's word"`,
-     or `"resolved by the user"` for a file they resolved themselves.
+     or `"resolved by the user"` for a file they resolved themselves. The
+     description also lists each line the script named and the file and
+     section it is in now, or that it is not there.
 
   If anything is still unresolved, `--finish` stops again with exit 3 and
   opens nothing and keeps none of the `--resolved` it was given; show what
