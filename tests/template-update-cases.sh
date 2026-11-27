@@ -629,6 +629,36 @@ if [ "$(cut -f3 <<<"$hrep")" = 0 ] && [ "$(cut -f4- <<<"$hrep")" = "timeout = 20
 then ok "a template line with tabs in the placement is shown with \\t, and the fields stay in place"
 else bad "helper, tabs in the placement"; printf '%s\n' "$hrep" | cat -t | sed 's/^/        /'; fi
 
+# #1233: the four shapes round 4 of the review on #1224 reproduced.
+hc comment t.toml '# Keep this timeout for slow tests\ntimeout = 10\n' 'timeout = 30\n' 'timeout = 10\n' '[tool.x]\n'
+if [ "$hout" = "$(printf '[tool.x]\n# Keep this timeout for slow tests\ntimeout = 30')" ]
+then ok "a comment added above an unchanged key is kept above the template's line, with one assignment, the template's"
+else bad "helper, a comment-only addition"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc provenance s.toml '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 20\nmode = "custom"\n' \
+  '[tool.a]\ntimeout = 30\n[tool.b]\ntimeout = 30\nmode = "new"\n' '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\nmode = "old"\n'
+if [ "$hout" = "$(printf '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 30\nmode = "custom"')" ]
+then ok "a line is this repository's only in the scope it changed it: [tool.b]'s timeout takes the template's change"
+else bad "helper, added with its scope"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc anchor n.toml '[tool.a]\nmode = "mine"\nenabled = true\n[tool.b]\nenabled = true\ncustom = 42\ntimeout = 1\n' \
+  '[tool.a]\nmode = "tpl"\nenabled = true\n[tool.b]\nenabled = true\ntimeout = 2\n' \
+  '[tool.a]\nmode = "x"\nenabled = true\n[tool.b]\nenabled = true\ntimeout = 1\n'
+if [ "$hout" = "$(printf '[tool.a]\nmode = "mine"\nenabled = true\n[tool.b]\nenabled = true\ncustom = 42\ntimeout = 2')" ]
+then ok "a line goes after its own neighbour, in its own table, not the first line with the same text"
+else bad "helper, anchors by scope"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc entries r.toml '[[tool.sources]]\nname = "mine"\nurl = "a"\n[[tool.sources]]\nname = "two"\nurl = "custom"\n' \
+  '[[tool.sources]]\nname = "tpl1"\nurl = "a2"\n[[tool.sources]]\nname = "two"\nurl = "b2"\n' \
+  '[[tool.sources]]\nname = "one"\nurl = "a"\n[[tool.sources]]\nname = "two"\nurl = "b"\n'
+if [ "$hout" = "$(printf '[[tool.sources]]\nname = "mine"\nurl = "a2"\n[[tool.sources]]\nname = "two"\nurl = "custom"')" ]
+then ok "each [[table]] entry is its own scope: the second entry's url stays there"
+else bad "helper, array-of-tables entries"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+# A TOML combination that does not parse is said: here the project's `b`
+# has no old place and lands beside the head's own `b` (#1233).
+hc parse d.toml 'a = 2\nb = 1\n' 'a = 3\n' 'a = 2\n' '[x]\nb = 0\n'
+if grep -q $'^invalid\tTOML: ' <<<"$hrep"
+then ok "a TOML combination that does not parse says so"
+else bad "helper, an invalid TOML combination"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+
+
 
 # ── the base must be the verified default branch ────────────────────────
 reset_logs

@@ -19,7 +19,9 @@ this repository added there kept. Standard library only.
       keys or table, set by this repository),
       `no old place` (its neighbours are gone: at the end of the block), or
       `no old place; propose: <where>` for a Markdown line, `under ## This
-      project` when the file ends in that section. Exit 0; exit 2 when the
+      project` when the file ends in that section, or `above <the template's
+      line>` (a comment added above a key whose value it left alone). A TOML
+      combination that does not parse adds a line `invalid<TAB><why>`. Exit 0; exit 2 when the
       markers cannot be read (nested, unclosed, or diff3's `|||||||`).
 
   template-update-combine.py where <file> <line> <count>
@@ -33,6 +35,7 @@ this repository added there kept. Standard library only.
 from __future__ import annotations
 
 import difflib
+import importlib
 import re
 import sys
 from pathlib import Path
@@ -79,15 +82,17 @@ def blocks(text: list[str]) -> list[tuple[int, int, int]] | None:
     return None if at is not None else out
 
 
-def added_lines(base: list[str], old: list[str] | None) -> set[str]:
-    """The lines of <base> that copier's old render does not have there."""
+def added_lines(base: list[str], old: list[str] | None, kind: str) -> set[tuple[tuple[str, ...], str]]:
+    """The lines of <base> that copier's old render does not have there, each
+    with its scope (`parents`): a line this repository changed in one table is
+    not its line in another table that holds the same text (#1233)."""
     if old is None:
-        return set(base)
-    out: set[str] = set()
+        return {(parents(base, j, kind), ln) for j, ln in enumerate(base)}
+    out: set[tuple[tuple[str, ...], str]] = set()
     sm = difflib.SequenceMatcher(a=old, b=base, autojunk=False)
     for tag, _, _, j1, j2 in sm.get_opcodes():
         if tag in ("insert", "replace"):
-            out.update(base[j1:j2])
+            out.update((parents(base, j, kind), base[j]) for j in range(j1, j2))
     return out
 
 
@@ -161,7 +166,15 @@ def parents(lines: list[str], n: int, kind: str) -> tuple[str, ...]:
     above it with less indentation, a sequence item by its whole first line
     (`- name: Test`), so two steps' `run:` keys are not the same key."""
     if kind == "toml":
-        return tuple(t.strip() for t in reversed(lines[:n]) if re.match(r"^\s*\[", t))[:1]
+        # The table above it; an array-of-tables entry by its ordinal, so two
+        # `[[tool.sources]]` entries are not one scope (#1233).
+        h = next((i for i in range(n - 1, -1, -1) if re.match(r"^\s*\[", lines[i])), None)
+        if h is None:
+            return ()
+        header = lines[h].strip()
+        if header.startswith("[["):
+            return (f"{header}#{sum(1 for t in lines[:h + 1] if t.strip() == header)}",)
+        return (header,)
     if kind != "yaml":
         return ()
     keys: list[str] = []
@@ -182,14 +195,20 @@ def parents(lines: list[str], n: int, kind: str) -> tuple[str, ...]:
     return tuple(keys)
 
 
-def combine(ours: list[str], theirs: list[str], added: set[str], kind: str,
-            closing: bool, head: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
+def combine(ours: list[str], theirs: list[str], added: set[tuple[tuple[str, ...], str]], kind: str,
+            closing: bool, head: list[str], oscope: list[tuple[str, ...]]) -> tuple[list[str], list[tuple[str, str]]]:
+    """<oscope>: the scope of each line of <ours>, read in the file as this
+    repository has it; <head>: the combined file above the block, for the
+    template's side and the result."""
+    def rscope(lines: list[str], i: int) -> tuple[str, ...]:
+        return parents(head + lines, len(head) + i, kind)
+
     # A line the template's side keeps is one it holds in the same scope (the
     # same TOML table or YAML parents): the same text under another table is
     # not this repository's line kept (review on #1224).
-    kept = {(parents(head + theirs, len(head) + i, kind), ln) for i, ln in enumerate(theirs)}
-    risky = [ln.strip() != "" and ln in added and not ln.startswith((OURS, THEIRS))
-             and (parents(head + ours, len(head) + i, kind), ln) not in kept for i, ln in enumerate(ours)]
+    kept = {(rscope(theirs, i), ln) for i, ln in enumerate(theirs)}
+    risky = [ln.strip() != "" and (oscope[i], ln) in added and not ln.startswith((OURS, THEIRS))
+             and (oscope[i], ln) not in kept for i, ln in enumerate(ours)]
     result = list(theirs)
     mine = [False] * len(result)  # which lines of result came from this repository's side
     report: list[tuple[str, str]] = []
@@ -200,29 +219,48 @@ def combine(ours: list[str], theirs: list[str], added: set[str], kind: str,
         result[at:at] = span
         mine[at:at] = [True] * len(span)
 
+    def find(j: int) -> int | None:
+        """Where ours[j] is in result: the same text in the same scope, and
+        the same occurrence of it there (#1233), not the first anywhere."""
+        nth = sum(1 for i in range(j) if ours[i] == ours[j] and oscope[i] == oscope[j])
+        hits = [i for i, ln in enumerate(result) if ln == ours[j] and not mine[i] and rscope(result, i) == oscope[j]]
+        return hits[nth] if nth < len(hits) else None
+
     tail: list[tuple[str, bool]] = []
     for first, item, last in units(ours, kind):
         if not any(risky[first:last + 1]):
             continue
         span = ours[first:last + 1]
         placement = ""
-        # The key that owns the at-risk lines: the item line's, whether the
-        # project changed that line or only its value's continuation.
-        k = key_of(ours[item], kind) if any(risky[item:last + 1]) else None
+        k = key_of(ours[item], kind) if not is_comment(ours[item], kind) else None
+        match = None
         if k is not None:
-            where = parents(head + ours, len(head) + item, kind)
             for tf, ti, tl in units(result, kind):
                 if key_of(result[ti], kind) == k and indent(result[ti]) == indent(ours[item]) \
-                        and parents(head + result, len(head) + ti, kind) == where and not any(mine[tf:tl + 1]):
-                    placement = f"replaces {result[ti].strip()}"
-                    result[tf:tl + 1] = span
-                    mine[tf:tl + 1] = [True] * len(span)
+                        and rscope(result, ti) == oscope[item] and not any(mine[tf:tl + 1]):
+                    match = (tf, ti, tl)
                     break
-        if not placement:
-            before = next((j for j in range(first - 1, -1, -1) if not risky[j] and ours[j].strip() and ours[j] in result), None)
-            after = next((j for j in range(last + 1, len(ours)) if not risky[j] and ours[j].strip() and ours[j] in result), None)
+        if match and any(risky[item:last + 1]):
+            # The key that owns the at-risk lines, whether the project changed
+            # its line or only its value's continuation: the project's value.
+            tf, ti, tl = match
+            placement = f"replaces {result[ti].strip()}"
+            result[tf:tl + 1] = span
+            mine[tf:tl + 1] = [True] * len(span)
+        elif match:
+            # Only comments above an unchanged key are this repository's: they
+            # go above the template's line, which keeps its value (#1233).
+            ti = match[1]
+            placement = f"above {result[ti].strip()}"
+            put(ti, ours[first:item])
+            span = ours[first:item]
+        else:
+            neighbours = [j for j in range(first - 1, -1, -1) if not risky[j] and ours[j].strip()]
+            before = next((i for i in map(find, neighbours) if i is not None), None)
+            neighbours = [j for j in range(last + 1, len(ours)) if not risky[j] and ours[j].strip()]
+            after = next((i for i in map(find, neighbours) if i is not None), None)
             if before is not None:
-                at = result.index(ours[before]) + 1
+                at = before + 1
                 # After what this repository's side already put there, so
                 # consecutive additions keep their order (review on #1224).
                 while at < len(result) and mine[at]:
@@ -230,10 +268,10 @@ def combine(ours: list[str], theirs: list[str], added: set[str], kind: str,
                 put(at, span)
                 placement = "in place"
             elif after is not None:
-                put(result.index(ours[after]), span)
+                put(after, span)
                 placement = "in place"
         if placement:
-            report += [(placement, ln) for ln, r in zip(span, risky[first:last + 1]) if r]
+            report += [(placement, ln) for ln, r in zip(span, risky[first:first + len(span)]) if r]
         else:
             tail += list(zip(span, risky[first:last + 1]))
     for ln, r in tail:
@@ -253,7 +291,7 @@ def cmd_combine(path: str, base_path: str, old_path: str, out_path: str) -> int:
     if found is None:
         print("the conflict markers could not be read", file=sys.stderr)
         return 2
-    added = added_lines(lines_of(base_path), None if old_path == "-" else lines_of(old_path))
+    added = added_lines(lines_of(base_path), None if old_path == "-" else lines_of(old_path), kind)
     # The file without its blocks' "before" sides: does it close with the section?
     theirs_whole: list[str] = []
     at = 0
@@ -263,10 +301,22 @@ def cmd_combine(path: str, base_path: str, old_path: str, out_path: str) -> int:
     theirs_whole += text[at:]
     headings = [ln for ln in theirs_whole if re.match(r"^#{1,6} ", ln)]
     closing = bool(headings) and headings[-1] == THIS_PROJECT
-    out: list[str] = []
+    # The file as this repository has it, each block its "before" side: where
+    # each of its lines sits, read as `added` read the base.
+    ours_whole: list[str] = []
+    starts: list[int] = []
     at = 0
     for s, m, e in found:
-        res, report = combine(text[s + 1:m], text[m + 1:e], added, kind, closing, out + text[at:s])
+        ours_whole += text[at:s]
+        starts.append(len(ours_whole))
+        ours_whole += text[s + 1:m]
+        at = e + 1
+    ours_whole += text[at:]
+    out: list[str] = []
+    at = 0
+    for (s, m, e), o in zip(found, starts):
+        oscope = [parents(ours_whole, o + i, kind) for i in range(m - s - 1)]
+        res, report = combine(text[s + 1:m], text[m + 1:e], added, kind, closing, out + text[at:s], oscope)
         out += text[at:s] + res
         at = e + 1
         for placement, line in report:
@@ -277,6 +327,15 @@ def cmd_combine(path: str, base_path: str, old_path: str, out_path: str) -> int:
     out += text[at:]
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text("\n".join(out) + "\n", encoding="utf-8")
+    # A TOML combination that does not parse is said (#1233): the person takes
+    # a side or edits it instead. YAML has no parser in the standard library.
+    if kind == "toml":
+        try:  # tomllib is Python 3.11's; without it the check is not made
+            importlib.import_module("tomllib").loads("\n".join(out) + "\n")
+        except ImportError:
+            pass
+        except ValueError as e:  # tomllib.TOMLDecodeError
+            print(f"invalid\tTOML: {e}".replace("\n", " "))
     return 0
 
 
