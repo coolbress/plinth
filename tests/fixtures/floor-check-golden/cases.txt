@@ -28001,7 +28001,7 @@ floor check: root=$WORK/good project=.
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
   WARN  mattpocock-skills@plinth (user) is behind its pin: installed commit c55ee46073ed, the plinth marketplace pins d1478fcb140d; its skills may report "Path not found". fix: claude plugin update mattpocock-skills@plinth --scope user
-  INFO  at the plinth marketplace's pin: plinth@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), plinth@plinth (user)
 -- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
@@ -28075,7 +28075,7 @@ floor check: root=$WORK/good project=.
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
   WARN  mattpocock-skills@plinth (user) is behind its pin: installed commit d1478fcb140d, the plinth marketplace pins d1478fcb140d; its skills may report "Path not found". fix: claude plugin update mattpocock-skills@plinth --scope user
-  INFO  at the plinth marketplace's pin: plinth@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), plinth@plinth (user)
 -- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
@@ -28149,7 +28149,7 @@ floor check: root=$WORK/good project=.
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
   SKIP  mattpocock-skills@plinth (user) not checked: its install records no full commit
-  INFO  at the plinth marketplace's pin: plinth@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), plinth@plinth (user)
 -- 0 failed, 2 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
@@ -28224,7 +28224,7 @@ floor check: root=$WORK/good project=.
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
   SKIP  mattpocock-skills@plinth (user) not checked: its install records no full commit
-  INFO  at the plinth marketplace's pin: plinth@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), plinth@plinth (user)
 -- 0 failed, 2 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
@@ -28298,7 +28298,7 @@ floor check: root=$WORK/good project=.
   PASS  ci.yml carries the image job (docker build, docker run)
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
-  INFO  at the plinth marketplace's pin: mattpocock-skills@plinth (user), plinth@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), mattpocock-skills@plinth (user), plinth@plinth (user)
 -- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
@@ -28373,7 +28373,7 @@ floor check: root=$WORK/good project=.
   SKIP  no --repo: wall not checked
   WARN  mattpocock-skills@plinth (project in /w/my app) is behind its pin: installed commit c55ee46073ed, the plinth marketplace pins d1478fcb140d; its skills may report "Path not found". fix: cd '/w/my app' && claude plugin update mattpocock-skills@plinth --scope project
   WARN  mattpocock-skills@plinth (local) is behind its pin: installed commit c55ee46073ed, the plinth marketplace pins d1478fcb140d; its skills may report "Path not found". fix: claude plugin update mattpocock-skills@plinth --scope local, run from the project folder it was installed for
-  INFO  at the plinth marketplace's pin: mattpocock-skills@plinth (user), plinth@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), mattpocock-skills@plinth (user), plinth@plinth (user)
 -- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
@@ -28447,7 +28447,7 @@ floor check: root=$WORK/good project=.
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
   WARN  plinth@plinth (user) is behind its pin: installed version 2.19.1, the plinth marketplace pins 2.19.2; its skills may report "Path not found". fix: claude plugin update plinth@plinth --scope user
-  INFO  at the plinth marketplace's pin: mattpocock-skills@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), mattpocock-skills@plinth (user)
 -- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
@@ -28520,18 +28520,18 @@ floor check: root=$WORK/good project=.
   PASS  ci.yml carries the image job (docker build, docker run)
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
+  SKIP  frontend-design@plinth (user) not checked: its install records no full commit
   SKIP  gone@plinth (user) not checked: the plinth marketplace has no entry for it
   SKIP  last30days@plinth (project in /p) not checked: its entry pins no full commit
-  SKIP  taste-skill@plinth (user) not checked: its install records no full commit
   INFO  at the plinth marketplace's pin: mattpocock-skills@plinth (user), plinth@plinth (user)
   INFO  plugins from another marketplace, outside what plinth compares: codex@openai-codex
 -- 0 failed, 4 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: frontend-design@plinth (user) not checked: its install records no full commit; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: gone@plinth (user) not checked: the plinth marketplace has no entry for it; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: last30days@plinth (project in /p) not checked: its entry pins no full commit; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
-not yet confirmed: taste-skill@plinth (user) not checked: its install records no full commit; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/good --no-network --plugins
 --- exit 0
 --- stdout
@@ -28600,7 +28600,7 @@ floor check: root=$WORK/good project=.
   PASS  ci.yml carries the image job (docker build, docker run)
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
-  INFO  at the plinth marketplace's pin: mattpocock-skills@plinth (user), plinth@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), mattpocock-skills@plinth (user), plinth@plinth (user)
 -- 0 failed, 1 not verified
 --- again with --verdicts: exit 0
 pass: the floor, no FAIL in what this run read
@@ -28673,7 +28673,7 @@ floor check: root=$WORK/good project=.
   PASS  ci.yml carries the image job (docker build, docker run)
   PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
   SKIP  no --repo: wall not checked
-  INFO  at the plinth marketplace's pin: mattpocock-skills@plinth (user), plinth@plinth (user), taste-skill@plinth (user)
+  INFO  at the plinth marketplace's pin: frontend-design@plinth (user), mattpocock-skills@plinth (user), plinth@plinth (user)
   INFO  plugins from another marketplace, outside what plinth compares: codex@openai-codex
 -- 0 failed, 1 not verified
 --- again with --verdicts: exit 0

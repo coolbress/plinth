@@ -63,18 +63,18 @@
       ]
     },
     {
-      "name": "taste-skill",
-      "description": "One taste-skill skill, design-taste-frontend: frontend design that does not look templated, for landing pages, portfolios and redesigns. No hooks; pinned here to a commit.",
+      "name": "frontend-design",
+      "description": "One frontend-design skill, Anthropic's, from the official plugin directory: distinctive, intentional visual design when building new UI or reshaping an existing one, away from templated defaults. No hooks; pinned here to a commit.",
       "category": "design",
       "source": {
         "source": "git-subdir",
-        "url": "https://github.com/Leonxlnx/taste-skill.git",
-        "path": "skills",
-        "sha": "ccbc15639c97057cbfcf32ecebc38ef716e4bb37"
+        "url": "https://github.com/anthropics/claude-plugins-official.git",
+        "path": "plugins/frontend-design/skills",
+        "sha": "30202c767cfaf325212b3921ab484f83adaec850"
       },
       "strict": false,
       "skills": [
-        "./taste-skill"
+        "./frontend-design"
       ]
     },
     {
