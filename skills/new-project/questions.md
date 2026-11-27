@@ -151,8 +151,8 @@ computer, has no login, and that where it runs is asked next.
 
 **Another kind** asks header `Kind` again with the kinds below other than
 the one recommended, at most four: on GitLab.com leave out `web`; on GitHub,
-when that leaves five, leave out `library` and say in one line that it can
-be typed under Other. When
+when that leaves five, leave out `library` (or `cli`, when `library` is the
+one recommended) and say in one line that it can be typed under Other. When
 the `Use` follow-up was asked, it is not asked again: this list is the
 next step after it, not a repeat. Every kind gets the same checks besides
 (title, lint, types, tests, build, secrets, dependencies, change size, the

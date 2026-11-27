@@ -2257,7 +2257,7 @@ for phrase in 'With `--host` in the arguments the host is not asked' \
               '> **Where will the page run?**' \
               '**The page has no login: anyone with its address can read it,' \
               'Then add `--hosting=local` (1) or `--hosting=render` (2).' \
-              'on GitHub, when that leaves five, leave out `library`'; do
+              'on GitHub, when that leaves five, leave out `library` (or `cli`, when `library` is the one recommended)'; do
   if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-order "the skill says \"$phrase\""
   else bad skill-order "the skill does not say \"$phrase\""; fi
 done

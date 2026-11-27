@@ -7,7 +7,9 @@
   default) or on Render (`--hosting=render`, about US $7 a month, GitHub
   only), where anyone with the page's address can read it. It gets no tag
   ruleset, since it releases nothing. On GitLab it runs locally only: the
-  GitLab door refuses `--hosting=render`. The door accepts the archetype once
+  GitLab door, which took no `--hosting` before, accepts `--hosting=local`
+  for a dashboard, refuses `--hosting=render`, and says `--hosting` is not
+  asked of any other archetype there. The door accepts the archetype once
   plinth's template pin reaches the plinth-template release that adds it;
   until then it stops with "unknown archetype: dashboard", as before.
 - `/plinth:floor-check` asks a dashboard whose answers say `hosting: render`

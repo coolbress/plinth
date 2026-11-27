@@ -194,7 +194,9 @@ release_said() {
   fi
   # A dashboard (#1069): the cell's clause for where it runs.
   if [ "$archetype" = dashboard ]; then
-    if [ "${hosting:-}" = render ]; then grep -oE 'so does a `dashboard` on Render' <<<"$next" || printf '%s\n' "$next"
+    if [ "${hosting:-}" = render ]; then
+      if grep -qF 'so does a `dashboard` on Render' <<<"$next"; then printf '%s\n' 'A `dashboard` on Render goes out by itself once `main` is green'
+      else printf '%s\n' "$next"; fi
     else grep -oE 'a `dashboard` on the person.s computer is not put out' <<<"$next" || printf '%s\n' "$next"; fi
     return
   fi
