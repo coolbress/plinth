@@ -64,6 +64,7 @@
       "query": true,
       "json": {
         "data": {
+          "lookBack": {"nodes": [{"number": 20, "title": "Look back 2026-11-05", "createdAt": "2026-11-05T09:00:00Z"}]},
           "repository": {
             "createdAt": "2026-11-02T09:00:00Z",
             "pushedAt": "2026-11-04T17:38:00Z",
