@@ -3,7 +3,7 @@
 # This file records which version of the template this repository came from,
 # so that `copier update` can merge only the template changes made since.
 # Deleting it turns the repository back into a point-in-time copy.
-_commit: v1.51.0
+_commit: v1.52.0
 _src_path: gh:coolbress/plinth-template
 archetype: cli
 code_of_conduct: false
@@ -15,7 +15,7 @@ owner_has_code_of_conduct: false
 owner_has_issue_forms: false
 owner_has_pr_template: false
 owner_has_security_policy: false
-plinth_sha: 9d0feb70c9d5296f2b559c0de8c3a31a00d8a4c3
+plinth_sha: 50a45c30d5a8f0700ac6e6426a8b6c15e96018b7
 project_name: probe
 records_language: English
 third_party_review: false

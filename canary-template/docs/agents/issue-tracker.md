@@ -44,7 +44,8 @@ form's label yourself.
 | --- | --- | --- |
 | A defect, reported by anyone; a feature request | Bug (`bug`), Feature request (`enhancement`) | The form's fields: what happened, steps, expected, environment, logs; or what you are blocked on, how you would like it, what you tried. A `bug` made `ready-for-agent` gains `## Acceptance criteria` (and `## Not building` when it helps) below the form's fields, in the same issue: `/implement` reads them |
 | A task, one thing to build | Task (`task`) | `## Parent`, `## What to build`, `## Acceptance criteria`, `## Not building`, `## Blocked by`; while open, decisions go under `## Decisions` (dated) and the result under `## Outcome` |
-| The end of the project, or handing it over | End or hand over this project (`task`) | The steps as a checklist (data, keys, users, package, image and service, repository), `## Not needed` for those that do not apply, and three questions: what went well, what the agent kept getting wrong, which rule or check to add |
+| The end of the project, or handing it over | End or hand over this project (`task`) | The steps as a checklist (final export, billing, a mirror when the account closes, data, keys, users, package, image and service, collaborators, repository), the handover steps, `## Not needed` for those that do not apply, and three questions: what went well, what the agent kept getting wrong, which rule or check to add |
+| A look back, when a version was tagged, ten `feat:` pull requests merged or 30 days passed | Look back (`task`) | The title `Look back YYYY-MM-DD`, seven fixed questions, and at most three tickets, each a sub-issue |
 | A record: research, a decision, a map, a spec | blank issue; the kind is a label: `wayfinder:map`, `wayfinder:research`, `wayfinder:grilling`, `wayfinder:prototype`, or `spec` (`/plinth:new-project` creates them), plus the triage label while open | Research, grilling and prototype: `## Question`, `## Findings`, `## Decision`, `## Used by`. The map: `## Destination`, `## Notes`, `## Decisions so far`, `## Not yet specified`, `## Out of scope`. The spec keeps its own shape. Each starts from its skeleton under [Record skeletons](#record-skeletons) |
 
 The body is the record and stays canonical; comments are conversation, and
@@ -67,6 +68,12 @@ When a discussion or a review changes the conclusion, update the body. Keep the
 earlier reasoning and the reason it was corrected; a record that shows only the
 final answer cannot be argued with.
 
+Closing an issue writes its ending into the body: `## Outcome`, saying
+whether it was completed, cancelled, superseded or moved to a follow-up and what
+was verified, with each acceptance criterion that was met ticked and any left
+unticked named with why. `Closes #N` in a pull request description closes the issue
+on merge without anyone writing that, so whoever merges writes it.
+
 Distinguish **completed** from **cancelled**, **superseded**, and **moved to a
 follow-up** — closing is not one state. An item still owed when an issue closes
 goes into an open follow-up issue that the Outcome links, where a read of open
@@ -79,6 +86,15 @@ what the record says happened, not by whether the headings are all present.
 Fields, labels and syntax that automation depends on are followed exactly:
 `Closes` auto-closes, a label drives triage queries, and a form's field id is
 read by tooling. Precision there is not style.
+
+### Everyday terms
+
+The first time you use one of the everyday terms in plinth's term table
+(https://github.com/coolbress/plinth/blob/main/docs/reference/terms.md:
+repository, issue, pull request, branch, commit, check, CI, merge, ruleset,
+draft, review, template update) with the person, add its plain explanation once, in their language,
+and keep the English term in brackets after the translation, the same word
+every time, so it matches the host's screen.
 
 ### Public records
 
