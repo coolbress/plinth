@@ -7,7 +7,8 @@
 # bash -n and shellcheck; pr-title, deps, floor-check, diff-size and test are
 # extracted and run here against fixtures with the tool downloads stubbed (uv
 # too, for test), under GitLab's `set -eo pipefail`, so the rule tested is the
-# rule shipped. lint, typecheck, build and secrets do not run here. GitLab itself never
+# rule shipped. lint, typecheck, build and secrets run here only failing, with
+# uv and gitleaks stubbed, for the block a failed job ends with (#1101). GitLab itself never
 # runs here: whether GitLab accepts the file is a run on GitLab.com,
 # recorded on #353. floor-check installs its PyYAML from PyPI (#528), so
 # those cases need network; the other downloads are stubbed.
@@ -197,13 +198,20 @@ limit() {
 run_job() { # <job>
   rc=0
   out="$( { cat "$tmp/helpers.sh"; echo ": > \"\$PLINTH_TMP/$mark\"; plinth_uv() { :; }; plinth_osv() { :; }; plinth_gitleaks() { :; }"; cat "$tmp/$1.sh"; } \
-    | PATH="$tmp/bin:$PATH" TMPDIR="$tmp/job-tmp" limit "${JOB_LIMIT:-600}" bash -eo pipefail 2>&1)" || rc=$?
+    | CI_JOB_NAME="${CI_JOB_NAME:-$1}" PATH="$tmp/bin:$PATH" TMPDIR="$tmp/job-tmp" limit "${JOB_LIMIT:-600}" bash -eo pipefail 2>&1)" || rc=$?
 }
 expect() { # <label> <rc> <pattern in out>...
   local label="$1" want="$2"; shift 2
   local p miss=""
   for p in "$@"; do printf '%s' "$out" | grep -qF -- "$p" || miss="$miss missing: $p;"; done
   if [ "$rc" = "$want" ] && [ -z "$miss" ]; then ok "$label"; else bad "$label (exit $rc, wanted $want;$miss)" "$out"; fi
+}
+# <label> <job> <failed: start> <next: start> [<more: start>]: the log's last
+# three lines. Without a readable include line the link is at main, saying so.
+ends() {
+  local more="${5:-https://github.com/coolbress/plinth/blob/main/docs/reference/required-checks.md#ci--$2 (main: no include line}" t
+  t="$(printf '%s\n' "$out" | tail -n 3)"
+  case "$t" in "failed: $3"*$'\n'"next: $4"*$'\n'"more: $more"*) ok "$1" ;; *) bad "$1 (exit $rc)" "$out" ;; esac
 }
 refuse() { # <label> <pattern that must not be in out>
   if printf '%s' "$out" | grep -qF -- "$2"; then bad "$1" "$out"; else ok "$1"; fi
@@ -518,6 +526,7 @@ high="$(finding jinja2 3.1.2 GHSA-high 8.8)"; mod="$(finding requests 2.25.0 GHS
 none="$(finding idna 2.10 GHSA-none "")"
 deps_case "$(report "$high")" "$(report)"
 expect "an added version with a high advisory fails" 1 "fail: dependency review, 1 advisories at high or above on added dependency versions" "jinja2 3.1.2 (GHSA-high, CVSS 8.8)"
+ends "deps: an added advisory ends with the block (#1101)" deps "dependency review, 1 advisories at high" "raise each named package past its advisory's fixed version"
 grep -q -- "--download-offline-databases" <(sed -n 1p "$STUB/log") && ! grep -q -- "--download-offline-databases" <(sed -n 2p "$STUB/log") \
   && [ "$(sed 's/.* db=//' "$STUB/log" | sort -u | wc -l | tr -d ' ')" = 1 ] && [ "$(wc -l < "$STUB/log" | tr -d ' ')" = 2 ] \
   && grep -q -- "--offline-vulnerabilities" <(sed -n 2p "$STUB/log") \
@@ -540,6 +549,7 @@ deps_case "" "$(report)" 127
 expect "osv-scanner erroring (the download, a crash) fails" 1 "osv-scanner exited 127" "fail: dependency review, the scan could not run"
 deps_case "not json" "$(report)" 0
 expect "a report that is not JSON fails" 1 "not the JSON report expected" "fail: dependency review, the scan could not run"
+ends "deps: a scan that could not run ends with the block (#1101)" deps "dependency review, the scan could not run" "re-run this job"
 deps_case "" "$(report)" 128
 expect "no package found in a lockfile that names registry packages fails" 1 "which names registry packages" "fail: dependency review"
 deps_case "$(report)" "" 1 128
@@ -735,6 +745,7 @@ expect "over the limit fails" 1 "fail: diff size, 31 lines, over the limit of 20
   "land one after another" "each branched from main after the one before it"
 refuse "over the limit no longer says to stack the pieces (#988)" "stack"
 expect "a named pipeline change is listed as named" 1 "named in the description: .gitlab-ci.yml"
+ends "diff-size: over the limit ends with the block (#1101)" diff-size "diff size, 31 lines, over the limit of 20" "split the change into merge requests"
 ds 0 "x"
 expect "max-diff-lines 0 measures without blocking" 0 "pass: diff size, measured and not enforced (max-diff-lines is 0): 31 lines"
 
@@ -845,6 +856,7 @@ mkdir -p "$tmp/uvbin"
 cat > "$tmp/uvbin/uv" <<'SH'
 #!/usr/bin/env bash
 echo "uv $*" >> "$UVLOG"
+[ -z "${PYTEST_ADDOPTS:-}" ] || echo "PYTEST_ADDOPTS=$PYTEST_ADDOPTS" >> "$UVLOG"
 case " $* " in
   *" python - "*) exit 10 ;;   # coverage's configuration names no source
   *pytest*) [ "${STUB_SLEEP:-0}" = 0 ] || exec sleep "$STUB_SLEEP"; exit "${STUB_RC:-0}" ;;
@@ -897,6 +909,67 @@ for v in 0 361 2.5; do
   expect "test-timeout-minutes '$v' fails, naming the input and its range" 1 "fail: test-timeout-minutes, '$v' is not whole minutes from 1 to 360"
 done
 if ! grep -q pytest "$tmp/uv.log"; then ok "an out-of-range test-timeout-minutes runs no test"; else bad "an out-of-range limit still ran pytest" "$(cat "$tmp/uv.log")"; fi
+
+echo "-- a failed job ends its log with failed:, next: and more: (#1101)"
+# uv and gitleaks stubbed to fail when their arguments hold $STUB_FAIL.
+mkdir -p "$tmp/failbin" "$tmp/fail-job"
+printf '#!/usr/bin/env bash\ncase " $* " in *" $STUB_FAIL "*) echo "stub: $*"; exit 1 ;; esac\nexit 0\n' > "$tmp/failbin/uv"
+printf '#!/usr/bin/env bash\necho "leaks found: 1"; exit 1\n' > "$tmp/failbin/gitleaks"
+chmod +x "$tmp/failbin/uv" "$tmp/failbin/gitleaks"
+fj() { # <job> <STUB_FAIL> [VAR=value...]: the job in $tmp/fail-job with the stubs
+  local job="$1" f="$2"; shift 2
+  (cd "$tmp/fail-job" && env PATH="$tmp/failbin:$PATH" STUB_FAIL="$f" PLINTH_WORKDIR=. CI_MERGE_REQUEST_IID= CI_OPEN_MERGE_REQUESTS= "$@" \
+     bash -c "$(declare -f run_job limit); tmp='$tmp'; mark='$mark'; run_job $job; printf '%s\n%s' \"\$rc\" \"\$out\"" > "$tmp/o")
+  rc="$(head -1 "$tmp/o")"; out="$(tail -n +2 "$tmp/o")"
+}
+fj lint "ruff check"
+ends "lint: ruff check" lint "ruff check" "run uv run ruff check . here, fix what it names, and push"
+fj lint "ruff format --check"
+ends "lint: ruff format" lint "ruff format --check" "run uv run ruff format here, commit what it changes, and push"
+fj typecheck "sync --locked"
+ends "typecheck: uv sync --locked" typecheck "uv sync --locked" "run uv sync --locked here: when it says uv.lock needs updating, run uv lock"
+fj typecheck mypy
+ends "typecheck: mypy" typecheck "mypy" "run uv run mypy . here, fix what it names, and push"
+fj build build
+ends "build: uv build" build "uv build" "run uv build here, fix what it names, and push"
+fj secrets none
+ends "secrets: gitleaks" secrets "gitleaks, the history included" "revoke each secret gitleaks names above where it was issued"
+fj lint none PLINTH_WORKDIR=missing
+ends "a working-directory that is not there names the input" lint "working-directory, 'missing' is not a directory in the repository" "set working-directory in the include's inputs"
+# The link at the commit the project's include line pins.
+printf 'include:\n  - remote: %s\n' "$url" > "$tmp/fail-job/.gitlab-ci.yml"
+fj lint "ruff check"
+ends "the link names the include line's commit" lint "ruff check" "run uv run ruff check ." "https://github.com/coolbress/plinth/blob/${sha:0:12}/docs/reference/required-checks.md#ci--lint"
+refuse "the link at the include's commit does not say main" "(main: no include line"
+rm "$tmp/fail-job/.gitlab-ci.yml"
+# A download that fails: the stub plinth_uv in run_job replaced by a failing one.
+out="$( { cat "$tmp/helpers.sh"; echo ": > \"\$PLINTH_TMP/$mark\"; plinth_uv() { echo 'curl: (22) The requested URL returned error: 504'; return 22; }"; cat "$tmp/lint.sh"; } \
+  | (cd "$tmp/fail-job" && CI_JOB_NAME=lint PLINTH_WORKDIR=. TMPDIR="$tmp/job-tmp" PATH="$tmp/bin:$PATH" bash -eo pipefail 2>&1))" && rc=0 || rc=$?
+ends "a failed uv download says to re-run the pipeline" lint "uv, its download from github.com or its checksum check failed" "re-run the pipeline: GitHub refuses anonymous downloads at times"
+refuse "a failed download runs no check" "pass: uv sync"
+tj="$(cd "$trepo" && pwd)"
+tjob STUB_RC=1
+ends "test: a failing test" test "pytest on .python-version" "run uv run pytest here, fix what the failing test above the Verdict shows, and push"
+if grep -qx "PYTEST_ADDOPTS=--junitxml='$tj/plinth-junit/pytest.xml'" "$tmp/uv.log"; then ok "pytest writes its JUnit report under the project's plinth-junit/"
+else bad "pytest was not given the JUnit report's path" "$(cat "$tmp/uv.log")"; fi
+tjob PLINTH_TEST_TIMEOUT_MINUTES=1 CI_JOB_STARTED_AT="$(ago 45)" STUB_SLEEP=60
+ends "test: the time limit names --durations=20" test "pytest on .python-version, stopped at the time limit" "run uv run pytest --durations=20 here"
+tjob STUB_RC=1 PLINTH_EXTRA_PYTHON_VERSIONS=3.13 PYTEST_ADDOPTS=-p\ no:cacheprovider
+if grep -qx "PYTEST_ADDOPTS=-p no:cacheprovider --junitxml='$tj/plinth-junit/pytest.xml'" "$tmp/uv.log"; then ok "a PYTEST_ADDOPTS of the project's own is kept before the report's path"
+else bad "the project's PYTEST_ADDOPTS was lost" "$(cat "$tmp/uv.log")"; fi
+if python3 - "$gl" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read().split("\ntest:\n", 1)[1].split("\n  script:", 1)[0]
+sys.exit("  artifacts:\n    when: always\n    reports:\n      junit: plinth-junit/*.xml" not in t)
+PY
+then ok "test declares artifacts:reports:junit for plinth-junit/*.xml, when: always"; else bad "test does not upload its JUnit report on every run"; fi
+title "not conventional"
+ends "pr-title: a title that is not Conventional Commits" pr-title "MR title, it is not Conventional Commits: not conventional" "rewrite it as type(scope): summary"
+CI_OPEN_MERGE_REQUESTS='g/p!3' run_job pr-title
+ends "a branch pipeline of an open merge request says to let merge request pipelines run" pr-title "MR title, this is a branch pipeline" "let merge request pipelines run"
+fc "include:
+  - remote: https://raw.githubusercontent.com/coolbress/plinth/main/gitlab/python-ci.yml"
+ends "floor-check: an include at a branch" floor-check ".gitlab-ci.yml includes plinth's GitLab pipeline at a full commit SHA, it includes it at main" "run /plinth:floor-check here"
 
 echo "-- temporary directories (#575)"
 made="$(find "$tmp/job-tmp" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"

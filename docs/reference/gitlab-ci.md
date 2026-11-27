@@ -88,17 +88,25 @@ The jobs have `python-ci.yml`'s names and run its checks with the same pinned
 tools. `tests/gitlab-ci-cases.sh` keeps the names, the inputs, the tool
 pins, the commit types, the coverage requirements, the changed-lines judge
 and the diff-size functions the two files share equal, and runs `pr-title`,
-`deps`, `floor-check` and `diff-size` on fixtures. GitLab does not enforce the names; this page
+`deps`, `floor-check`, `diff-size` and `test` on fixtures, and the other four
+failing, with their tools stubbed. GitLab does not enforce the names; this page
 and that test keep them. Each job writes its verdict lines (the forms in
 [required checks](required-checks.md#what-a-jobs-summary-says)) at the end of
 its log under `Verdict`: GitLab has no job summary and no annotations, so a
-`not yet confirmed` line appears in the log only.
+`not yet confirmed` line appears in the log only. A failed job's log ends with
+`failed:`, `next:` and `more:`, as [on GitHub](required-checks.md#when-a-check-fails):
+the first `fail:` line, one action, and a link to that job's section of the
+required checks. The link is at the plinth commit the project's include line
+pins, read from `CI_CONFIG_PATH`; when no such line can be read there, it is
+at `main` and says so. A tool download from github.com that fails (GitHub
+refuses anonymous downloads at times) ends the job the same way, its next
+step a re-run of the pipeline.
 
 | Job | Differs from GitHub |
 | --- | --- |
 | `lint` | No zizmor: it audits GitHub Actions only, and nothing here audits `.gitlab-ci.yml`. A `not yet confirmed` line says so on every run |
 | `typecheck` | Nothing |
-| `test` | The changed lines are judged against the merge request's merge base (`CI_MERGE_REQUEST_DIFF_BASE_SHA`); GitLab checks out the merge request's head, not a merge commit |
+| `test` | The changed lines are judged against the merge request's merge base (`CI_MERGE_REQUEST_DIFF_BASE_SHA`); GitLab checks out the merge request's head, not a merge commit. pytest writes a JUnit report (`plinth-junit/`, through `PYTEST_ADDOPTS`), which the job uploads as `artifacts:reports:junit` on every run, failed ones included; GitLab Free shows it in the merge request's Test summary. GitHub annotates the failed tests instead |
 | `build` | Nothing |
 | `secrets` | Nothing in the job. GitLab Free has no secret push protection, so this job is the only secret check, and it runs after the secret has reached GitLab |
 | `deps` | osv-scanner 2.6.0 (checked against its SHA-256) instead of GitHub's dependency review. It downloads the OSV database once, scans `uv.lock` at the head and at the merge base offline against that one copy, and fails on an advisory the head has and the base does not, at `deps-fail-on-severity` or above. The severity is the advisory's highest CVSS score: critical from 9.0, high from 7.0, moderate from 4.0, low above 0; an advisory with no score counts as at or above. A scan that cannot run (the download, a tool error, a lockfile it cannot read) fails the job. Both scans use an empty configuration of plinth's, so an `osv-scanner.toml` in the project cannot ignore an advisory |

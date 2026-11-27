@@ -23,8 +23,9 @@
 # Each job writes its verdict lines (`pass:`, `fail:`, `not yet confirmed:`;
 # the forms are in docs/reference/required-checks.md) at the end of its log
 # under "Verdict". GitLab has no job summary and no annotations, so a not yet
-# confirmed line is in the log only. A job that stops before its first check
-# (a tool install) writes none, and its failure is the verdict.
+# confirmed line is in the log only. A failed job ends its log with
+# `failed:`, `next:` and `more:`, as python-ci.yml's do (#1101); a tool
+# download that fails ends it the same way, its next step a re-run.
 #
 # The image is pinned by digest; uv, gitleaks and osv-scanner come from their
 # official releases with SHA-256 checksums, and floor-check's PyYAML from PyPI
@@ -34,8 +35,8 @@
 # GitLab pipeline has no GitHub token to send (#878). When GitHub sheds
 # anonymous requests, as on 2026-11-09 when it answered them with 504 for about
 # two hours, every job here stops at its tool install and the pipeline is red
-# until GitHub recovers; re-run the pipeline then. Nothing is checked and
-# nothing passes in the meantime.
+# until GitHub recovers; re-run the pipeline then, as the job's next: line
+# says. Nothing is checked and nothing passes in the meantime.
 
 spec:
   inputs:
@@ -84,8 +85,14 @@ workflow:
   before_script:
     - |
       PLINTH_TMP="$(mktemp -d)"
-      plinth_failed=0; plinth_last=; plinth_lines=()
-      say() { plinth_lines+=("$1"); }
+      plinth_failed=0; plinth_last=; plinth_lines=(); plinth_next=; plinth_nfail=0; plinth_root="$PWD"
+      say() { plinth_lines+=("$1"); [[ "$1" != "fail: "* ]] || plinth_nfail=$((plinth_nfail + 1)); }
+      # The next step for the first failure (#1101): a job names it right
+      # after the fail line, and the Verdict ends with failed:, next: and
+      # more:, as on GitHub (#1098). Said after a second fail line it is not
+      # that failure's, so it is dropped.
+      nx() { [ -n "$plinth_next" ] || [ "$plinth_nfail" != 1 ] || plinth_next="$1"; }
+      onfail() { [ "$plinth_last" != failure ] || nx "$1"; }
       # A check: its verdict line from its exit code. After a failed check the
       # later ones do not run and are not yet confirmed, as on GitHub. A
       # function run here has errexit off, so each one returns its failures.
@@ -98,11 +105,42 @@ workflow:
         printf '$ %s\n' "$*"
         if "$@"; then say "pass: $std"; plinth_last=success; else say "fail: $std"; plinth_last=failure; plinth_failed=1; fi
       }
+      # The link names the plinth commit the project's include line pins
+      # (`raw.githubusercontent.com/coolbress/plinth/<sha>/...` in
+      # CI_CONFIG_PATH), or main, saying so, when that line cannot be read.
+      plinth_more() {
+        local u="https://github.com/coolbress/plinth/blob/%s/docs/reference/required-checks.md#ci--${CI_JOB_NAME:-}" at
+        at="$(grep -oE 'raw\.githubusercontent\.com/coolbress/plinth/[0-9a-fA-F]{40}/gitlab/python-ci\.yml' "${CI_PROJECT_DIR:-$plinth_root}/${CI_CONFIG_PATH:-.gitlab-ci.yml}" 2>/dev/null | head -n 1 || true)"
+        at="${at#*/coolbress/plinth/}"; at="${at%%/*}"
+        # shellcheck disable=SC2059 # u is the format, with one %s
+        if [ -n "$at" ]; then printf "$u" "${at:0:12}"; else printf "$u (main: no include line of plinth's pipeline at a commit SHA was read from %s)" main "${CI_CONFIG_PATH:-.gitlab-ci.yml}"; fi
+      }
       verdict() {
         echo; echo "Verdict"
-        local l
-        for l in ${plinth_lines+"${plinth_lines[@]}"}; do printf -- '- %s\n' "${l//[$'\r\n']/ }"; done
+        local l w=
+        for l in ${plinth_lines+"${plinth_lines[@]}"}; do
+          l="${l//[$'\r\n']/ }"; printf -- '- %s\n' "$l"
+          [ -n "$w" ] || [[ "$l" != "fail: "* ]] || w="${l#fail: }"
+        done
+        if [ "$plinth_failed" != 0 ]; then
+          printf 'failed: %s\nnext: %s\nmore: %s\n' "${w:-this job, its error is above}" \
+            "${plinth_next:-read the error above the Verdict, fix what it names, and push}" "$(plinth_more)"
+        fi
         exit "$plinth_failed"
+      }
+      # <tool> <install function>: a failed download or checksum ends the job.
+      # The downloads from github.com are anonymous (see the top of the file).
+      plinth_cd() {
+        cd "$PLINTH_WORKDIR" && return 0
+        say "fail: working-directory, '$PLINTH_WORKDIR' is not a directory in the repository"
+        nx "set working-directory in the include's inputs to the project's root, relative to the repository root"
+        plinth_failed=1; verdict
+      }
+      plinth_get() {
+        "$2" && return 0
+        say "fail: $1, its download from github.com or its checksum check failed (the error is above), so nothing was checked"
+        nx "re-run the pipeline: GitHub refuses anonymous downloads at times (504 for about two hours on 2026-11-09); a checksum error that repeats is not that, so report it at https://github.com/coolbress/plinth/issues"
+        plinth_failed=1; verdict
       }
       # A branch pipeline for a commit an open merge request carries has no
       # CI_MERGE_REQUEST_* variables, so a merge request check would read it
@@ -112,6 +150,7 @@ workflow:
       plinth_branch_of_mr() {
         if [ -n "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "${CI_OPEN_MERGE_REQUESTS:-}" ]; then return 1; fi
         say "fail: $1, this is a branch pipeline while merge request ${CI_OPEN_MERGE_REQUESTS} is open, so it was not checked against the merge request; let merge request pipelines run (a project's own workflow: replaces plinth's rules)"
+        nx "let merge request pipelines run: give the project's own workflow: a rule for \$CI_PIPELINE_SOURCE == \"merge_request_event\", as plinth's rules have, and run the merge request's pipeline"
         plinth_failed=1
       }
       plinth_uv() {
@@ -143,12 +182,12 @@ lint:
   extends: .plinth
   script:
     - |
-      plinth_uv || exit 1
-      cd "$PLINTH_WORKDIR" || exit 1
+      plinth_get uv plinth_uv
+      plinth_cd
       # --locked fails when the lockfile is missing or disagrees with pyproject.
-      step "uv sync --locked" uv sync --locked
-      step "ruff check" uv run ruff check .
-      step "ruff format --check" uv run ruff format --check .
+      step "uv sync --locked" uv sync --locked; onfail "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
+      step "ruff check" uv run ruff check .; onfail "run uv run ruff check . here, fix what it names, and push"
+      step "ruff format --check" uv run ruff format --check .; onfail "run uv run ruff format here, commit what it changes, and push"
       # GitHub's lint also runs zizmor on .github/workflows/. zizmor audits
       # GitHub Actions only, and no pinned tool audits .gitlab-ci.yml.
       say "not yet confirmed: the pipeline definition's security, zizmor audits GitHub Actions only and nothing in this pipeline audits .gitlab-ci.yml; a reviewer reading the merge request's .gitlab-ci.yml changes confirms it"
@@ -158,10 +197,10 @@ typecheck:
   extends: .plinth
   script:
     - |
-      plinth_uv || exit 1
-      cd "$PLINTH_WORKDIR" || exit 1
-      step "uv sync --locked" uv sync --locked
-      step "mypy" uv run mypy .
+      plinth_get uv plinth_uv
+      plinth_cd
+      step "uv sync --locked" uv sync --locked; onfail "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
+      step "mypy" uv run mypy .; onfail "run uv run mypy . here, fix what it names, and push"
       verdict
 
 # Coverage and diff-cover are installed as in python-ci.yml, each file pinned
@@ -187,6 +226,11 @@ test:
     PLINTH_EXTRA_PYTHON_VERSIONS: $[[ inputs.extra-python-versions ]]
     PLINTH_TEST_TIMEOUT_MINUTES: $[[ inputs.test-timeout-minutes ]]
     PLINTH_TEST_MARGIN_SECONDS: "120"
+  # GitLab Free shows the report in the merge request's Test summary.
+  artifacts:
+    when: always
+    reports:
+      junit: plinth-junit/*.xml
   script:
     - |
       # From the job's start, which GitLab's timeout counts from too: the
@@ -195,6 +239,7 @@ test:
       case "$PLINTH_TEST_TIMEOUT_MINUTES" in "" | *[!0-9]*) l= ;; *) l=1 ;; esac
       if [ -z "$l" ] || [ "$PLINTH_TEST_TIMEOUT_MINUTES" -lt 1 ] || [ "$PLINTH_TEST_TIMEOUT_MINUTES" -gt 360 ]; then
         say "fail: test-timeout-minutes, '$PLINTH_TEST_TIMEOUT_MINUTES' is not whole minutes from 1 to 360; set it in the include's inputs"
+        nx "set test-timeout-minutes in the include's inputs to whole minutes from 1 to 360"
         plinth_failed=1
       fi
       # The margin: PLINTH_TEST_MARGIN_SECONDS, or a fifth of the limit when
@@ -218,9 +263,9 @@ test:
         [ -e "$PLINTH_TMP/$1" ] || return 0
         plinth_lines[${#plinth_lines[@]} - 1]="fail: $2, stopped at the time limit: the job's $PLINTH_TEST_TIMEOUT_MINUTES-minute limit (test-timeout-minutes) less $plinth_margin s kept for the steps after it ended it, not a failing test; measure first: uv run pytest --durations=20 lists the slowest tests, and when a few take most of the time, make them faster; raise test-timeout-minutes in the include's inputs only when none stands out and the time moves between runs of the same commit"
       }
-      plinth_uv || exit 1
-      cd "$PLINTH_WORKDIR" || exit 1
-      step "uv sync --locked" uv sync --locked
+      plinth_get uv plinth_uv
+      plinth_cd
+      step "uv sync --locked" uv sync --locked; onfail "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
       # A failed install never fails the job: pytest then runs without
       # coverage and the changed lines are not yet confirmed. Only a merge
       # request's changed lines read coverage's data, so elsewhere it is not
@@ -277,9 +322,18 @@ test:
         else echo "could not read coverage's configuration (exit $rc): --source=$src"; fi
         limited pytest.time-limit uv run --no-sync coverage run --branch --source="$src" -m pytest
       }
+      # A JUnit report for the merge request's Test summary (#1101), through
+      # PYTEST_ADDOPTS so the commands above stay as they are; the job's
+      # artifacts: uploads it, a failed run included.
+      plinth_junit="${CI_PROJECT_DIR:-$plinth_root}/plinth-junit"; mkdir -p "$plinth_junit"
+      plinth_addopts="${PYTEST_ADDOPTS:-}"
+      export PYTEST_ADDOPTS="${plinth_addopts:+$plinth_addopts }--junitxml='$plinth_junit/pytest.xml'"
+      plinth_slow="run uv run pytest --durations=20 here and make the slowest tests faster; raise test-timeout-minutes in the include's inputs only when none stands out and the time moves between runs of the same commit"
       step "pytest on .python-version" run_pytest
       pytest_outcome="$plinth_last"
       time_limit pytest.time-limit "pytest on .python-version"
+      if [ -e "$PLINTH_TMP/pytest.time-limit" ]; then onfail "$plinth_slow"
+      else onfail "run uv run pytest here, fix what the failing test above the Verdict shows, and push"; fi
 
       # Which of the lines a merge request changes ran under the tests (#503).
       # Reported, never failing; a step that breaks leaves no verdict file,
@@ -398,13 +452,16 @@ test:
       extra_versions() {
         local v
         for v in $PLINTH_EXTRA_PYTHON_VERSIONS; do
-          echo "── python $v"
+          echo "── python $v"; plinth_v="$v"
+          PYTEST_ADDOPTS="${plinth_addopts:+$plinth_addopts }--junitxml='$plinth_junit/pytest-$v.xml'"
           limited extra.time-limit uv run --isolated --python "$v" --with pytest pytest -q || return 1
         done
       }
       if [ -n "$PLINTH_EXTRA_PYTHON_VERSIONS" ]; then
         step "pytest on $PLINTH_EXTRA_PYTHON_VERSIONS" extra_versions
         time_limit extra.time-limit "pytest on $PLINTH_EXTRA_PYTHON_VERSIONS"
+        if [ -e "$PLINTH_TMP/extra.time-limit" ]; then onfail "$plinth_slow"
+        else onfail "run uv run --isolated --python ${plinth_v:-<version>} --with pytest pytest here, fix what the failing test above the Verdict shows, and push"; fi
       else say "pass: pytest on extra Python versions, does not apply (the extra-python-versions input is empty)"; fi
       if [ -n "$branch_of_mr" ]; then :
       elif [ -s "$PLINTH_TMP/changed.verdict" ]; then while IFS= read -r l; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/changed.verdict"
@@ -422,9 +479,10 @@ secrets:
     GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
   script:
     - |
-      plinth_gitleaks || exit 1
-      cd "$PLINTH_WORKDIR" || exit 1
+      plinth_get gitleaks plinth_gitleaks
+      plinth_cd
       step "gitleaks, the history included" gitleaks git . --no-banner --redact
+      onfail "revoke each secret gitleaks names above where it was issued, then remove it from the branch history (git rebase or git filter-repo) and push"
       verdict
 
 # The merge request title is Conventional Commits with the standard eleven
@@ -471,7 +529,9 @@ pr-title:
         echo "Types are these eleven only: feat fix docs style refactor perf test build ci chore revert."
         echo "Local meaning goes into the scope (docs(research):, refactor(layout):); do not invent a type."
         echo "Rewrite the title; the format is in https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#land-a-change"
-        say "fail: MR title, it is not Conventional Commits"
+        say "fail: MR title, it is not Conventional Commits: ${title:0:92}"
+        case "$title" in 'Revert "'*) nx 'rewrite it as Revert "type(scope): summary", with one of the eleven types' ;;
+          *) nx "rewrite it as type(scope): summary, type one of feat fix docs style refactor perf test build ci chore revert" ;; esac
         plinth_failed=1
       fi
       # The description, whole: GitLab cuts CI_MERGE_REQUEST_DESCRIPTION at
@@ -843,9 +903,10 @@ pr-title:
       PY
       case "$rc" in
         0) say "not yet confirmed: MR description, no closing keyword stands before an issue outside its closing line by GitLab's default closing pattern, in the title, the description or the commit messages; GitLab's own list of the issues the merge closes cannot be read with the job token, so a project's own closing pattern and a squash or merge commit message template of its own are not read" ;;
-        1) say "fail: MR description, merging it would close an issue its closing line does not name (the lines are above)"; plinth_failed=1 ;;
-        3) say "fail: MR description, the merge request's commit messages could not be read, so they were not checked"; plinth_failed=1 ;;
-        *) say "fail: MR description, it could not be read, so it was not checked"; plinth_failed=1 ;;
+        1) say "fail: MR description, merging it would close an issue its closing line does not name (the lines are above)"; plinth_failed=1
+           nx "reword the sentence so the keyword does not stand before the number, or put the issue on the closing line, then run a new pipeline for the merge request" ;;
+        3) say "fail: MR description, the merge request's commit messages could not be read, so they were not checked"; plinth_failed=1; nx "re-run this job" ;;
+        *) say "fail: MR description, it could not be read, so it was not checked"; plinth_failed=1; nx "re-run this job" ;;
       esac
       # What the person checked themselves and which review ran (#810): a
       # missing, empty or bare "done" field is a not yet confirmed line.
@@ -878,7 +939,7 @@ deps:
         say "pass: $std, does not apply (not a merge request: no base to compare dependencies against)"
         verdict
       fi
-      plinth_osv || exit 1
+      plinth_get osv-scanner plinth_osv
       export OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY="$PLINTH_TMP/osv-db"
       lock="${PLINTH_WORKDIR%/}/uv.lock"; lock="${lock#./}"
       # osv-scanner applies an osv-scanner.toml beside the lockfile, where a
@@ -952,6 +1013,8 @@ deps:
       if [ -s "$PLINTH_TMP/deps.verdict" ]; then say "$(cat "$PLINTH_TMP/deps.verdict")"
       else say "fail: $std, the scan could not run (its error is above); a run where osv-scanner reads both lockfiles confirms it"; fi
       [ "$rc" = 0 ] || plinth_failed=1
+      if grep -q '^fail: ' "$PLINTH_TMP/deps.verdict" 2>/dev/null; then nx "raise each named package past its advisory's fixed version (uv lock --upgrade-package <name>), commit uv.lock and push"
+      else nx "re-run this job, and if it fails again read osv-scanner's error above the Verdict"; fi
       verdict
 
 # A reviewability gate: added plus removed lines, docs and lockfiles left
@@ -985,6 +1048,7 @@ diff-size:
       if ! numstat="$(git diff --numstat "${base}...${head}" -- "${spec[@]}")"; then
         echo "Could not compute the diff (base=${base} head=${head})."
         say "fail: diff size, the diff could not be computed"; plinth_failed=1
+        nx "update the branch from its base and push again, so both commits are fetched"
       else
         added=0; removed=0
         while read -r a d _; do
@@ -998,6 +1062,7 @@ diff-size:
         elif [ "$total" -gt "$PLINTH_MAX_DIFF_LINES" ]; then
           echo "Over the limit. Split the change along its dependency chain (data, then API, then wiring, then UX) into merge requests that land one after another, each branched from main after the one before it merged."
           say "fail: diff size, ${total} lines, over the limit of ${PLINTH_MAX_DIFF_LINES}"; plinth_failed=1
+          nx "split the change into merge requests that land one after another, each branched from main after the one before it merged, and do not shorten docs, docstrings or tests to fit"
         else
           say "pass: diff size, ${total} lines, within the limit of ${PLINTH_MAX_DIFF_LINES}"
         fi
@@ -1204,9 +1269,9 @@ build:
   extends: .plinth
   script:
     - |
-      plinth_uv || exit 1
-      cd "$PLINTH_WORKDIR" || exit 1
-      step "uv sync --locked" uv sync --locked
+      plinth_get uv plinth_uv
+      plinth_cd
+      step "uv sync --locked" uv sync --locked; onfail "run uv sync --locked here: when it says uv.lock needs updating, run uv lock, commit uv.lock and push"
       # A uv workspace (#889): a root whose dependencies include its own
       # members builds every package (`--all-packages`); the plan, empty
       # without a workspace, names the root and the members that are packages.
@@ -1242,7 +1307,7 @@ build:
       PY
         if [ -s "$plan" ]; then uv build --all-packages; else uv build; fi
       }
-      step "uv build" build
+      step "uv build" build; onfail "run uv build here, fix what it names, and push"
       # `uv build` proves the files were produced; whether they install and
       # import in a clean environment is a different sentence. In a
       # workspace only the root's two files are installed, each with
@@ -1294,6 +1359,7 @@ build:
         done
       }
       step "install smoke, the wheel and the sdist in a clean venv" smoke
+      onfail "run uv build here, then install the artifact named above the Verdict into a new venv with uv pip install and import it, fix what it names, and push"
       verdict
 
 # The floor, as far as this pipeline can read it on GitLab: whether the
@@ -1346,6 +1412,7 @@ floor-check:
       }
       if ! plinth_pyyaml; then
         say "fail: $cfg includes plinth's GitLab pipeline at a full commit SHA, PyYAML did not install (its error is above), so nothing read the definition"
+        nx "re-run the pipeline: PyYAML comes from PyPI, and a download that fails there passes on a later run"
         plinth_failed=1
         verdict
       fi
@@ -1423,6 +1490,7 @@ floor-check:
       PY
       while IFS= read -r l || [ -n "$l" ]; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/floor.verdicts"
       [ -s "$PLINTH_TMP/floor.verdicts" ] || { say "fail: the floor, the check wrote no verdicts"; plinth_failed=1; }
+      nx "run /plinth:floor-check here, which writes the fix for each item, and push"
       # The block above is the include rule alone: /plinth:floor-check runs
       # it from this file on a checkout (#543), so these lines stay outside it.
       # A job token reads none of these; /plinth:floor-check, run with a
