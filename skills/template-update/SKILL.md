@@ -114,9 +114,21 @@ before and after it merges. Show those lists whole; they are what the yes is
 to. When a list says it was not compared, pass that on. copier failing on
 the copy stops the plan with its last line: show it and stop.
 
+Its `New questions` list names each question the target tag asks that this
+project never answered and that applies to it, with the default it would
+take and its help. A question with no default stops the plan (exit 1) with
+its name, since copier would record null; it is still asked below.
+
 ## 2. The user's yes
 
-Ask the user whether to apply exactly that plan. Invoking this skill is not
+Before the yes, ask each listed question, one at a time, in the list's
+order: its name, its help, and its default as the recommended answer,
+unless what you know of the person or the project says another answer fits
+(a person who works in Korean, asked `records_language`, is recommended
+`Korean`). The person's answer is theirs to give; never answer for them.
+Keep each answer, or that they kept the default.
+
+Then ask the user whether to apply exactly that plan, with those answers. Invoking this skill is not
 the yes: the yes is to the plan they have just read. Without it, stop.
 
 On a yes, run the `--apply` line the plan printed, as printed, adding your
@@ -126,7 +138,12 @@ own agent and model:
 ${CLAUDE_PLUGIN_ROOT}/scripts/template-update.sh --apply <sha from the plan> --assisted-by <agent>:<model>
 ```
 
-For example `--assisted-by Claude:claude-fable-5-1`. The line ends the pull
+For example `--assisted-by Claude:claude-fable-5-1`. Add `--answer <name>
+<value>` for each question the person answered with other than its
+default, the value as they gave it (`--answer records_language Korean`);
+one left out keeps its default, and the description says "default kept".
+A name the plan did not list is refused (exit 2), having created nothing.
+The line ends the pull
 request description. The script refuses if the default branch moved since
 the plan; then show the plan again and ask again. It stops as the plan does,
 having created nothing, when the plinth pin is behind.

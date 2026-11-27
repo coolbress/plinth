@@ -12,6 +12,7 @@
 #     (tests/fixtures/osps-baseline/<release>.txt);
 #   - every entry whose view is not `report` is listed with why, and with
 #     whether `ci / floor-check` prints it.
+#   - every entry's `docs` link names a heading of the file it names.
 #
 #   tests/floor-check-registry.sh           check
 #   tests/floor-check-registry.sh --write   add the registered ids ids.txt lacks
@@ -144,6 +145,18 @@ listed("not in the report:", [f"{i} {reg[i]['view']}, {'printed' if reg[i]['ci_v
                               f"by ci / floor-check: {reg[i]['view_why']}" for i in off])
 hidden = [i for i, e in reg.items() if not e["ci_visible"]]
 listed("not printed by ci / floor-check:", [f"{i} {reg[i]['name']}" for i in hidden])
+
+# Docs: each entry's `docs` names a file and one of its headings (#1105 moved
+# the explanations to skills/floor-check/reference.md).
+def anchors(path):
+    return {re.sub(r"[^a-z0-9 -]", "", h.strip().lower()).replace(" ", "-")
+            for h in re.findall(r"^#+ (.+)$", path.read_text(encoding="utf-8"), re.M)} if path.is_file() else set()
+broken = [f"{i} {e['docs']}" for i, e in reg.items()
+          if e["docs"].partition("#")[2] not in anchors(root / e["docs"].partition("#")[0])]
+if not broken:
+    ok(f"every entry's docs link names a heading in its file ({len({e['docs'] for e in reg.values()})} links)")
+else:
+    bad("docs links to no heading", broken)
 
 print(f"-- {passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

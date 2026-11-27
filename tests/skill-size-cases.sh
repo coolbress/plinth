@@ -17,11 +17,10 @@ bad() { fail=$((fail+1)); printf '  FAIL  %s\n' "$1"; [ -n "${2:-}" ] && printf 
 fixture() {
   local d="$tmp/$3"
   mkdir -p "$d/tests"
-  # one, and the skills skill-size.sh lists exceptions for, which must exist
-  for s in one floor-check; do
-    mkdir -p "$d/skills/$s"
-    printf -- '---\nname: %s\ndescription: x\n---\nbody\n' "$s" > "$d/skills/$s/SKILL.md"
-  done
+  # one small skill (skill-size.sh lists no exception today; one it listed
+  # would have to exist here too)
+  mkdir -p "$d/skills/one"
+  printf -- '---\nname: one\ndescription: x\n---\nbody\n' > "$d/skills/one/SKILL.md"
   cp "$root/tests/size_caps.py" "$d/tests/size_caps.py"
   if [ -n "$1" ]; then
     python3 - "$d/AGENTS.md" "$1" "$2" <<'PY'

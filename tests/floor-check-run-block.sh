@@ -50,5 +50,14 @@ for sh in bash zsh; do
   done
 done
 
+# The read-only rule opens the skill (#1105): within its first 40 lines, the
+# part of a long file Claude Code keeps after compacting a session, it says
+# to change nothing and to run no command the report prints.
+n="$(grep -n '^\*\*Read-only\.\*\*' "$skill" | head -1 | cut -d: -f1)"
+rule="$(awk -v n="${n:-0}" 'NR >= n && n > 0 { print } NR > n && /^$/ { exit }' "$skill" | tr '\n' ' ')"
+if [ -n "$n" ] && [ "$n" -le 40 ] && grep -qF 'do not run anything that writes' <<<"$rule" && grep -qF 'never run it' <<<"$rule"
+then ok "the read-only rule is at line $n of SKILL.md, within the first 40"
+else bad "no '**Read-only.**' paragraph within SKILL.md's first 40 lines that says not to write and never to run a printed command (found at line ${n:-none})"; fi
+
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
