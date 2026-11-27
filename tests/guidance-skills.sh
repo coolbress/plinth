@@ -13,8 +13,9 @@
 # words: `/security-review` at step 5, `/resume` and `/recap` (same machine
 # only) at step 8, `/insights` on the retrospective row, `/doctor` and
 # `/rewind` under "Something broke", `/design` on the idea row, `/simplify`
-# on the build and check rows, `/run-skill-generator` in the first merge's
-# Also (#1084); `/debug`, which debugs Claude Code, is in no row. The template's end-or-hand-over form is read against
+# on the build and check rows; `/run-skill-generator` is a built-in name the
+# table may use (#1084, the first merge's Also), not one it must keep;
+# `/debug`, which debugs Claude Code, is in no row. The template's end-or-hand-over form is read against
 # the installed skills by tests/install-smoke.sh, which has them.
 # The arsenal's not-used.md (#1086): each entry is "- `/<name>` (<class>).
 # Breaks: <rule>.", its class "built in" or "installed by plinth" (a tool that

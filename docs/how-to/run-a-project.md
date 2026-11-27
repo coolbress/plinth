@@ -70,12 +70,9 @@ missing:
 1. [Its own account](give-the-agent-its-own-account.md), whose step 6 removes your own login, the token included.
 2. [The four things by hand](set-four-things-by-hand.md).
 
-Once the token is done, type `/run-skill-generator` once: built into Claude
-Code, it writes the project a skill of its own that teaches `/run` to build,
-launch and drive the app, beside the template's `verify`, which it leaves as
-it is. Its skill goes in through a pull request like any change: in the trial
-a `web` project's driver printed its throwaway password, and CodeQL's
-required check blocked the merge
+Once the token is done, type `/run-skill-generator` once (built in): it
+writes a skill that teaches `/run` to drive the app, beside the template's
+`verify`; commit it through a pull request like any change
 ([#1084](https://github.com/coolbress/plinth/issues/1084)).
 
 An uptime monitor and an error tracker wait for the first deploy: the
