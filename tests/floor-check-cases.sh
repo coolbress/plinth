@@ -653,6 +653,46 @@ if FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --
 # held to the first ruleset's rule (fail-closed), and the gap is named.
 merge_wall "without --merge-ruleset the shape is said not compared" "FC-E25 info"
 merge_wall "without --merge-ruleset its bypass actor is not let through" "FC-E24 fail"
+# The approvals required against who can merge (#1150): a WARN either way
+# they do not fit, never a FAIL. With the merge ruleset standing, only admins
+# merge, so the agent's own account (write) is not a person here.
+collab() { # <login>:<admin|write|bot> ...: the collaborators list
+  local c out=() l r
+  for c in "$@"; do l="${c%%:*}"; r="${c#*:}"
+    case "$r" in
+      admin) out+=("{\"login\":\"$l\",\"type\":\"User\",\"permissions\":{\"admin\":true,\"push\":true}}") ;;
+      write) out+=("{\"login\":\"$l\",\"type\":\"User\",\"permissions\":{\"admin\":false,\"push\":true}}") ;;
+      bot)   out+=("{\"login\":\"$l\",\"type\":\"Bot\",\"permissions\":{\"admin\":true,\"push\":true}}") ;;
+    esac; done
+  local IFS=,; printf '[%s]' "${out[*]}" > "$mapi/repos/o/r/collaborators?per_page=100.json"
+}
+count() { # <approvals>: the pull_request rule requires that many
+  jq -c --argjson n "$1" "map(if .type == \"pull_request\" then .parameters.required_approving_review_count = \$n else . end) + [$b_rule]" \
+    <<<"$good_rules" > "$mapi/repos/o/r/rules/branches/main.json"
+}
+merge_wall "one person and the agent's account, no approval: a PASS" "FC-E31 pass" "count 0; collab o:admin agent:write" "${M[@]}"
+merge_wall "  and the agent's account is not counted as a person" "and 1 person can merge \(o\)" "count 0; collab o:admin agent:write" "${M[@]}"
+merge_wall "two admins and no approval required: a WARN" "FC-E31 warn" "count 0; collab o:admin b:admin agent:write" "${M[@]}"
+merge_wall "  naming both" "2 people can merge \(b, o\) and no approval is required" "count 0; collab o:admin b:admin agent:write" "${M[@]}"
+merge_wall "  with the two-people command" "add-ruleset-rule.sh o/r two-people" "count 0; collab o:admin b:admin agent:write" "${M[@]}"
+merge_wall "  and fails nothing" '^-- 0 failed' "count 0; collab o:admin b:admin agent:write" "${M[@]}"
+merge_wall "one approval required and one person: a WARN" "FC-E31 warn" "count 1; collab o:admin agent:write" "${M[@]}"
+merge_wall "  saying their own pull requests cannot merge" "only o can merge: a pull request of theirs cannot merge" "count 1; collab o:admin agent:write" "${M[@]}"
+merge_wall "  with the one-person command" "add-ruleset-rule.sh o/r one-person" "count 1; collab o:admin agent:write" "${M[@]}"
+merge_wall "  and fails nothing" '^-- 0 failed' "count 1; collab o:admin agent:write" "${M[@]}"
+merge_wall "one approval and two admins: a PASS" "FC-E31 pass" "count 1; collab o:admin b:admin agent:write" "${M[@]}"
+merge_wall "a bot with admin is not a person" "FC-E31 pass" "count 0; collab o:admin dependabot:bot" "${M[@]}"
+# Without the merge ruleset, everyone with write can merge: the agent's own
+# account is one of them (FC-E25 says to add the ruleset).
+merge_wall "no merge ruleset: write counts" "FC-E31 warn" "count 0; collab o:admin agent:write; jq -c 'map(select(.type != \"update\"))' \"$mapi/repos/o/r/rules/branches/main.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
+merge_wall "collaborators not readable: an INFO, not a SKIP" "FC-E31 info" "count 0; rm -f \"$mapi/repos/o/r/collaborators?per_page=100.json\"" "${M[@]}"
+merge_wall "  that adds nothing unverified (the one is the labels, offline)" '^-- 0 failed, 1 not verified$' "count 0; rm -f \"$mapi/repos/o/r/collaborators?per_page=100.json\"" "${M[@]}"
+merge_wall "collaborators not readable with the Actions token: left to the skill" "FC-E31 review" "count 0; rm -f \"$mapi/repos/o/r/collaborators?per_page=100.json\"" "${M[@]}" --actions-token
+merge_wall "no person with admin among the collaborators: an INFO" "FC-E31 info" "count 1; collab agent:write" "${M[@]}"
+merge_wall "no approval count in the rule: nothing said" '^-- ' "collab o:admin b:admin; rm -f \"$mapi/x\"" "${M[@]}"
+fc_out="$(FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "${M[@]}" 2>&1)"
+if grep -q "approvals required\|can merge (" <<<"$fc_out"; then bad "no approval count in the rule: no FC-E31 line"; else ok "no approval count in the rule: no FC-E31 line"; fi
+rm -f "$mapi/repos/o/r/collaborators?per_page=100.json"
 # CodeQL: enforced by the code_scanning rule (the door since #41) or by
 # a `CodeQL` check name (repositories the door created before that). Either
 # holds the wall; neither does not. The fixture carries both.

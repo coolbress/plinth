@@ -75,12 +75,16 @@ fi
 # Its search for the last look back (#1145) answers from history.json's
 # data.lookBack, else a look back opened a day ago, so that no case is due
 # one unless it says so, whatever day the tests run.
+# The login it runs under (#1150) is data.viewer, else "someone", the login
+# every pull request below is opened by, so that no case has a second person
+# unless it says so.
 if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *mergedPulls* ]]; then
   [ -n "${MOCK_HISTORY_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
   set -o pipefail
   if [ -f "$MOCK_DIR/history.json" ]; then cat "$MOCK_DIR/history.json"
   else echo '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":0},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":0,"nodes":[]},"firstMerges":{"nodes":[]}}}}'
-  fi | jq '.data.lookBack //= {nodes: [{number: 900, title: "Look back \(now - 86400 | todate | .[0:10])", createdAt: (now - 86400 | todate)}]}' | jq -r "$jqf"
+  fi | jq '.data.lookBack //= {nodes: [{number: 900, title: "Look back \(now - 86400 | todate | .[0:10])", createdAt: (now - 86400 | todate)}]}
+    | .data.viewer //= {login: "someone"}' | jq -r "$jqf"
   exit
 fi
 # The latest completed run of ci.yml on main (#1076): runs.json in the REST
@@ -286,6 +290,64 @@ put "$d/issues.json" "$(issue 4 'Ask the user for their name' needs-triage)"
 out="$(MOCK_DIR="$d" "$script" "$d")"
 grep -qxF "command: /triage" <<<"$out" && ! grep -qF "$retro_line" <<<"$out" && ok "a merge an hour ago, no before: /clear: no /retro line" || bad "the /retro line without before: /clear"
 put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
+# A second person (#1150): someone besides the owner and the login this runs
+# under (the agent's own account) who can be assigned issues, or who opened a
+# pull request, open or merged. One line, until a CODEOWNERS file is there.
+d3="$(repo second)"
+people() { # <owner kind> <owner login> <assignable logins, comma-separated> [<first merge's author>]
+  jq -n --arg k "$1" --arg o "$2" --arg a "$3" --arg f "${4:-}" '{data: {repository: {createdAt: "2026-10-01T00:00:00Z", pushedAt: "2026-10-28T00:00:00Z",
+    mergedPulls: {totalCount: 0}, closedIssues: {totalCount: 0}, records: {nodes: []}, releases: {totalCount: 0, nodes: []},
+    tags: {totalCount: 0, nodes: []}, owner: {__typename: $k, login: $o},
+    firstMerges: {nodes: (if $f == "" then [] else [{number: 1, title: "docs: first", mergedAt: "2026-10-02T00:00:00Z", author: {__typename: "User", login: $f}}] end)},
+    assignableUsers: {nodes: ($a | split(",") | map(select(. != "")) | map({login: .}))}}}}' > "$d3/history.json"
+}
+by() { sed "s/\"login\":\"someone\"/\"login\":\"$1\"/"; }
+second_page="$root/docs/how-to/add-a-second-person.md"
+seconds() { grep -c '^a second person: ' <<<"$1" || true; }
+people User o "o,someone,b"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+if [ "$(seconds "$out")" = 1 ] && grep -qF "a second person: b (can be assigned here); before their first change, follow $second_page:" <<<"$out"
+then ok "a collaborator besides the owner and the agent's login: the second-person line, once"; else bad "a collaborator: $(grep '^a second person' <<<"$out" || echo no line)"; fi
+people User o "o,someone"
+put "$d3/open.json" "$(pr 7 'feat: x' false SUCCESS)"; put "$d3/merged.json" "$(pr 6 'feat: y' false SUCCESS | by O)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "only the owner (any case) and the agent's own account: no second-person line" || bad "the owner and the agent alone, yet: $(grep '^a second person' <<<"$out")"
+put "$d3/open.json" "$(pr 7 'feat: x' false SUCCESS | by carol)" "$(pr 8 'chore(deps): bump x' true SUCCESS)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 1 ] && grep -q '^a second person: carol (opened #7); ' <<<"$out" && ok "an open pull request by someone else: the line names them" || bad "an open pull request by carol: $(grep '^a second person' <<<"$out" || echo no line)"
+put "$d3/open.json" "$(pr 8 'chore(deps): bump x' true SUCCESS)"; put "$d3/merged.json" "$(pr 6 'feat: y' false SUCCESS | by dave)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+grep -q '^a second person: dave (opened #6); ' <<<"$out" && ok "a merged pull request by someone else: the line names them" || bad "a merged pull request by dave: $(grep '^a second person' <<<"$out" || echo no line)"
+put "$d3/merged.json" "$(pr 6 'feat: y' false SUCCESS)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "a bot's pull request is not a second person" || bad "Dependabot counted as a person"
+people User o "o,someone,b"; put "$d3/open.json" "$(pr 7 'feat: x' false SUCCESS | by b)" "$(pr 9 'feat: z' false SUCCESS | by e)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 1 ] && grep -q '^a second person: b (can be assigned here), e (opened #9); ' <<<"$out" && ok "seen twice and two people: one line, each named once" || bad "two people: $(grep '^a second person' <<<"$out" || echo no line)"
+mkdir -p "$d3/.github"; : > "$d3/.github/CODEOWNERS"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "a CODEOWNERS file is there: the line has done its work" || bad "CODEOWNERS there, yet the line"
+rm -r "$d3/.github"; put "$d3/open.json"
+out="$(MOCK_HISTORY_FAIL=1 MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "the history not read: no second-person line (the login it runs under is not known)" || bad "the line without the history read"
+people User o "" frank
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+grep -q '^a second person: frank (opened #1); ' <<<"$out" && ok "nobody assignable read, a first merge by someone else: the line names them" || bad "the first merge's author: $(grep '^a second person' <<<"$out" || echo no line)"
+# An organization is not a person: one person and the agent is still one.
+people Organization acme "alice,someone"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "an organization's repository, one person and the agent: no line" || bad "an organization with one person, yet: $(grep '^a second person' <<<"$out")"
+people Organization acme "alice,someone,bob"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+grep -q '^a second person: alice (can be assigned here), bob (can be assigned here); ' <<<"$out" && ok "an organization's repository with two people: the line" || bad "an organization with two people: $(grep '^a second person' <<<"$out" || echo no line)"
+rm "$d3/history.json"
+# The end row (#1150): it opens the end-or-hand-over form, and a handover
+# goes through the second-person page first.
+out="$(MOCK_DIR="$d3" "$script" "$d3" map end)"
+if grep -qF 'purpose: Open the issue form "End or hand over this project" (New issue on GitHub)' <<<"$out" \
+   && grep -qF 'A handover: the new owner joins as a second person first, restores and ships one fix, and only then is the repository moved' <<<"$out" \
+   && grep -qF "for a handover, \`$second_page\` first" <<<"$out"
+then ok "map end: the end-or-hand-over form, and a handover's second-person-first order"; else bad "map end: $(grep -E '^  (purpose|how):' <<<"$out")"; fi
 # What it started with off (#763), through scripts/off-by-default.sh. The
 # whole list is the features view's (#1087), no longer the map's.
 out="$(MOCK_DIR="$d" "$script" "$d" features)"

@@ -237,6 +237,9 @@ What to keep to:
 - An `after the merge:` line goes in part 4 as one sentence: if anything in
   that piece of work should go differently next time, type `/retro` in that
   session before `/clear`.
+- An `a second person:` line goes in part 4 as one sentence: who, and
+  that the page it names comes before their first change. It stops once a
+  CODEOWNERS file is there.
 - When `command:` says to undo a pull request first (`main`'s latest CI run
   failed on its merge), say that `main` is broken by that merge and the
   undo comes before any fix: the project's `docs/how-to/undo-a-merged-change.md`

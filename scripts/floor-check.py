@@ -1123,6 +1123,22 @@ def _wall() -> tuple[dict, ...]:
                         "unlisted": "the tag ruleset not verified: this repository's rulesets could not be listed",
                         "members": "the tag ruleset for members released on their own tags not verified: "
                                    "[tool.plinth.release] own-tags in pyproject.toml could not be read here"}),
+        check("FC-E31", "the approvals required match who can merge", states=("pass", "warn", "review", "info"),
+              handoff="admin", docs=WALL_DOCS, hosts=gh, needs=net, lifecycle="experimental",
+              fix="the two-person rules, or back to one: scripts/add-ruleset-rule.sh <repo> two-people or one-person",
+              messages={"good": "{branch}: {required} required, and {people} can merge ({who})",
+                        "none": "{branch}: {people} can merge ({who}) and no approval is required: nothing makes one "
+                                "of them look at the other's change",
+                        "alone": "{branch}: {required} required, and only {who} can merge: a pull request of theirs "
+                                 "cannot merge, as nobody else's approval counts",
+                        "hint": "  scripts/with-admin-token.sh scripts/add-ruleset-rule.sh {repo} {preset}   (from a "
+                                "plinth checkout; its docs/how-to/add-a-second-person.md says when)",
+                        "review": "who can merge is not read here: /plinth:floor-check reads the collaborators with a "
+                                  "login that administers the repository",
+                        "unread": "{branch}: the approvals required are not compared with who can merge: the "
+                                  "collaborators could not be read (that needs push access)",
+                        "nobody": "{branch}: the approvals required are not compared with who can merge: no person "
+                                  "with {role} access is among the collaborators read"}),
         check("FC-E30", "the repository has a description", states=("pass", "info"), handoff="admin",
               docs=BESIDE_DOCS, hosts=gh, needs=net, fix="set one with gh repo edit <repo> --description '<one line>'",
               messages={"good": "the repository has a description",
@@ -5515,6 +5531,45 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             emit("FC-E24", "unknown", "unread", {"rid": rid}, reason="bypass actors not read")
         else:
             verdict("FC-E24", actors == [], {"rid": rid, "actors": actors})
+    if "pull_request" in by_type:
+        check_approvals(repo, branch, pr, reserved, network, actions_token)
+
+
+def check_approvals(repo: str, branch: str, pr: dict, reserved: str | None, network: bool,
+                    actions_token: bool) -> None:
+    """The approvals the pull-request rule requires against the people who
+    can merge (#1150), a WARN either way it does not fit: two or more people
+    and no approval, so neither has to look at the other's change; or an
+    approval required and one person, whose own pull requests then cannot
+    merge. Who can merge is the admins where the merge ruleset stands (an
+    agent's own account is a collaborator with write, never the admin), and
+    everyone with write where it does not; bots are not people."""
+    required = pr.get("required_approving_review_count")
+    if not isinstance(required, int):
+        return
+    got = api(f"repos/{repo}/collaborators?per_page=100", network, paginate=True)
+    if not isinstance(got, list) and actions_token:
+        emit("FC-E31", "review", "review", reader=ADMIN_READER)
+        return
+    if not isinstance(got, list):
+        emit("FC-E31", "info", "unread", {"branch": branch})
+        return
+    role = "admin" if reserved in ("stands", "never") else "push"
+    who = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
+                 and (c.get("permissions") or {}).get(role) is True)
+    values = {"branch": branch, "who": ", ".join(who) or "nobody",
+              "people": f"{len(who)} {'person' if len(who) == 1 else 'people'}",
+              "required": f"{required} approval{'' if required == 1 else 's'}", "repo": repo}
+    if not who:
+        emit("FC-E31", "info", "nobody", dict(values, role="admin" if role == "admin" else "write"))
+    elif len(who) >= 2 and required == 0:
+        emit("FC-E31", "warn", "none", values)
+        emit("FC-E31", "info", "hint", dict(values, preset="two-people"))
+    elif required >= 1 and len(who) == 1:
+        emit("FC-E31", "warn", "alone", values)
+        emit("FC-E31", "info", "hint", dict(values, preset="one-person"))
+    else:
+        emit("FC-E31", "pass", "good", values)
 
 
 def bypass_key(actor: dict) -> tuple[str, str, str]:
