@@ -62,7 +62,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | Proof | Code with no test that pins it | `/implement` (calls `tdd`, `code-review`) | person; `tdd` agent | Type `/implement #N` | 0 and 0; tests first via text (U2, RC1, #302 27 of 27) |
 | Proof | A plausible change that misses a case | A fresh-context review: a new subagent given only the diff, the issue's criteria and the Code Review Rules (the default, from the template's `AGENTS.md`); `code-review`, run by the authoring session, not independent | agent | Nothing to type: `AGENTS.md` asks the agent to run it before the pull request (template v1.38.0), and the agent may skip it; ask "which review ran?" | `code-review` 1 (U1, after the person asked); fresh-context: one trial on a docs change, 4 findings, 2 of them not in the same-session review, which had 6 the fresh one did not (#808) |
 | Health, Proof | Scaffolding or reshuffling the change did not need; a commit over a red or wrong check | The template's `verify`, its cleanup step and its check of the commit | commit | Nothing to type: Claude Code asks the agent to run it before a code commit, and the agent may skip it; check the commit | The check: 5 of 6 (#458); on Sonnet 5.5 0 of 10 beside `simplify` (#474). The cleanup: on Sonnet 5.5 0 of 5 before. Both as one skill with shell writes refused: Sonnet 5.5 4 of 5, Opus 5.5 5 of 5 (#496) |
-| Use | A page that looks templated | `design-taste-frontend` | person names it | Say so in the ticket, or type `/design-taste-frontend` | 1 named (U2); 0 unnamed on a rendered repository (#469) |
+| Use | A page that looks templated | `frontend-design` (#1082) | person names it | Say so in the ticket, or type `/frontend-design` | Not run yet for `frontend-design`; `design-taste-frontend`, the skill it replaced: 1 named (U2), 0 unnamed on a rendered repository (#469) |
 | Flow | A merge or rebase conflict | No tool: ask the agent to show both sides of each conflict and say which to keep | person | Ask the agent to show both sides of each conflict and say which to keep | 0; none arose; `resolving-merge-conflicts` was removed upstream in v1.3.2 (#714) |
 
 ### 5 Check
@@ -113,7 +113,7 @@ Four criteria (#475) for the plugins and skills plinth installs or lists:
 what a tool has to show to be added or kept. The exceptions below are the
 known gaps, not a certificate that every other tool was checked against every
 criterion; `last30days` and Impeccable, for instance, are listed for rows
-`research` and `design-taste-frontend` also answer. The other rows name
+`research` and `frontend-design` also answer. The other rows name
 what plinth does not select: Claude Code's built-ins (`/clear`, `/run`,
 `/security-review`, `/resume`, `/recap`, `/insights`, `/doctor`), the
 generated repository's text and its `verify` skill (shipped by
@@ -149,7 +149,8 @@ Named exceptions:
   because `/implement` calls it by name (above).
 - **Cost measured only in part** (criterion 2): every entry's share of the
   listing and its hooks are measured, but tokens per call are measured only
-  for `taste-skill` and `last30days`, and run time only for `last30days`'s
+  for `taste-skill` (the page-design skill before #1082) and `last30days`, and
+  run time only for `last30days`'s
   hook. For the rest, `ponytail`'s "~1k tokens" included, the Cost column is
   the part measured so far. Impeccable's cost is stated as what it writes into
   the repository, not in tokens.

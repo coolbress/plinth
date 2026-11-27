@@ -177,7 +177,7 @@
 
 | Check | Asserts | A red means | The fix |
 | --- | --- | --- | --- |
-| `image` | The container image builds, runs, and its first log line carries `"message": "started"`; required for `backend`, `data-ml` and `web` | The image does not build, does not start, or does not log that it started | `docker build -t app . && docker run --rm app` locally |
+| `image` | The container image builds, runs, and its first log line carries `"message": "started"`; required for `backend`, `data-ml` and `web`; `cli`, `library` and `dashboard` ship no container, so their wall has no `image` | The image does not build, does not start, or does not log that it started | `docker build -t app . && docker run --rm app` locally |
 
 ## Required for the web archetype
 
