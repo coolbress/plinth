@@ -2625,6 +2625,68 @@ def moves_lines(d: dict) -> list[str]:
             for f, old, new in d.get("moves", [])]
 
 
+def question_help(text: str, key: str) -> list[str] | None:
+    """The `help:` of the top-level question <key> in a copier.yml, as lines:
+    a plain or quoted scalar, or a `|` or `>` block (dedented; `>` folded into
+    one line). None when the question or its help is not there. Not a YAML
+    parser: the `help:` line one level inside the top-level `<key>:` block."""
+    m = re.search(rf"^{re.escape(key)}:[ \t]*\n((?:[ \t]+.*\n|[ \t]*\n)*)", text + "\n", re.MULTILINE)
+    if not m:
+        return None
+    lines = m.group(1).splitlines()
+    inner = min((len(x) - len(x.lstrip()) for x in lines if x.strip()), default=0)
+    for i, line in enumerate(lines):
+        if len(line) - len(line.lstrip()) != inner or not line.lstrip().startswith("help:"):
+            continue
+        v = line.lstrip()[len("help:"):].strip()
+        if v[:1] in ("|", ">"):
+            block: list[str] = []
+            for x in lines[i + 1:]:
+                if x.strip() and len(x) - len(x.lstrip()) <= inner:
+                    break
+                block.append(x)
+            while block and not block[-1].strip():
+                block.pop()
+            deeper = min((len(x) - len(x.lstrip()) for x in block if x.strip()), default=0)
+            block = [x[deeper:] for x in block]
+            return [" ".join(x.strip() for x in block if x.strip())] if v[0] == ">" else block
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+            v = v[1:-1]
+        return [v] if v else None
+    return None
+
+
+def print_question_help(names: list[str], network: bool) -> int:
+    """--print-question-help (#1185): for each named question, its name on a
+    line, then its help from the copier.yml of the tag this plinth targets
+    (read at the commit new-project.sh pins), each line indented by two; a
+    question with no help there is followed by `  (no help in copier.yml)`;
+    a blank line of help is printed as two spaces, so only a name starts a line.
+    Exit 0; exit 1 with the reason on stderr when copier.yml is not read."""
+    pin = new_project_pin()
+    if not pin:
+        print("no template pin beside this script", file=sys.stderr)
+        return 1
+    template_repo, target, target_sha = pin[0], pin[1], pin[2]
+    data = api(f"repos/{template_repo}/contents/copier.yml?ref={target_sha}", network)
+    text = None
+    if isinstance(data, dict):
+        try:
+            text = base64.b64decode(data["content"]).decode()
+        except (TypeError, KeyError, ValueError):
+            text = None
+    if text is None:
+        print(f"{template_repo} copier.yml at {target}: {'not found' if data is ABSENT else 'offline or API error'}",
+              file=sys.stderr)
+        return 1
+    for name in names:
+        print(name)
+        # A blank line of the help stays indented: only a name starts a line.
+        for line in question_help(text, name) or ["(no help in copier.yml)"]:
+            print(f"  {line}".rstrip() or "  ")
+    return 0
+
+
 def new_project_pin() -> tuple[str, str, str, str, str] | None:
     """(template_repo, template_ref, template_sha, copier_version, copier_newer) as
     scripts/new-project.sh pins them -- read from that file and nowhere else
@@ -6150,6 +6212,9 @@ def main() -> int:
                     help="print the template CHANGELOG's section headings from the recorded tag to the one this plinth "
                          "targets, with each section's files-and-questions block; exit 0, or the compare link and "
                          "exit 1 when not read (#1184)")
+    ap.add_argument("--print-question-help", nargs="+", metavar="NAME",
+                    help="print each named question of the copier.yml this plinth targets with its help, indented; "
+                         "exit 1, with the reason, when copier.yml is not read (#1185)")
     ap.add_argument("--print-plugin-skew", action="store_true",
                     help="compare the template tag this plinth targets with the latest release's and the CI pin's: exit 3 "
                          "with what to type when it is older, else exit 0, a failed read said on stderr (#843)")
@@ -6204,6 +6269,8 @@ def main() -> int:
         return print_diff_size(root)
     if a.print_template_changes:
         return print_template_changes(root, not a.no_network)
+    if a.print_question_help:
+        return print_question_help(a.print_question_help, not a.no_network)
     if a.print_plugin_skew:
         return print_plugin_skew(root, not a.no_network, a.host)
     if a.print_behind:
