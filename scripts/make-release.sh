@@ -59,6 +59,11 @@
 # highest vX.Y.Z tag is less than 7 days old, unless the why carries one line
 #   hotfix: <reason>
 # which stays in the section and the Release. An empty reason always stops.
+# A release the owner decided to cut early that is not a hotfix carries
+# instead one line naming the comment that records the decision:
+#   train exception: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>
+# Run 1 reads that comment through gh and stops when it cannot; the line stays
+# in the section and the Release. A why with both lines stops.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -258,6 +263,21 @@ if [ -n "$hotfix_line" ] && [ -z "$(tr -cd '[:alpha:]' <<<"${hotfix_line#hotfix:
   stop "the why's 'hotfix:' line must give the reason: a published advisory reaching what plinth ships or pins," \
        "installing plinth as the README says failing, or a consumer's required check failing because of plinth"
 fi
+# An early release that is not a hotfix (#1132's exception of 2026-11-27):
+# one line naming the comment that records the decision, read here so a link
+# to nothing does not pass.
+exception_line="$(grep -E '^train exception:' "$why_file" || true)"
+if [ -n "$exception_line" ]; then
+  [ "$(grep -c . <<<"$exception_line")" -le 1 ] || stop "the why-file has more than one 'train exception:' line:" "$exception_line"
+  [ -z "$hotfix_line" ] || stop "the why-file has both a 'hotfix:' and a 'train exception:' line; an early release is one or the other"
+  exception_re='^train exception: <https://github\.com/([^/[:space:]]+/[^/[:space:]]+)/issues/[0-9]+#issuecomment-([0-9]+)>$'
+  [[ "$exception_line" =~ $exception_re ]] \
+    || stop "the 'train exception:' line must be the link to the comment that records the decision, in angle brackets:" \
+            "  train exception: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>"
+  exc_repo="${BASH_REMATCH[1]}"; exc_id="${BASH_REMATCH[2]}"
+  exc_body="$(gh api "repos/$exc_repo/issues/comments/$exc_id" --jq .body 2>/dev/null)" && [ -n "$exc_body" ] \
+    || stop "cannot read the comment the 'train exception:' line names ($exc_repo comment $exc_id); nothing changed"
+fi
 rc=0; tags="$(git ls-remote --exit-code --tags --refs origin 'refs/tags/v*' 2>&1)" || rc=$?
 case "$rc" in 0|2) ;; *) stop "cannot list origin's tags (git ls-remote exit $rc); nothing changed" ;; esac
 prev_tag="$(sed -nE 's|^[0-9a-f]+[[:space:]]+refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)$|\1|p' <<<"$tags" | sort -V | tail -1)"
@@ -270,14 +290,16 @@ if [ -n "$prev_tag" ]; then
   born="$(git cat-file tag FETCH_HEAD | sed -nE 's/^tagger .* ([0-9]+) [-+][0-9]{4}$/\1/p')"
   [[ "$born" =~ ^[0-9]+$ ]] || stop "cannot read the date of $prev_tag; nothing changed"
   age=$(( $(date +%s) - born ))
-  if [ "$age" -lt $(( 7 * 86400 )) ] && [ -z "$hotfix_line" ]; then
+  if [ "$age" -lt $(( 7 * 86400 )) ] && [ -z "$hotfix_line" ] && [ -z "$exception_line" ]; then
     stop "$prev_tag is $(( age / 86400 )) days $(( age % 86400 / 3600 )) hours old: plinth releases at most once a week (docs/how-to/cut-a-release.md)." \
          "wait until it is 7 days old, or, for a hotfix, add one line to the why-file:" \
          "  hotfix: <reason>" \
          "(a published advisory reaching what plinth ships or pins, installing plinth as the README says failing," \
-         " or a consumer's required check failing because of plinth); the release section and the Release carry it"
+         " or a consumer's required check failing because of plinth); the release section and the Release carry it." \
+         "An early release the owner decided on, not a hotfix, names the comment that records the decision instead:" \
+         "  train exception: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>"
   fi
-  echo "the release before, $prev_tag, is $(( age / 86400 )) days old${hotfix_line:+; $hotfix_line}"
+  echo "the release before, $prev_tag, is $(( age / 86400 )) days old${hotfix_line:+; $hotfix_line}${exception_line:+; $exception_line}"
 fi
 grep -q '^## \[Unreleased\]$' "$changelog" || stop "CHANGELOG.md has no '## [Unreleased]' section to release from"
 grep -qE '^\[Unreleased\]: [^[:space:]]+/compare/[^[:space:]]+\.\.\.HEAD$' "$changelog" \

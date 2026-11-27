@@ -24,6 +24,13 @@ when origin's highest `vX.Y.Z` tag is less than 7 days old and the why-file
 has no `hotfix:` line, it stops before changing anything and names the tag
 and its age. A `hotfix:` line with no reason always stops.
 
+An early release that is not a hotfix goes out only when the owner decided
+it in a comment, as on #1132 for v2.46.0. The why-file then carries one line
+instead of `hotfix:`, the comment's link in angle brackets:
+`train exception: <https://github.com/coolbress/plinth/issues/1132#issuecomment-7210202040>`.
+Run 1 reads that comment with `gh` and stops when it cannot. The line stays
+in the release's section and its GitHub Release. A why with both lines stops.
+
 You need a clone whose `main` equals `origin/main` with no uncommitted changes
 to tracked files, and `gh` logged in with write access to the repository.
 
@@ -218,6 +225,9 @@ the move changes what a new project's agent reads, and then asks for
 
 | It says | Do this |
 | --- | --- |
+| The release before is less than 7 days old | Wait, or add `hotfix: <reason>` for a hotfix, or `train exception: <link>` for an early release the owner decided in a comment ([Before you start](#before-you-start)) |
+| Cannot read the comment the `train exception:` line names | Check the link and that `gh` is logged in, then run step 3 again |
+| The why-file has both a `hotfix:` and a `train exception:` line | Keep the one that is true |
 | The why must say what this release was tested with | Add the exact line it prints; if you tested another template tag, raise the pin first ([How to upgrade the template pin](upgrade-the-template-pin.md)) |
 | The why says nothing but the tested line | Add a sentence on why the release exists |
 | The why has a heading line | Remove every line that starts with `#` |
