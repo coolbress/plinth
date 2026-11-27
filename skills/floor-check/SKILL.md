@@ -103,7 +103,13 @@ why; the summary counts them on their own, `K do not apply`.
 
 Give the person the report `floor-report.py` printed, in their language, line
 for line and in its order: keep its numbers, file names and commands as
-printed, add no line, and drop none. It is already the short form:
+printed, add no line, and drop none. It is already the short form.
+
+Your answer's first line is the report's first line, the verdict. Write
+nothing before it: no line saying the check ran or changed nothing (the
+verdict says that). What the repository's output style asks you to say first
+at a task's start (who you work as, the goal) comes right after the verdict,
+never before it. The report's lines are:
 
 - the first line is the verdict;
 - at most five action rows, those that cannot be undone or reach others
@@ -120,7 +126,8 @@ printed, add no line, and drop none. It is already the short form:
 - what could not be read, which is not a failure, and what would read it;
 - what was not checked, which is not a problem;
 - the passes as one line;
-- one question, last. End with it: ask nothing else.
+- one question, last. End with it: ask nothing else, and write nothing
+  after it, not an Insight block either (the check changed nothing).
 
 Do not write a check's id (`FC-…`) in the chat.
 
@@ -154,9 +161,10 @@ Protection on a private repository) is a fact about the plan: buying it is the
 user's choice, never a step to run or to recommend as a repair.
 
 A yes to the pull-request question ends this check, which changed nothing.
-Say that the pull request is a change of its own, made after the check in a
-new session the way the project makes every change (a branch, the plan
-approved, a pull request), and that `/plinth:guide` names the step.
+Only after that yes, never under the question, say that the pull request is a
+change of its own, made after the check in a new session the way the project
+makes every change (a branch, the plan approved, a pull request), and that
+`/plinth:guide` names the step.
 
 When the report says the check stopped early, say so first: what it read
 before stopping is all there is, and the rest was not checked.
