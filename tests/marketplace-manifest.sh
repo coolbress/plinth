@@ -30,7 +30,7 @@ check(market.get("version") == plugin["version"], f"marketplace.json version equ
 
 deps = plugin["dependencies"]
 names = [d["name"] if isinstance(d, dict) else d for d in deps]
-check(names == ["mattpocock-skills", "taste-skill"],
+check(names == ["mattpocock-skills", "frontend-design"],
       f"dependencies are exactly the default two: {names}")
 check(all(isinstance(d, str) for d in deps), "every dependency resolves in plinth's marketplace, none cross-marketplace")
 # Listed, not installed: in the catalog (so `claude plugin install <name>@plinth`
@@ -46,10 +46,12 @@ for n in listed:
 plinth_says = entries["plinth"]["description"]
 check("No hooks in the default set." in plinth_says and "hook" not in plinth_says.replace("No hooks in the default set.", "").lower(),
       "plinth entry: the description says the default set has no hooks, and names none")
-# One tool per slot: frontend-design and taste-skill are never both on (#68, from #149).
+# One tool per slot: frontend-design and taste-skill are never both listed (#68,
+# from #149; #1082 made frontend-design the one).
 # Impeccable is listed in the arsenal with its own installer and is not a marketplace entry;
 # claude-security and sentry are listed with the official marketplace's install line (#1080).
-for n in ("frontend-design", "impeccable", "claude-security", "sentry", "i-have-adhd", "playbook", "review"):
+check(not ("frontend-design" in entries and "taste-skill" in entries), "frontend-design and taste-skill are never both listed")
+for n in ("taste-skill", "impeccable", "claude-security", "sentry", "i-have-adhd", "playbook", "review"):
     check(n not in entries, f"no marketplace entry named {n}")
 
 pinned = {n: p["source"].get("sha") for n, p in entries.items() if isinstance(p["source"], dict)}
@@ -83,13 +85,15 @@ for where, text in (("catalog description", ponytail_skills.get("description", "
     check(len(held) == 7 and held in text and "pre-v5" in text and "over-engineering" in text,
           f"ponytail-skills {where} names the pin it describes ({held}), the pre-v5 hold and the over-engineering audit")
 
-# One taste-skill skill by default (#469): design-taste-frontend is
-# self-contained; the other twelve need an image tool, serve another product, or
-# repeat it. Narrowed under the same name and source, like ponytail-skills.
-taste = entries["taste-skill"]
-check(taste.get("strict") is False and taste.get("skills") == ["./taste-skill"], "taste-skill: strict false, the one skill ./taste-skill")
-check(taste["source"]["source"] == "git-subdir" and taste["source"]["path"] == "skills", "taste-skill mounts skills/ only, below the upstream plugin.json")
-check("design-taste-frontend" in taste["description"] and "Thirteen" not in taste["description"], "taste-skill description names the one skill, not thirteen")
+# Anthropic's frontend-design, the one page-design skill by default (#1082):
+# the official directory's plugin folder, its skills/ mounted below its
+# plugin.json, the one skill exposed, and no hooks said.
+fd = entries["frontend-design"]
+check(fd["source"].get("source") == "git-subdir" and fd["source"].get("url") == "https://github.com/anthropics/claude-plugins-official.git"
+      and fd["source"].get("path") == "plugins/frontend-design/skills",
+      "frontend-design: git-subdir of claude-plugins-official, plugins/frontend-design/skills")
+check(fd.get("strict") is False and fd.get("skills") == ["./frontend-design"], "frontend-design: strict false, the one skill ./frontend-design")
+check("One frontend-design skill" in fd["description"] and "No hooks" in fd["description"], "frontend-design description names the one skill and No hooks")
 
 # 15 of mattpocock/skills' 27 by default (#520, #704, #714); 6 more are listed in
 # mattpocock-skills-extra and six are in neither (#475, #714). Moved from

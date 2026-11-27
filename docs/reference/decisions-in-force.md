@@ -118,7 +118,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Each pull request writes its changelog line as a fragment, and `make-release.sh` assembles the fragments into the version's section at release; the release pull request's pass rule changes with it. 2026-11-25, #1136
 - Released CHANGELOG sections stay as published; corrections go in the next section. 2026-10-13, #511
 - A dependency entry narrows its skills inside the entry and is never renamed or moved. 2026-10-10, #407
-- An update does not install a dependency under a new name, and a `renames` map drops the old one silently; so an entry keeps its name. 2026-10-10, #468
+- An update does not install a dependency under a new name, and a `renames` map drops the old one silently; so an entry keeps its name. Measured before Claude Code 2.1.319, which installs the new name; the old one still stays, failing. 2026-10-10, #468
 - An entry whose upstream root carries a `plugin.json` narrows its skills through a `git-subdir` source under the same name; installed copies need `claude plugin update <name>@plinth` once. 2026-10-10, #469
 - A move from another marketplace into plinth's under the same name needs `claude plugin install plinth@plinth` then `claude plugin prune`, named in the release note. 2026-10-10, #477
 - A raised marketplace pin is a pull request whose release note names `claude plugin update <name>@plinth`: `update plinth` does not fetch it. 2026-10-30, #714
@@ -126,7 +126,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Dependencies that run a hook stay out of the default set (last30days moved to the catalog). 2026-09-30, #354
 - ponytail-skills is not a dependency; its entry stays listed. 2026-10-19, #598
 - mattpocock-skills installs a narrowed set; the listed skills install as `mattpocock-skills-extra@plinth`. 2026-10-19, #593
-- The design default is the pinned taste-skill (`design-taste-frontend`); a raise is measured first, is its own pull request, and its note names `claude plugin update taste-skill@plinth`. 2026-11-24, #1082 (decided; not built yet: #1082)
+- The page-design default is Anthropic's `frontend-design`, pinned to a commit of claude-plugins-official, in place of taste-skill: in #713's blind trial (2026-10-31, three briefs, three runs a cell) it graded the same as or higher than taste-skill on every brief at about 63% of its cost a run, and taste-skill's pin cannot be raised (upstream added Node scripts). Replaces #713's decision to keep taste-skill. 2026-11-26, #1082
 - `make-release.sh` run 1 stops when the pinned template's `AGENTS.md`, `CLAUDE.md` or `.claude/` changed, unless the why-file records an eval-suite run; plinth's own skills are outside this guard. 2026-10-28, #700
 - When a release owes both the eval suite and the smoke run, one `scripts/eval-suite.sh --release` run on the release candidate serves both, its link in the release pull request's description and the GitHub Release; the full suite is still required when the template's `AGENTS.md` or `.claude/` changed, with no waiver and no check-name change. 2026-11-25, #1134 (decided; not built yet: #1134)
 - The eval suite is a script around `claude -p`, not `claude plugin eval`. 2026-10-25, #647

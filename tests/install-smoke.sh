@@ -140,7 +140,8 @@ expect() {  # expect <plugin> <needle>...
   echo "  PASS  $1: ${*:2}"
 }
 expect plinth@plinth "Skills (6)" "arsenal" "floor-check" "guide" "new-project" "records-check" "template-update" "Hooks (0)"
-expect taste-skill@plinth "Skills (1)  design-taste-frontend" "Hooks (0)"
+# Anthropic's frontend-design, one skill, in place of taste-skill (#1082).
+expect frontend-design@plinth "Skills (1)  frontend-design" "Hooks (0)"
 # 15 of the 27 skills upstream ships (#520, #593, #704, #714): 6 more are listed
 # in mattpocock-skills-extra, and six are in neither (#475, #477, #714).
 added=(to-spec to-tickets wayfinder improve-codebase-architecture handoff retro writing-for-agents)
@@ -266,6 +267,15 @@ done
 # of its tag, then replaced by this checkout's files, its version raised so that
 # `update` sees a newer one (a pull request carries the released version).
 upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
+# A dependency that left plinth for another (taste-skill for frontend-design,
+# #1082): `update` does not remove the old one, which stays "not found in
+# marketplace", and `prune` cannot tell an orphan while it is (measured for
+# #468). From Claude Code 2.1.319 `update` installs the new one; before it, it
+# did not (#468, on 2.1.296). The README names install, then uninstall of the
+# old one.
+swap_cmds=("claude plugin install plinth@plinth" "claude plugin uninstall taste-skill@plinth")
+grep -qF "\`${swap_cmds[0]}\` and then \`${swap_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/README.md")" \
+  || { echo "  FAIL  README.md does not name \`${swap_cmds[0]}\` and then \`${swap_cmds[1]}\`"; exit 1; }
 # The docs name them in this order; the other order leaves no mattpocock-skills
 # skill until `install` runs.
 # The README is their one source (#835); tests/doc-consistency.sh holds the
@@ -299,6 +309,7 @@ rm -rf "$up/mkt/.git"
   # With the release's mattpocock-skills-extra installed too: the case where a
   # skill moved between the two entries (#704) could end up under both names.
   claude plugin install mattpocock-skills-extra@plinth -y >/dev/null
+  had_taste=no; rel_list="$(claude plugin list --json)"; ! grep -qF '"taste-skill@plinth"' <<<"$rel_list" || had_taste=yes
   rm -rf "$up/mkt" && mkdir "$up/mkt"
   (cd "$root" && git ls-files -z -co --exclude-standard | tar --null -T - -cf -) | tar -xf - -C "$up/mkt"
   for m in plugin.json marketplace.json; do
@@ -309,7 +320,41 @@ rm -rf "$up/mkt/.git"
   claude plugin list --json | python3 -c 'import json, sys
 for p in json.load(sys.stdin):
     print("  INFO  after update alone: %s errors=%s" % (p["id"], p.get("errors", [])))'
-  for c in "${upgrade_cmds[@]}"; do echo "+ $c -y"; read -ra cmd <<<"$c"; "${cmd[@]}" -y; done
+  # What `update` alone does to the swap (#1082), held to what the README
+  # says: taste-skill stays, with an error, when the release installed it, and
+  # from 2.1.319 frontend-design is installed. Below 2.1.319 (the floor is
+  # 2.1.274) whether frontend-design is installed is recorded, not judged. A
+  # Claude Code that does otherwise fails here, so the README's one-time
+  # commands are rewritten, not left stale.
+  new_dep_v=2.1.319
+  new_dep=no; [ "$(printf '%s\n%s\n' "$new_dep_v" "$v" | sort -V | head -1)" = "$new_dep_v" ] && new_dep=yes
+  claude plugin list --json | python3 -c 'import json, sys
+ids = {p["id"]: p for p in json.load(sys.stdin)}
+had, new_dep, v, new_dep_v = sys.argv[1] == "yes", sys.argv[2] == "yes", sys.argv[3], sys.argv[4]
+for n in ("taste-skill@plinth", "frontend-design@plinth"):
+    print("  INFO  after update alone, %s: %s" % (n, ("installed, errors=%s" % ids[n].get("errors", [])) if n in ids else "not installed"))
+bad = []
+if had:
+    if "taste-skill@plinth" not in ids:
+        bad.append("update removed taste-skill@plinth")
+    elif not ids["taste-skill@plinth"].get("errors"):
+        bad.append("taste-skill@plinth has no error after update")
+else:
+    print("  INFO  the release did not install taste-skill@plinth: nothing to leave behind")
+if new_dep and "frontend-design@plinth" not in ids:
+    bad.append("update did not install frontend-design@plinth on claude %s (%s or later)" % (v, new_dep_v))
+if not new_dep:
+    print("  INFO  claude %s is below %s: frontend-design@plinth %s after update alone, recorded, not judged" % (v, new_dep_v, "installed" if "frontend-design@plinth" in ids else "not installed"))
+if bad:
+    print("  FAIL  " + "; ".join(bad) + ": the README says otherwise; rewrite its one-time commands"); sys.exit(1)
+print("  PASS  update alone left the swap as the README says")' "$had_taste" "$new_dep" "$v" "$new_dep_v"
+  # Then the README's commands, in its order: install plinth@plinth, then the
+  # old dependency's uninstall (no -y: without --prune it asks nothing, and the
+  # floor may not take it), then prune for the moves of v1.11.0 and earlier.
+  echo "+ ${swap_cmds[0]} -y"; read -ra cmd <<<"${swap_cmds[0]}"; "${cmd[@]}" -y
+  if [ "$had_taste" = yes ]; then echo "+ ${swap_cmds[1]}"; read -ra cmd <<<"${swap_cmds[1]}"; "${cmd[@]}"
+  else echo "  INFO  $tag did not install taste-skill@plinth: no uninstall"; fi
+  echo "+ ${upgrade_cmds[1]} -y"; read -ra cmd <<<"${upgrade_cmds[1]}"; "${cmd[@]}" -y
   for c in "${dep_cmds[@]}"; do echo "+ $c"; read -ra cmd <<<"$c"; "${cmd[@]}"; done
   # check_list holds no ponytail-skills here: the release installed it as a
   # dependency, and `prune` removed it once plinth no longer names it (#598).
@@ -325,5 +370,34 @@ for p in json.load(sys.stdin):
   not_expect mattpocock-skills-extra@plinth "${added[@]}"
   # /ponytail-audit comes back the same way, from the entry the marketplace keeps (#598).
   echo "+ claude plugin install ponytail-skills@plinth -y"; claude plugin install ponytail-skills@plinth -y
+  expect frontend-design@plinth "Skills (1)  frontend-design" "Hooks (0)"
   expect ponytail-skills@plinth "Skills (1)" "ponytail-audit" "Hooks (0)"
+)
+
+# A person who installed Anthropic's frontend-design from the official
+# marketplace before plinth (#1082): both copies install under their own
+# marketplaces. Recorded as INFO, never a failure: the official marketplace is
+# read at its live head, unpinned, so a clone failure or an upstream rename
+# there says nothing about plinth. Which copy a session's `/frontend-design`
+# runs is a session's to say, not this script's.
+both="$CLAUDE_CONFIG_DIR/both-copies"
+mkdir -p "$both"
+(
+  set +e
+  export CLAUDE_CONFIG_DIR="$both"
+  echo "-- frontend-design from the official marketplace first, then plinth (recorded, not judged)"
+  claude plugin marketplace add anthropics/claude-plugins-official >/dev/null 2>&1 \
+    && claude plugin install frontend-design@claude-plugins-official -y >/dev/null 2>&1 \
+    || { echo "  INFO  both copies not recorded: frontend-design@claude-plugins-official did not install"; exit 0; }
+  claude plugin marketplace add "$root" >/dev/null 2>&1 && claude plugin install plinth@plinth -y >/dev/null 2>&1 \
+    || { echo "  INFO  both copies not recorded: plinth@plinth did not install beside it"; exit 0; }
+  claude plugin list --json | python3 -c 'import json, sys
+for p in json.load(sys.stdin):
+    if p["id"].startswith(("frontend-design@", "plinth@")):
+        print("  INFO  both copies: %s enabled=%s errors=%s" % (p["id"], p.get("enabled"), p.get("errors", [])))'
+  for p in frontend-design@claude-plugins-official frontend-design@plinth; do
+    s="$(claude plugin details "$p" 2>&1 | grep -E '^ *Skills \(' | sed 's/^ *//')"
+    echo "  INFO  $p: ${s:-no Skills line read}"
+  done
+  exit 0
 )

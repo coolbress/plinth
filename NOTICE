@@ -8,11 +8,13 @@ each notice is reproduced here in full. Each licence was read on 2026-09-27:
 at the pinned commit for the pinned entries, and at the commit named below for
 Impeccable, which plinth does not pin. mattpocock-skills' was read again on
 2026-10-10 at its pinned commit.
+frontend-design's was read on 2026-11-27 at its pinned commit.
 
-taste-skill
-  https://github.com/Leonxlnx/taste-skill  (skills/taste-skill)
-  MIT  ·  commit ccbc15639c97057cbfcf32ecebc38ef716e4bb37
-  Copyright (c) 2026 Leonxlnx
+frontend-design
+  https://github.com/anthropics/claude-plugins-official  (plugins/frontend-design/skills/frontend-design)
+  Apache-2.0  ·  commit 30202c767cfaf325212b3921ab484f83adaec850
+  Anthropic. The full licence is the skill folder's own LICENSE.txt, which
+  the mounted folder carries.
 
 last30days
   https://github.com/mvanhorn/last30days-skill
