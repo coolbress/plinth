@@ -19,10 +19,8 @@ fixture() {
   mkdir -p "$d/tests"
   # one small skill (skill-size.sh lists no exception today; one it listed
   # would have to exist here too)
-  for s in one; do
-    mkdir -p "$d/skills/$s"
-    printf -- '---\nname: %s\ndescription: x\n---\nbody\n' "$s" > "$d/skills/$s/SKILL.md"
-  done
+  mkdir -p "$d/skills/one"
+  printf -- '---\nname: one\ndescription: x\n---\nbody\n' > "$d/skills/one/SKILL.md"
   cp "$root/tests/size_caps.py" "$d/tests/size_caps.py"
   if [ -n "$1" ]; then
     python3 - "$d/AGENTS.md" "$1" "$2" <<'PY'
