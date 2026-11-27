@@ -80,7 +80,14 @@ def kind_records(rs: list[Run]) -> str:
             for s in x["skills"]:
                 calls[s] += 1
         used = ", ".join(f"`{s}` ×{c}" for s, c in sorted(calls.items())) or "none"
-        return f"gaps the final report says are missing: {named}; Skill calls: {used}"
+        # The short report's rules (#1105): each broken one, with how many runs broke it.
+        broke: dict[str, int] = defaultdict(int)
+        for x in k:
+            for rule, met in (x.get("shape") or {}).get("rules", {}).items():
+                if not met:
+                    broke[rule] += 1
+        shape = ", ".join(f"`{r}` {c}/{n}" for r, c in sorted(broke.items())) or "none"
+        return f"gaps the final report says are missing: {named}; Skill calls: {used}; report rules broken: {shape}"
     if kind == "resume":
         items = list(k[0]["named"])
         named = ", ".join(f"`{i}` {sum(1 for x in k if x['named'][i])}/{n}" for i in items)

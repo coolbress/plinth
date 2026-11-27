@@ -54,6 +54,12 @@ case "$*" in
     [ "${PULLS_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$PULLS_RC"; }
     [ -z "${RELEASE_PR_BODY:-}" ] || printf '%s\n' "$RELEASE_PR_BODY"
     exit 0 ;;
+  # The comment a `train exception:` line names, as the script's --jq prints
+  # its body: EXC_RC fails the read, EXC_BODY= is an empty body.
+  "api repos/"*"/issues/comments/"*)
+    [ "${EXC_RC:-0}" = 0 ] || { echo "HTTP 404: Not Found" >&2; exit "$EXC_RC"; }
+    printf '%s\n' "${EXC_BODY-Decision (2026-11-27): one exception to the weekly train.}"
+    exit 0 ;;
   # A commit's tree, read from a real repository: the mock answers with the
   # tree that commit has, not with one a case says it has.
   "api repos/"*"/git/commits/"*)
@@ -325,6 +331,30 @@ run "v$next" "$work/hotfix.md";    check "6 days after, with 'hotfix: <reason>',
 is "  and the section says hotfix: with its reason" grep -qxF "hotfix: $hotfix_reason" <(section_of "$next")
 is "  above the first ###, so run 2 publishes it as the why" \
   grep -qxF "hotfix: $hotfix_reason" <(section_of "$next" | awk '/^### /{exit} 1')
+undo_bump
+# An early release that is not a hotfix (#1132's exception): one line naming
+# the comment that records the decision, read through gh.
+exc="train exception: <https://github.com/coolbress/plinth/issues/1132#issuecomment-7210202040>"
+printf 'A reason.\n\n%s\n\ntested with %s\n' "$exc" "$template" > "$work/exception.md"
+printf 'A reason.\n\ntrain exception: decided on #1132\n\ntested with %s\n' "$template" > "$work/exception-bare.md"
+printf 'A reason.\n\n%s\n%s\n\ntested with %s\n' "$exc" "$exc" "$template" > "$work/exception-two.md"
+printf 'A reason.\n\nhotfix: %s\n%s\n\ntested with %s\n' "$hotfix_reason" "$exc" "$template" > "$work/exception-hotfix.md"
+run "v$next" "$work/exception-bare.md"; check "6 days after, a 'train exception:' line that is not a comment's link is refused" no $?
+is "  and nothing changed"         untouched
+is "  and the refusal shows the form" says "train exception: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>"
+run "v$next" "$work/exception-two.md"; check "two 'train exception:' lines are refused" no $?
+is "  and nothing changed"         untouched
+run "v$next" "$work/exception-hotfix.md"; check "a 'train exception:' line beside a 'hotfix:' line is refused" no $?
+is "  and nothing changed"         untouched
+EXC_RC=1 run "v$next" "$work/exception.md"; check "a 'train exception:' link gh cannot read is refused" no $?
+is "  and nothing changed"         untouched
+is "  and the refusal names the comment" says "coolbress/plinth comment 7210202040"
+EXC_BODY='' run "v$next" "$work/exception.md"; check "a 'train exception:' comment with an empty body is refused" no $?
+is "  and nothing changed"         untouched
+run "v$next" "$work/exception.md"; check "6 days after, with a 'train exception:' link gh reads, it bumps" ok $?
+is "  and the section carries the line above the first ###, so run 2 publishes it" \
+  grep -qxF "$exc" <(section_of "$next" | awk '/^### /{exit} 1')
+is "  and gh was asked for that comment" grep -qF "gh api repos/coolbress/plinth/issues/comments/7210202040" "$GH_LOG"
 undo_bump
 untag; tag_aged $(( 7 * day ))
 run "v$next" "$work/why.md";       check "7 days after, without a hotfix line, it bumps" ok $?

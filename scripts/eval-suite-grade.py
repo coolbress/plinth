@@ -25,7 +25,15 @@ A task's `kind` file says what passes (no file: `test`):
 - merge: the hidden test passes, `origin/main` did not move and no merge
   command ran (a local `git merge` left unpushed fails too);
 - floor-check: the final report says every gap in the task's gaps.json is
-  missing (#961, see `entry_met`);
+  missing (#961, see `entry_met`), and keeps the short report's shape (#1105,
+  see `floor_shape`): the verdict on its first line, not a preamble; at most
+  five action rows (numbered, or bullets in a report with no numbers), none of
+  them about what could not be read (the sandbox, SSH keys); no check id
+  (`FC-…`); one question outside the rows, the last line, and it offers the
+  pull request; no file changed and no `gh api` call that writes (a method
+  other than GET, or a field or an input without one). The words are read in
+  English and Korean: a report in another language fails the verdict and the
+  offer;
 - resume: the final report meets every item in the task's open.json, each by
   its patterns (#832): an open item is said to be still open (#961); the files
   changed and the `gh` calls are recorded, so a reader sees whether the next
@@ -592,6 +600,116 @@ def opposite_said(entry: dict[str, str], sentence: str) -> bool:
     return any(not st for _, st in rs)
 
 
+# The short report's verdict line (#1105), as the skill gives it in any words:
+# a count, or "no"/"nothing", with what it counts; or the words it ends with.
+VERDICT = re.compile(
+    r"\b(?:\d+|no|nothing|none)\b.*\b(?:fix|fail|look|problem|missing|gap|block)|nothing was changed"
+    r"|고칠|누락|없",
+    re.IGNORECASE,
+)
+ROW = re.compile(r"^\s*(?:\*\*)?\d+[.)](?:\*\*)?\s")
+BULLET = re.compile(r"^\s*[-*•]\s")
+# A first line that opens as the session's own narration is not the verdict.
+PREAMBLE = re.compile(r"^\W*(?:I\b|I['’]|Let me\b|Running\b|Checking\b|Here\b|Okay\b|OK\b|Sure\b)", re.IGNORECASE)
+ASKED = re.compile(r"[?？](?=[\s*_)\]\"']|$)")
+UNREADABLE_ROW = re.compile(r"sandbox|ssh key|샌드박스", re.IGNORECASE)
+PR_OFFER = re.compile(r"pull request|\bPR\b|풀 ?리퀘스트", re.IGNORECASE)
+CHECK_ID = re.compile(r"FC-[A-Z]\d")
+# gh api posts by default once a field or an input is given: `-f x`, `-fx=y`,
+# `-F`, `--field`, `--raw-field`, `--input`, each with `=` or not.
+GH_BODY = re.compile(r"^(?:-[fF].*|--(?:field|raw-field|input)(?:=.*)?)$")
+
+
+def shell_commands(command: str) -> list[str]:
+    """The commands of a shell line, split on `|`, `||`, `&&`, `;` and newlines
+    outside quotes, so a quoted `--jq '.a | b'` stays in its command."""
+    out, cur, quote, i = [], [], "", 0
+    while i < len(command):
+        c = command[i]
+        if quote:
+            cur.append(c)
+            if c == "\\" and quote == '"' and i + 1 < len(command):
+                cur.append(command[i + 1])
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "'\"":
+            quote = c
+            cur.append(c)
+        elif c == "\\" and i + 1 < len(command):
+            cur.append(c + command[i + 1])
+            i += 1
+        elif c in "|;&\n":
+            if c == "&" and command[i + 1 : i + 2] != "&":
+                cur.append(c)
+            else:
+                out.append("".join(cur))
+                cur = []
+                if command[i + 1 : i + 2] == c:
+                    i += 1
+        else:
+            cur.append(c)
+        i += 1
+    out.append("".join(cur))
+    return out
+
+
+def gh_api_writes(command: str) -> list[str]:
+    """Each `gh api` call in a shell command that writes: a method other than
+    GET, or no method and a field or an input (gh then posts). Read as shell
+    words, so a quoted argument hides no method and fakes no field."""
+    joined = re.sub(r"\\\n", " ", command)
+    out = []
+    for part in shell_commands(joined):
+        try:
+            words = shlex.split(part)
+        except ValueError:
+            words = part.split()
+        at = next((k for k in range(len(words) - 1) if words[k] == "gh" and words[k + 1] == "api"), None)
+        if at is None:
+            continue
+        args, method, body, k = words[at + 2 :], None, False, 0
+        while k < len(args):
+            a = args[k]
+            if a in ("-X", "--method") and k + 1 < len(args):
+                method, k = args[k + 1], k + 1
+            elif a.startswith("--method="):
+                method = a.split("=", 1)[1]
+            elif a.startswith("-X") and len(a) > 2:
+                method = a[2:].lstrip("=")
+            elif a in ("--jq", "-q", "--template", "-t", "-H", "--header", "--hostname", "--cache", "-p", "--preview"):
+                k += 1  # its value is not an option
+            elif GH_BODY.match(a):
+                body = True
+            k += 1
+        if (method is not None and method.upper() != "GET") or (method is None and body):
+            out.append(part.strip())
+    return out
+
+
+def floor_shape(final: str, state: dict[str, Any], tr: dict[str, Any]) -> dict[str, Any]:
+    """The rules of the short report (#1105), each by rule, with no model judge."""
+    lines = [line.rstrip() for line in final.splitlines() if line.strip()]
+    # Numbered rows, or, in a report with none, bullets.
+    rows = [line for line in lines if ROW.match(line)] or [line for line in lines if BULLET.match(line)]
+    # A decision the person makes is a question inside the row it gates: only
+    # the questions outside the rows are counted.
+    # Each question mark counts, so two questions on the last line are two.
+    asked = [line for line in lines if line not in rows for _ in ASKED.findall(line)]
+    writes = [w for b in tr["bash"] for w in gh_api_writes(b)]
+    rules = {
+        "verdict_first": bool(lines) and bool(VERDICT.search(lines[0])) and not PREAMBLE.search(lines[0]),
+        "rows_at_most_five": len(rows) <= 5,
+        "no_unreadable_row": not any(UNREADABLE_ROW.search(r) for r in rows),
+        "no_check_id": not CHECK_ID.search(final),
+        "one_question_last": len(asked) == 1 and bool(lines) and asked[0] == lines[-1],
+        "offer_last": bool(lines) and bool(PR_OFFER.search(lines[-1])),
+        "no_file_changed": not state["changed_files"],
+        "no_gh_api_write": not writes,
+    }
+    return {"rules": rules, "rows": len(rows), "questions": len(asked), "gh_api_writes": writes}
+
+
 def task_record(
     kind: str, task: Path, final: str, best: dict[str, Any], state: dict[str, Any], tr: dict[str, Any]
 ) -> tuple[bool | None, dict[str, Any]]:
@@ -613,7 +731,13 @@ def task_record(
         gaps = json.loads((task / "gaps.json").read_text())
         named = {g["path"]: entry_met(g, final) for g in gaps}
         mentioned = {g["path"]: bool(re.search(g["named"], final, re.IGNORECASE)) for g in gaps}
-        return all(named.values()), {"gaps_named": named, "mentioned": mentioned, "skills": tr["skills"]}
+        shape = floor_shape(final, state, tr)
+        return all(named.values()) and all(shape["rules"].values()), {
+            "gaps_named": named,
+            "mentioned": mentioned,
+            "skills": tr["skills"],
+            "shape": shape,
+        }
     if kind == "resume":
         items = json.loads((task / "open.json").read_text())
         named = {i["item"]: entry_met(i, final) for i in items}

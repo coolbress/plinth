@@ -72,6 +72,14 @@ one narrow ignore in `pyproject.toml`, with its reason.
    Assisted-by: <agent>:<model>
    ```
 
+   Under What I checked myself goes what you ran, opened or read yourself
+   before saying "merge", and what you saw: a command's output, a page, a
+   number. A pasted output keeps home paths out: `~/...`, or the condition it
+   shows. Or `Skipped: <reason>` when you did not check. Left empty, or "done"
+   alone, `ci / pr-title` warns; it does not fail. A test named
+   under How it was verified shows the criterion was exercised, not that it
+   is proved.
+
    The not-verified line is always there, as `Not verified: nothing` when that
    is true: a small fix or a docs-only change drops it most often. When a
    ticket is split across several pull requests, each one says which
@@ -81,8 +89,9 @@ one narrow ignore in `pyproject.toml`, with its reason.
    The issue link goes after the verification section, directly above the
    attribution. `Closes #N` only when the pull request completes that issue;
    partial work links with `Part of #N`, related work with `Related to #N`.
-   `Closes` drives GitHub's auto-close, so the wrong verb closes an unfinished
-   issue. So does a close, fix or resolve word (in any form) before `#N`
+   Any reference to another repository's issue or pull request, anywhere in
+   the description: `owner/repo#N`. `Closes` drives GitHub's auto-close, so
+   the wrong verb closes an unfinished issue. So does a close, fix or resolve word (in any form) before `#N`
    anywhere in the description, a sentence included: "the two fixes #N
    decided" closes #N. Word such a sentence another way. With no issue to link, omit the line. A person's trailers
    (`Co-authored-by`, `Signed-off-by`) stay, in one contiguous block at the end
@@ -101,7 +110,8 @@ one narrow ignore in `pyproject.toml`, with its reason.
    the description is what lands on `main`.
 
    Say what was actually run, and name what was not. A review run in the same
-   session that wrote the change is not an independent review. When you change
+   session that wrote the change is not an independent review; do not
+   describe it as one. When you change
    behaviour, verify the boundaries and partial failures of the inputs and
    states it touches, record which paths you exercised and which you did not,
    and do not widen the result of a few cases into a guarantee about all of
@@ -145,12 +155,84 @@ one narrow ignore in `pyproject.toml`, with its reason.
    cancels the run in progress, `ci / test` included, and `label.yml` runs
    on it too.
 
+## Review findings
+
+The default review is a fresh-context review, before the description is
+written: a new subagent (not a fork of this session) or a new session, given
+only the diff (`git diff origin/main...HEAD`), the issue's acceptance criteria
+and `AGENTS.md`'s Code Review Rules, never this conversation; its findings go
+in the description as it reported them. `/implement`'s `/code-review` is
+briefed and summed up by the session that wrote the change, so it is not
+independent; say which review ran.
+
+Fix what is irreversible or reaches others before merging; a recoverable
+inconvenience is fixed if it is a few lines with a case, otherwise an issue;
+after two fix rounds, only the irreversible class is fixed and the rest becomes
+issues. Judge the class by what the diff does, not by the reviewer's severity
+label: a line of guidance that could say more exposes nothing, so it is never
+that class. When a finding repeats the last one's kind, rewrite once for the
+whole kind. Say on the thread what was not changed and why.
+
+## Several sessions at once
+
+Before editing, inspect the branch, working-tree changes, worktree list and
+commits ahead of the intended base: `git fetch origin`, then `git status -sb`,
+`git worktree list`, `git log --oneline origin/main..HEAD`. Identify what
+belongs to this task. Those show the state of the checkout, not who else is
+using it: no command shows another session, so a clean checkout on `main` is
+not proof that it is yours alone. When it is not, or when it holds unrelated or
+unexplained work, leave it untouched and work in a uniquely named worktree
+branched from an explicitly verified base (step 2). Never switch, reset, rebase
+or stash another task's checkout.
+
+When several pull requests are open, only the session the person names, or the
+person, merges them, one at a time as step 7 says, and that session does not
+edit a description while it waits. A session not told to merge does not bring
+its own pull request up to date, even when it is behind.
+
+## Two people
+
+When the project has a second person, two more rules hold:
+
+- A pull request merges only after the other person approves it.
+- The person who asked the agent for a change does not approve the agent
+  account's pull request for it: the approval is there so that someone who
+  did not ask for the change reads it. The agent never approves one.
+
+## Coming back
+
+Coming back to the project, the person types `/plinth:guide`: it reads the
+project and names the one command to type next. The agent reads the
+issues, their unticked acceptance criteria, the open pull requests and the
+recent commits, as `AGENTS.md` says.
+
+## Along the way
+
+- An improvement found during a change becomes a new issue, not part of the
+  change.
+- An incident that lost data, needed a revert or reached users gets a short
+  blameless note in its issue's `## Outcome`: what happened, why, and what
+  changes so it does not happen again, about the system, not a person
+  (the conditions follow the
+  [Google SRE book, ch. 15](https://sre.google/sre-book/postmortem-culture/)).
+- On a public repository, a log, a screenshot or an issue attachment holding
+  real data publishes it: cut it to what shows the problem, or use made-up
+  values. `.gitignore` leaves out `*.log`, CSV files outside `tests/` and
+  `src/`, and screenshots at the top level under their usual English names;
+  anything else is yours to check before committing.
+- Notebooks are committed with their outputs, which can carry data rows,
+  paths and printed tokens, so clear outputs before committing (Jupyter's
+  "Clear All Outputs"; an optional tool such as nbstripout does it on every
+  commit, and is not installed).
+
 ## Pull request size
 
 Aim at 200 changed lines and stay under 400; `ci / diff-size` blocks above.
-The figure comes from the largest published code-review case study (Cisco,
-one team): review effect falls off around 200 lines and 400 is its ceiling.
-Documentation and lockfiles are not counted. A bigger change is split into
+The cap's basis is small, revertable changes whose description says one thing.
+The largest published code-review case study (Cisco, one team) recommends 200
+to 400 lines per review sitting; that is a pace for the reviewer, not a limit
+on a change. To get under the cap, split the change; do not shorten docs,
+docstrings or tests to fit. Documentation and lockfiles are not counted. A bigger change is split into
 pull requests that land one after another, each branched from `main` after the
 one before it is merged. A stack, each branched from the one below, costs
 more under squash merges: the lower one lands as one new commit, so the upper
@@ -160,9 +242,28 @@ push.
 
 ## Tests
 
-- A change in behaviour or a bug fix comes with the test that catches it, in the
-  same pull request; a documentation, configuration or refactoring change that
-  keeps behaviour does not need one, say so in the description.
+- Acceptance criteria live in the issue, as lines a check or a reviewer can
+  confirm; a pull request names, for each one it meets, the test that checks it,
+  or why none does. When the issue has "What should happen" and "Not sure yet"
+  fields, read both first: ask the person about each "Not sure yet" item before
+  writing code, and say in the pull request which "When … then …" line each
+  test covers.
+- A change in behaviour or a bug fix comes with the test that catches it (for a bug, the one
+  that reproduces it before the fix), in the same pull request; a documentation, configuration or refactoring change that
+  keeps behaviour does not need one, say so in the description. Any other
+  change without one says in the description why not.
 - Writing the failing test first is encouraged, not enforced.
 - A new behaviour has a test that actually runs it. The measure is not coverage
   but whether the test would fail if the behaviour broke.
+- Parsers, serializers and round-trip code, where a round trip or an invariant
+  can be stated, are worth a property-based test with Hypothesis besides their
+  example tests: a property states the behaviour expected, where an example
+  only shows the behaviour the code has now. Hypothesis is not a default
+  dependency: it joins the `dev` group in `pyproject.toml` the first time one
+  is written.
+- Tests never call a paid outside service (an AI model's API, a paid data
+  source, a messaging platform): they use a fake, and CI needs no key for it.
+  A test that calls one costs money on every run, fails wherever the key is
+  missing, and puts a key into CI.
+- Simplify within the agreed behaviour, the required checks and `AGENTS.md`'s
+  rules; the checks a ticket agreed on are not negotiable.
