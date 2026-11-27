@@ -859,7 +859,15 @@ echo "uv $*" >> "$UVLOG"
 [ -z "${PYTEST_ADDOPTS:-}" ] || echo "PYTEST_ADDOPTS=$PYTEST_ADDOPTS" >> "$UVLOG"
 case " $* " in
   *" python - "*) exit 10 ;;   # coverage's configuration names no source
-  *pytest*) [ "${STUB_SLEEP:-0}" = 0 ] || exec sleep "$STUB_SLEEP"; exit "${STUB_RC:-0}" ;;
+  *pytest*) [ "${STUB_SLEEP:-0}" = 0 ] || exec sleep "$STUB_SLEEP"
+    # A report as pytest writes one, where PYTEST_ADDOPTS names it.
+    j="$(printf '%s' "${PYTEST_ADDOPTS:-}" | sed -n "s/.*--junitxml='\([^']*\)'.*/\1/p")"
+    [ -z "$j" ] || printf '%s\n' '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" tests="2">' \
+      '<testcase classname="tests.test_a" name="test_ok" time="0.001" />' \
+      '<testcase classname="tests.test_a" name="test_cmp[a&gt;b]" time="0.002"><failure message="x">x</failure></testcase>' \
+      '</testsuite></testsuites>' > "$j"
+    case " $* " in *" --python ${STUB_FAIL_PY:-none} "*) exit 1 ;; esac
+    exit "${STUB_RC:-0}" ;;
 esac
 exit 0
 SH
@@ -959,6 +967,30 @@ ends "test: the time limit names --durations=20" test "pytest on .python-version
 tjob STUB_RC=1 PLINTH_EXTRA_PYTHON_VERSIONS=3.13 PYTEST_ADDOPTS=-p\ no:cacheprovider
 if grep -qx "PYTEST_ADDOPTS=-p no:cacheprovider --junitxml='$tj/plinth-junit/pytest.xml'" "$tmp/uv.log"; then ok "a PYTEST_ADDOPTS of the project's own is kept before the report's path"
 else bad "the project's PYTEST_ADDOPTS was lost" "$(cat "$tmp/uv.log")"; fi
+# GitLab keeps the first test of each name across a job's reports: each
+# run's report names the Python it ran on, in classname and name. The
+# default run passes and 3.13 fails, so a name kept from the first report
+# would hide 3.13's failure.
+printf '3.12\n' > "$trepo/.python-version"
+tjob STUB_FAIL_PY=3.13 PLINTH_EXTRA_PYTHON_VERSIONS='3.13 3.14'
+if python3 - "$tj/plinth-junit" <<'PY'
+import sys, xml.etree.ElementTree as ET
+d = sys.argv[1]
+seen = []
+for f, v in (("pytest.xml", "3.12"), ("pytest-3.13.xml", "3.13")):
+    cases = [(c.get("classname"), c.get("name")) for c in ET.parse(f"{d}/{f}").iter("testcase")]
+    want = [(f"python-{v}.tests.test_a", f"test_ok [python {v}]"), (f"python-{v}.tests.test_a", f"test_cmp[a>b] [python {v}]")]
+    if cases != want: sys.exit(f"{f}: {cases}")
+    seen += cases
+sys.exit(len(set(seen)) != len(seen))
+PY
+then ok "each Python's report names its version in classname and name, so no test repeats across reports"
+else bad "the reports' tests are not told apart by Python version" "$(cat "$tj"/plinth-junit/*.xml)"; fi
+if [ ! -e "$tj/plinth-junit/pytest-3.14.xml" ]; then ok "the version after a failing one does not run"; else bad "a version after a failure ran"; fi
+rm -f "$trepo/.python-version"; rm -rf "$tj/plinth-junit"
+tjob STUB_RC=1
+if grep -q 'classname="python-default.tests.test_a"' "$tj/plinth-junit/pytest.xml"; then ok "with no .python-version the default run's report says python-default"
+else bad "the default run's report without .python-version" "$(cat "$tj/plinth-junit/pytest.xml")"; fi
 if python3 - "$gl" <<'PY'
 import sys
 t = open(sys.argv[1], encoding="utf-8").read().split("\ntest:\n", 1)[1].split("\n  script:", 1)[0]

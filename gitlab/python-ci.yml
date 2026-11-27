@@ -328,8 +328,19 @@ test:
       plinth_junit="${CI_PROJECT_DIR:-$plinth_root}/plinth-junit"; mkdir -p "$plinth_junit"
       plinth_addopts="${PYTEST_ADDOPTS:-}"
       export PYTEST_ADDOPTS="${plinth_addopts:+$plinth_addopts }--junitxml='$plinth_junit/pytest.xml'"
+      # <file> <label>: GitLab keeps only the first test of each name across
+      # a job's reports, so each run's tests carry the Python they ran on
+      # (classname python-<v>.<class>, name <name> [python <v>]).
+      plinth_junit_tag() {
+        local l; l="$(printf '%s' "$2" | tr -cd 'A-Za-z0-9._-')"
+        [ -s "$1" ] || return 0
+        sed -e "s/<testcase classname=\"/<testcase classname=\"python-$l./g" \
+            -e "s/\(<testcase [^>]* name=\"[^\"]*\)\"/\1 [python $l]\"/g" "$1" > "$1.tag" && mv "$1.tag" "$1"
+      }
+      plinth_pyv="$(head -n 1 .python-version 2>/dev/null || true)"
       plinth_slow="run uv run pytest --durations=20 here and make the slowest tests faster; raise test-timeout-minutes in the include's inputs only when none stands out and the time moves between runs of the same commit"
       step "pytest on .python-version" run_pytest
+      plinth_junit_tag "$plinth_junit/pytest.xml" "${plinth_pyv:-default}"
       pytest_outcome="$plinth_last"
       time_limit pytest.time-limit "pytest on .python-version"
       if [ -e "$PLINTH_TMP/pytest.time-limit" ]; then onfail "$plinth_slow"
@@ -450,11 +461,13 @@ test:
 
       # Exercise the declared range for real; uv downloads the interpreter.
       extra_versions() {
-        local v
+        local v rc
         for v in $PLINTH_EXTRA_PYTHON_VERSIONS; do
           echo "── python $v"; plinth_v="$v"
           PYTEST_ADDOPTS="${plinth_addopts:+$plinth_addopts }--junitxml='$plinth_junit/pytest-$v.xml'"
-          limited extra.time-limit uv run --isolated --python "$v" --with pytest pytest -q || return 1
+          limited extra.time-limit uv run --isolated --python "$v" --with pytest pytest -q && rc=0 || rc=$?
+          plinth_junit_tag "$plinth_junit/pytest-$v.xml" "$v"
+          [ "$rc" = 0 ] || return 1
         done
       }
       if [ -n "$PLINTH_EXTRA_PYTHON_VERSIONS" ]; then
