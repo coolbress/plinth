@@ -16,6 +16,7 @@ when the person asks about one item; the skill's own rules are in
 - [Push protection](#push-protection)
 - [The Actions allowlist and private vulnerability reporting](#the-actions-allowlist-and-private-vulnerability-reporting)
 - [What the door sets beside the wall, and the project's own answers](#what-the-door-sets-beside-the-wall-and-the-projects-own-answers)
+- [Dependabot alerts, secret scanning and registry tokens](#dependabot-alerts-secret-scanning-and-registry-tokens)
 - [A private repository](#a-private-repository)
 - [Template drift](#template-drift)
 - [Reading the checker's text output](#reading-the-checkers-text-output)
@@ -382,6 +383,61 @@ login cannot administer the repository, and never run it.
   off, or one not recorded, is not read. `owner_has_security_policy` needs
   no item of its own: `SECURITY.md`, local or inherited, is in the document
   set above.
+
+## Dependabot alerts, secret scanning and registry tokens
+
+Four items read the repository's security reads with `--repo` (#1118),
+GitHub only: Dependabot does not run on GitLab, and GitLab Free has no
+vulnerability report (FC-A19 stays the GitLab line). Each is a WARN at
+most, with the call under it; relay the call as printed, behind
+`with-admin-token.sh` when the user's login cannot administer the
+repository, and never run it. Under `--actions-token` an answer the token
+does not get is an INFO left to this skill, so `ci / floor-check`'s FAIL
+and SKIP counts do not change.
+
+What a token needs to read each one, from GitHub's table of fine-grained
+token permissions (read 2026-11-28; a classic token or `gh`'s own login
+needs `repo`):
+
+| Read | Permission (read) |
+| --- | --- |
+| Dependabot alerts on, security updates on | Administration |
+| The open Dependabot alerts | Dependabot alerts |
+| The open secret scanning alerts | Secret scanning alerts |
+| The repository's secret names | Secrets |
+| An environment's secret names | Environments |
+| The environments themselves | Actions |
+
+- **Dependabot alerts.** On with none open is the PASS. Open alerts are
+  the WARN, counted by severity and linked, never listed one by one. Off is
+  the WARN with `gh api -X PUT …/vulnerability-alerts`. GitHub answers
+  "off" (404) to a login that does not administer the repository as well,
+  so a 404 is read as off only when the repository's answer says this
+  login administers it; otherwise it is not verified.
+- **Dependabot security updates.** On is the PASS; off or paused is the
+  WARN with `gh api -X PUT …/automated-security-fixes`.
+- **Secret scanning.** On with no open alert is the PASS. Open alerts are
+  the row, not "on": each named by its type and where it is (a path, or an
+  issue comment, an Actions log), never by its value, which the alert
+  carries and the checker never prints. A secret stays usable until it is
+  revoked at its provider; closing the alert does not revoke it. This item
+  cannot be kept in `.plinth-adoption.yml`. Off on a public repository is
+  the WARN with the `gh api -X PATCH` that turns it on. On a private
+  repository it needs GitHub Secret Protection, a paid product for Team
+  and Enterprise: off there is an INFO naming the plan, not "off". Its
+  status is in the same security settings as push protection's: when they
+  are not answered at all, push protection's line says so once (a SKIP, its
+  plan, or an INFO left to this skill) and this item adds no second line.
+- **Registry tokens beside OIDC (experimental).** Only when `release.yml`
+  asks for `id-token: write` and publishes with it (PyPI's publish action,
+  `uv publish`, `npm publish --provenance`): a repository or environment
+  secret whose name looks like a token for the registry it publishes to
+  that way (PyPI, twine or uv for PyPI; npm for an npm publish with
+  provenance) is the WARN, with one `gh secret delete` per name, to run once
+  a release has published through OIDC and no other workflow reads it. A
+  token for another registry is not named. Names only: GitHub's secrets API
+  returns no value. A list longer than one page (100) is not verified. A name is a guess at what a secret holds,
+  which is why it is a WARN and experimental.
 
 ## A private repository
 
