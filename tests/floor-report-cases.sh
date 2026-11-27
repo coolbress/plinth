@@ -117,6 +117,20 @@ for s in 'SSH keys not verified' 'not read either' 'no other credential found' '
   else bad "\"$s\" is in neither the report nor --all" "$all"; fi
 done
 
+# The merge line: guidance or a boundary for the agent's login, on its own line.
+doc guidance '
+r("FC-E26", "info", "the merge: guidance. This login is the repository'"'"'s admin, and GitHub lets the admin merge, so an agent working under it can merge too; it is asked to wait for your word", key="admin")
+'
+doc boundary '
+r("FC-E26", "pass", "the merge: boundary. This login is not the repository'"'"'s admin and the merge ruleset stands on main, so GitHub refuses its merge; you merge", key="stands")
+'
+for k in guidance boundary; do
+  out="$(python3 "$report" --no-note "$work/$k.json")"
+  if grep -qE "^The merge: $k\. " <<<"$out" && ! grep -qE '^[0-9]+\. ' <<<"$out"; then ok "the merge as $k: said on its own line, not as an action row"
+  else bad "the merge as $k is not said on its own line" "$out"; fi
+  shape "the merge as $k" "$out"
+done
+
 doc many '
 for k in range(1, 9):
     r(f"FC-E{k:02d}", "warn" if k % 2 else "fail", f"finding {k}")
@@ -205,6 +219,29 @@ out="$(python3 "$report" --root "$repo" "$work/offline.json")"
 if grep -qF '0 fixed, 1 still missing, 0 new; 1 not read this time, so not counted.' <<<"$out" && grep -qF '"FC-A02"' "$note"
 then ok "a finding not read this time is not counted as fixed, and the note keeps it"
 else bad "a finding not read this time was counted as fixed, or the note lost it" "$out"$'\n'"$(cat "$note")"; fi
+# A wall failure, then a run offline: the checker emits the wall's one SKIP
+# and evaluates none of its checks, so they are in not_evaluated. They are
+# not fixed, and the note keeps them.
+doc wallfail "$where"'
+r("FC-E13", "fail", "no rules govern main: the wall is down", keepable=False, handoff="admin")
+'
+python3 "$report" --root "$repo" "$work/wallfail.json" >/dev/null
+python3 "$checker" --root "$repo" --no-network --repo o/r --format json > "$work/offline-real.json" 2>/dev/null
+if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(not any(n["id"]=="FC-E13" for n in d["not_evaluated"]))' "$work/offline-real.json"
+then ok "the real checker offline lists the wall's checks as not evaluated"
+else bad "the real checker offline did not list FC-E13 as not evaluated: the next case reads nothing"; fi
+out="$(python3 "$report" --root "$repo" "$work/offline-real.json")"
+if grep -qE '^Since the last run .*: 0 fixed, 0 still missing, [0-9]+ new; 1 not read this time, so not counted\.$' <<<"$out"
+then ok "a wall failure the next run did not evaluate is not counted as fixed"
+else bad "a wall failure the next run did not evaluate was counted as fixed" "$out"; fi
+doc walloff "$where"'
+d["not_evaluated"] = [{"id": "FC-E13", "name": "check E13", "area": "wall"}]
+'
+python3 "$report" --root "$repo" "$work/wallfail.json" >/dev/null
+python3 "$report" --root "$repo" "$work/walloff.json" >/dev/null
+if grep -qF '"FC-E13"' "$note"; then ok "the note written after a run that did not evaluate it keeps the wall failure"
+else bad "the note lost a finding its run did not evaluate" "$(cat "$note")"; fi
+
 doc crashrun "$where"'
 d["crashed"] = {"after": None, "error": "OSError"}
 '

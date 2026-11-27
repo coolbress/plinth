@@ -14,6 +14,7 @@ It prints, in English for the skill to say in the person's language:
   - one line for what could not be read, saying they are not failures and
     what would read them;
   - one line for what was not checked, saying it is not a problem;
+  - whether the merge is guidance or a boundary for the agent's login;
   - the passes as one line;
   - where to go next, `/plinth:guide`;
   - one question, last.
@@ -185,9 +186,12 @@ def may_write_note(doc: dict, root: str) -> str | None:
 
 
 def unread_ids(doc: dict) -> set[str]:
-    """Checks this run could not read: a finding of the last run among them
-    is neither fixed nor forgotten."""
-    return {r["id"] for r in doc["results"] if r["state"] in ("unknown", "review")}
+    """Checks this run did not read: those it could not read, and those it
+    did not evaluate at all (offline, the wall is one SKIP and its checks
+    report nothing). A finding of the last run among them is neither fixed
+    nor forgotten."""
+    return ({r["id"] for r in doc["results"] if r["state"] in ("unknown", "review")}
+            | {n["id"] for n in doc.get("not_evaluated", [])})
 
 
 def note_of(doc: dict, root: str, prev: dict | None) -> dict:
@@ -237,6 +241,11 @@ def report(doc: dict, prev: dict | None, now: dict | None) -> list[str]:
         out.append(f"{len(rest)} more: {'; '.join(rest)}.")
     if prev and now and not doc.get("crashed"):
         out.append(since(prev, now, doc))
+    # Whether "merge on your word" is guidance or a boundary for the login
+    # the agent inherits: a fact the person needs, not a finding.
+    merge = next((r for r in res if r["id"] == "FC-E26" and r["state"] in ("pass", "info")), None)
+    if merge:
+        out.append(first_line(merge)[0].upper() + first_line(merge)[1:])
     unknowns = [r for r in res if r["state"] in ("unknown", "review") and r["area"] != "machine" and not json_only(r)]
     if unknowns:
         names = []

@@ -115,6 +115,8 @@ printed, add no line, and drop none. It is already the short form:
 - one line naming every other finding;
 - what changed since the last run, when there is a note: fixed, still
   missing, new;
+- whether "merge on your word" is guidance or a boundary for the login the
+  agent inherits, in those plain words;
 - what could not be read, which is not a failure, and what would read it;
 - what was not checked, which is not a problem;
 - the passes as one line;
