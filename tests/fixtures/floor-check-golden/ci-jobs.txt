@@ -135,6 +135,7 @@ floor-check:
       }
       if ! plinth_pyyaml; then
         say "fail: $cfg includes plinth's GitLab pipeline at a full commit SHA, PyYAML did not install (its error is above), so nothing read the definition"
+        nx "re-run the pipeline: PyYAML comes from PyPI, and a download that fails there passes on a later run"
         plinth_failed=1
         verdict
       fi
@@ -212,6 +213,7 @@ floor-check:
       PY
       while IFS= read -r l || [ -n "$l" ]; do [ -z "$l" ] || say "$l"; done < "$PLINTH_TMP/floor.verdicts"
       [ -s "$PLINTH_TMP/floor.verdicts" ] || { say "fail: the floor, the check wrote no verdicts"; plinth_failed=1; }
+      nx "run /plinth:floor-check here, which writes the fix for each item, and push"
       # The block above is the include rule alone: /plinth:floor-check runs
       # it from this file on a checkout (#543), so these lines stay outside it.
       # A job token reads none of these; /plinth:floor-check, run with a
