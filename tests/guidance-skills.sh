@@ -337,8 +337,8 @@ case("must fail: an installed sequence marked built in",
      problems(arsenal.replace("| `/to-spec`, then `/to-tickets` | installed |", "| `/to-spec`, then `/to-tickets` | built in |"), howto, guide),
      "is 'built in', and it is installed")
 case("must fail: a platform job marked installed",
-     problems(arsenal.replace("| the host's dashboard: its deploy-failure notification first, then its logs | platform |",
-                              "| the host's dashboard: its deploy-failure notification first, then its logs | installed |"), howto, guide),
+     problems(arsenal.replace("then its logs; `/triage`: what users report, written as an issue | platform; installed |",
+                              "then its logs; `/triage`: what users report, written as an issue | installed; installed |"), howto, guide),
      "and it is platform")
 case("must fail: a sequence with a class for one step of two",
      problems(arsenal.replace("| built in, then installed; installed |", "| built in, then installed, then listed; installed |"), howto, guide),

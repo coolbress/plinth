@@ -51,9 +51,10 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: ./scripts/release-gate.sh
 
-  # Docs gate: public text stays lint-clean, links resolve, no internal vocabulary,
-  # the README install block is the one the tutorial shows, and the pull
-  # request's own description closes no issue outside its closing line.
+  # Docs gate: public text stays lint-clean, links resolve, and the pull
+  # request's own description closes no issue outside its closing line. What
+  # the docs say, read against the source, is tests/doc-consistency.sh, in
+  # plinth-ci.yml's install-2.
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -243,14 +244,5 @@ jobs:
             echo "::error::a remapped link to a missing file passed: the remap checks nothing"; exit 1
           fi
 
-      - name: No internal vocabulary in public text
-        run: ./tests/de-jargon.sh
-
-      - name: README install block equals the tutorial's
-        run: ./tests/readme-install-block.sh
-
       - name: The required-checks page names exactly the checks the wall requires
         run: ./tests/required-checks-doc.sh
-
-      - name: The docs' template tag and check counts match the source
-        run: ./tests/doc-pinned-facts.sh

@@ -29,7 +29,8 @@ jobs:
   # group took 3.7 to 6.7 minutes, setup included, and `ci / install` ended
   # 5.1 to 6.8 minutes (median 6.2) after the first group started:
   #   install-1  the plugin's contracts and the eval suite
-  #   install-2  the checks' cases, the floor checker's golden output, the pins
+  #   install-2  the checks' cases, the floor checker's golden output, the pins,
+  #              what the docs and skills say against their sources
   #   install-3  the floor checker's verdicts and the door
   #   install-4  the guide and the template update
   #   install-5  python-ci on fixtures, the template render and the README install
@@ -112,17 +113,11 @@ jobs:
       - name: Archetype vocabulary has one source
         run: ./tests/archetype-single-source.sh
 
-      - name: plinth's own rules carry each rule shared with the pinned template
-        run: ./tests/template-rules-drift.sh
-
       - name: The label list has one source, read by the door and the checker
         run: ./tests/labels-single-source.sh
 
       - name: Records checker verdicts on fixtures, offline
         run: ./tests/records-check-cases.sh
-
-      - name: The term table has every first-project term, and the guide points at it
-        run: ./tests/term-table.sh
 
       - name: The off-by-default list has one source, read by the door and the guide
         run: ./tests/off-by-default-cases.sh
@@ -166,10 +161,12 @@ jobs:
       - name: ci / diff-size asks an admin to approve a change to the checks
         run: ./tests/checks-approval-cases.sh
 
-      - name: The arsenal says what the pinned template and the plugin ship
+      # The docs and skill text read against their sources, one table of
+      # cases (#1103); the arsenal rows read issue states over the API.
+      - name: The docs and skills say what the source, the template and the plugin hold
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./tests/arsenal-freshness.sh
+        run: ./tests/doc-consistency.sh
 
       # The same fixtures again, each checker run recorded and compared with
       # its golden output byte for byte, and its ids read against the registry (#1103).
@@ -221,9 +218,6 @@ jobs:
 
       - name: The door creates nothing before preflight passes and deletes on any failure after
         run: ./tests/new-project-failpath.sh
-
-      - name: The door's skill shows every answer in one table before it creates anything
-        run: ./tests/new-project-answer-table.sh
 
       - name: The door reads the folder it starts in from local state only, and its skill offers the right path first
         run: ./tests/new-project-where.sh

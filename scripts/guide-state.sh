@@ -491,7 +491,7 @@ if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
       --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers] | @tsv' 2>&1)"; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
 elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
-      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"'), .mergedAt] | @tsv' 2>&1)"; then
+      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"'), .mergedAt, (if (.mergedAt // "") != "" and now - (.mergedAt | fromdate) < 86400 then "recent" else "" end)] | @tsv' 2>&1)"; then
   failed="merged pull requests: $(tail -1 <<<"$merged")"
 elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body --jq "$issue_rows" 2>&1)"; then
   failed="open issues: $(tail -1 <<<"$issues")"
@@ -1223,6 +1223,13 @@ if [ "$reach" = none ] && [ "$people_merged" -eq 1 ] && [ -z "$past_first" ]; th
     also="$also, with usage credits billed at API rates once turned on, so set a monthly limit first"
   fi
   echo "$also"
+fi
+# After a person's merge (#1081): the newest merge is a person's, merged in
+# the past day, and the route clears the session for the next ticket. The
+# guide cannot see the session, only the record, so this is its sign that a
+# piece of work just ended; /retro reads that session, so it comes first.
+if [ "$before" = /clear ] && [ "$(head -1 <<<"$merged" | cut -f2,6)" = "person"$'\t'"recent" ]; then
+  echo "after the merge: if anything in that piece of work should go differently next time, type /retro in that session before /clear"
 fi
 # The template behind (#904): step 9's line names the update; the step the
 # project is at stays the one above.

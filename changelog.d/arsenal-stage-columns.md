@@ -12,7 +12,7 @@
   `/debug` leave the rows and stay where they are installed or listed. The
   build row names the project's `verify` skill as its check before a commit,
   in place of Claude Code's bundled `/verify`. `SKILL.md` is 93 lines and
-  10,263 bytes, from 94 and 15,906.
+  10,401 bytes, from 94 and 15,906.
 - `/plinth:guide` says the same as before: what it says of each step (Next
   action, How to use it, It leaves) moved to `skills/guide/steps.md`, and
   `scripts/guide-state.sh` joins it to the arsenal's row by the step's name

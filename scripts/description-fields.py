@@ -11,6 +11,9 @@ required waits on the non-author trial (#163).
 
     description-fields.py PR <GitHub GraphQL answer, as closing-references.sh read it> [<the highest numbers' answer>]
 
+With AUTHOR_TYPE=Bot in the environment (GitHub's `user.type` of the
+pull request's author) the two fields give one `pass:` line instead (#1141).
+
 With the third argument, GitHub's answer for the newest issue and pull request,
 it also prints a `not yet confirmed:` line for each bare `#N` above the highest
 of them (#826): a reference to another repository written without its name.
@@ -151,7 +154,15 @@ if __name__ == "__main__":
         print(f"not yet confirmed: {sys.argv[1]} description's fields. Why: they could not be read ({type(e).__name__})."
               f" What confirms it: a re-run of this job ({HOW}).")
         sys.exit(0)
-    lines = field_lines(body, sys.argv[1])
+    # A pull request a bot wrote (`user.type` Bot, Dependabot's included):
+    # its description cannot carry the person-only fields, so they get one
+    # pass line, not two that never clear (#1141). The bare numbers below,
+    # and closing-references.sh's comparison, still run.
+    if os.environ.get("AUTHOR_TYPE") == "Bot":
+        lines = [(f"pass: {sys.argv[1]} description, the person-only fields (`Review:`, `What I checked myself`) "
+                  "do not apply: a bot wrote this pull request")]
+    else:
+        lines = field_lines(body, sys.argv[1])
     # The bare numbers: never the fields' verdict, never a red. Unread, the
     # log says why and nothing is warned.
     if len(sys.argv) == 4:

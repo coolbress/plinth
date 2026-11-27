@@ -224,6 +224,9 @@ What to keep to:
   things by hand, recommended, not in the way. For a `web` project it also
   names what waits for the first deploy, with the bill and when to read the
   Billing page, and the page's section to read; say each as the line does.
+- An `after the merge:` line goes in part 4 as one sentence: if anything in
+  that piece of work should go differently next time, type `/retro` in that
+  session before `/clear`.
 - When `command:` says to undo a pull request first (`main`'s latest CI run
   failed on its merge), say that `main` is broken by that merge and the
   undo comes before any fix: the project's `docs/how-to/undo-a-merged-change.md`
