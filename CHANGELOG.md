@@ -11,6 +11,623 @@ pull requests and have no tag.
 
 ## [Unreleased]
 
+## [2.46.0] - 2026-11-27
+
+New projects can be a `dashboard`, a Streamlit page of tables and charts, and render plinth-template v1.52.0, whose `AGENTS.md` keeps under Always only what a machine holds, ends with a `## This project` section a template update never changes, and fits in 8,192 bytes. Anthropic's `frontend-design` replaces `taste-skill` as plinth's page-design skill. Every failing check, on GitHub and on GitLab, ends its log with what failed, the one next step and a link. `/plinth:floor-check` prints a short report and says what changed since the last run, `/plinth:guide` says when a look back is due, and `/plinth:template-update` keeps this repository's lines in a conflict and runs the pin first. This release is cut early, as the one exception to the weekly train decided on #1132: 56 pull requests merged since v2.45.0, and about twenty acceptance criteria wait on this release's eval run. It is not a hotfix. The release after this one counts its seven days from this one.
+
+To update from v2.45.0 or earlier: `claude plugin marketplace update plinth`, then `claude plugin update plinth@plinth`, then once, in this order, `claude plugin install plinth@plinth` and `claude plugin uninstall taste-skill@plinth`, then `/reload-plugins`.
+
+train exception: <https://github.com/coolbress/plinth/issues/1132#issuecomment-7210202040>
+eval suite: <https://github.com/coolbress/plinth/issues/647#issuecomment-7217428062>
+tested with plinth-template v1.52.0
+
+### Added
+
+- [GitLab pipeline](https://github.com/coolbress/plinth/blob/main/docs/reference/gitlab-ci.md): a failed job's log
+  ends with `failed:`, `next:` and `more:`, as the GitHub checks' do, with the
+  link at the plinth commit the project's include line pins (`main`, saying
+  so, when it cannot be read). A failed tool download says to re-run the
+  pipeline, and a working-directory that is not there names the input.
+  `test` uploads a JUnit report, each test named with the Python it ran on
+  (GitLab keeps only the first test of a name across reports), which
+  GitLab's documentation says Free shows in the merge request's Test
+  summary; that display is not measured yet (#1101).
+
+- The concepts page says why plinth bets on the process, where that process
+  comes from, and where the bet stops, in
+  [About the process](https://github.com/coolbress/plinth/blob/main/docs/explanation/concepts.md#about-the-process);
+  `README.md`'s opening links to it (#1142).
+
+- `tests/skill-size.sh` holds the arsenal's `SKILL.md` to 250 lines and
+  12,000 bytes, tighter than other skills' 500 and 20,000.
+- `tests/guidance-skills.sh` fails when a job in a Tool cell names a second
+  tool anywhere in its text (a sequence "X, then Y" counts each step once),
+  when an Also cell names more than one tool, a sequence included, when a job's class is not the one its tool has
+  (installed or listed by plinth's manifests, built in, or platform when it
+  names no tool), when an Also cell is not one tool with its class and
+  condition, and when a tool on the "Not used with plinth" line is in an Also
+  cell.
+- `tests/guide-cases.sh` fails when a stage has no row in the guide's steps,
+  or one without four cells or two rows, when a row there names no stage,
+  when the tool cell loses its plinth piece, `also:` or `class:`, and when one
+  names a command the arsenal's table does not.
+
+- `skills/arsenal/not-used.md`: tools an agent can reach without installing
+  anything whose use breaks a plinth rule, with their class and the rule.
+  Today `/ship` and `/steward`, both built in. `tests/guidance-skills.sh`
+  fails when an entry has no class or rule, a class other than built in or
+  installed by plinth, or a tool the "Where you are" table names.
+
+- `/plinth:new-project` knows the `dashboard` archetype, a Streamlit page of
+  tables and charts with no login and no database (#1069). A description
+  about charts or seeing data recommends it; its prerequisites are said; and
+  where it runs is asked: on the person's computer (`--hosting=local`, the
+  default) or on Render (`--hosting=render`, about US $7 a month, GitHub
+  only), where anyone with the page's address can read it. It gets no tag
+  ruleset, since it releases nothing. On GitLab it runs locally only: the
+  GitLab door, which took no `--hosting` before, accepts `--hosting=local`
+  for a dashboard, refuses `--hosting=render`, and says `--hosting` is not
+  asked of any other archetype there. The door accepts the archetype once
+  plinth's template pin reaches the plinth-template release that adds it;
+  until then it stops with "unknown archetype: dashboard", as before.
+- `/plinth:floor-check` asks a dashboard whose answers say `hosting: render`
+  for `render.yaml`, leaves it out of the tag-ruleset item, and
+  `--move-archetype` refuses a move to or from `dashboard`, as from `web`.
+  `/plinth:guide` says where a dashboard runs and gives it no release signal.
+
+- [Decisions in force](https://github.com/coolbress/plinth/blob/main/docs/reference/decisions-in-force.md): one page of
+  the decisions that hold today in plinth and plinth-template, one line each
+  with its date and the record that holds it, brought up to 2026-11-25 (the
+  release trains, changelog fragments, GitLab's support line, the defaults
+  #1144 kept, the template's `AGENTS.md` rules). The seven pairs of records
+  that disagreed when it was collected now carry reversal lines, and the page
+  lists none open. A decision whose building issue is still open ends in
+  `(decided; not built yet: #N)`. The issue body stays canonical; the page
+  says how to add a line and how a reversal is recorded.
+
+- `scripts/floor-check.py --format json` prints the run as one JSON document
+  (#1105, first part): each result's id, state, message, area, hand-off and
+  view, the reason an item could not be read, who reads an item left to a
+  login that administers the repository, the checks the run did not
+  evaluate, and the counts. Its shape is `scripts/floor-check.schema.json`.
+  The text output and `ci / floor-check` are unchanged.
+
+- `/plinth:guide` says when a release is due (#1077). A `release due:` line
+  gives the last tag and its date, or `no tag yet`, how many changes merged
+  since, and how many of them are a `feat:` or `fix:` by a person. When one
+  is, nothing else is open (no pull request, no ticket, no spec to cut, no
+  triage) and `main`'s latest CI run does not fail, the next step is to push a version tag, as the project's
+  `docs/how-to/publish-a-release.md` says, with what goes out for its
+  archetype; otherwise the answer says it in one sentence after the next
+  step. A `web` project has no such line: it goes out by itself once `main`
+  is green. The tag comes from the history read `/plinth:guide` already
+  makes, so no call is added.
+
+- `/plinth:new-project` reads the folder it starts in before any question (`scripts/new-project.sh --where`, local files only). In a folder that already holds code, a repository or a plinth project, it asks one question first, whose recommended choice changes nothing there: start a new separate project, check the repository with `/plinth:floor-check`, take the next step with `/plinth:guide`, or put the code on GitHub or GitLab first. Each hand-off is a command printed for you to type (#1121).
+
+- `scripts/make-release.sh` releases early without the hotfix path when the
+  why-file names the comment that records the owner's decision:
+  `train exception: <https://github.com/<owner>/<repo>/issues/<n>#issuecomment-<id>>`.
+  Run 1 reads the comment with `gh` and stops when it cannot; the line stays
+  in the release's section and its GitHub Release, and a why with a
+  `hotfix:` line too stops (#1132).
+
+### Changed
+
+- `/plinth:arsenal`'s "Where you are" table has the six columns of one row
+  per stage (#1086, second part): Trigger, Tool, Class, plinth piece, Also and
+  Then. Tool gives one tool for each job of the stage, Class says for each
+  whether it is installed, built in, platform or listed, and Also is at most
+  one alternative with its condition: `/design` on the idea row (Claude Code
+  v2.1.265 or later, an account where the Design template is available),
+  `/wayfinder` on the plan row, `/simplify` on the build and check rows,
+  `/improve-codebase-architecture`, `/insights` and `/handoff` where they
+  were. `domain-modeling`, `/grill-with-docs`, `/ponytail-audit` and
+  `/debug` leave the rows and stay where they are installed or listed. The
+  build row names the project's `verify` skill as its check before a commit,
+  in place of Claude Code's bundled `/verify`. `SKILL.md` is 93 lines and
+  10,401 bytes, from 94 and 15,906.
+- `/plinth:guide` says the same as before: what it says of each step (Next
+  action, How to use it, It leaves) moved to `skills/guide/steps.md`, and
+  `scripts/guide-state.sh` joins it to the arsenal's row by the step's name
+  (`scripts/lib/stage-table.sh`). Its tool cell now carries the row's plinth
+  piece, Also and Class.
+
+- `/plinth:arsenal` is lighter to read (#1086, first part). Its `SKILL.md`
+  keeps the "Where you are" table and the list of skills only the person can
+  start: 94 lines and 15,906 bytes, from 366 lines and 41,486, with no issue
+  numbers. What lies outside the table moved to files beside it, each read
+  only when the question needs it: `installed.md` (the default set and its
+  cost, the built-ins the table names), `listed.md` (the listed tools and
+  their install lines) and `not-used.md`. The coverage by step and concern,
+  the selection criteria and the measurements, with their issue numbers, are
+  in `docs/reference/arsenal-evidence.md`, for maintainers.
+- The "Unsure which skill now" row names `/plinth:guide` only, says the agent
+  cannot call it (it is user-only) and asks the person to type it, and says
+  that on GitLab the table is the answer. `/ask-matt` stays in
+  `mattpocock-skills-extra`.
+- `wizard` leaves the arsenal's rows: no recorded run called it. It stays in
+  `mattpocock-skills-extra`.
+- The release row names GitHub's generated release notes, grouped by the
+  project's `.github/release.yml`; the end row names the issue form "End or
+  hand over this project".
+- The skill's description is written for the agent's choice: choosing a tool
+  for a stage or a job, or asked what plinth installs or what a tool costs.
+
+- A change's changelog line is its own file, `changelog.d/<branch-slug>.md`,
+  starting with its Keep a Changelog section, in place of a line under
+  `## [Unreleased]` (#1136): pull requests open from the same `main` no
+  longer conflict in `CHANGELOG.md`. `scripts/make-release.sh` writes the
+  fragments into the new version's section, grouped by section, deletes them
+  in the release commit, and stops on a fragment that names no known section
+  or is empty. `ci / docs` fails a pull request that writes under
+  `[Unreleased]`, and the release pull request still passes without a
+  review with its fragments removed. `scripts/raise-template-pin.sh` writes
+  its line to `changelog.d/template-pin.md`.
+
+- A failing `ci / test` now says what failed, the next step and a link, in
+  the three places a person and their agent look (#1098). Its log ends with
+  `failed:`, `next:` and `more:` lines, the last thing plinth prints in the
+  job, and one annotation titled `ci / test` says the same in at most 300
+  characters: on a failing test it names the first one and the command that
+  runs it (`uv run pytest <test>`), and each failed test is an annotation at
+  its file and line, nine at most, then a line saying how many there are.
+  Fewer warnings: a step that did not run because an earlier step failed is
+  no longer a warning once the job has a `fail:` line (it repeated the
+  failure and read like the cause), and every job's Verdict prints its
+  summary lines into the log too. The links `python-ci.yml`,
+  `pr-review.yml` and the scripts they fetch print now name the plinth
+  commit the project's `ci.yml` calls (`job.workflow_sha`, its first 12
+  characters), not `main`; `more:` opens the check's section of the new
+  "When a check fails" part of `docs/reference/required-checks.md`. The
+  pytest step is named `pytest on .python-version` (it showed as
+  "Run limited() {"); no job, step id, check name, input or secret is
+  renamed. The other required checks get the same shape in #1099 and #1100.
+
+- plinth's own `AGENTS.md` (`CLAUDE.md`) keeps the rules an agent needs before
+  acting, in 97 lines rather than 159, and links each procedure to its one
+  home: the review rounds to the reviewer how-to, closing an issue to
+  [the issue tracker page](https://github.com/coolbress/plinth/blob/main/docs/agents/issue-tracker.md#closing-an-issue), the
+  release pull request to the release how-to, and the dependency-entry
+  exceptions to a new page, [dependency entries](https://github.com/coolbress/plinth/blob/main/docs/reference/dependency-entries.md).
+  The incidents that justified its rules are lines in the decisions page.
+  The only rule that changed is its own size: at most 110 lines and 7,500
+  bytes, which reverses the 60-line cap #25 set for it.
+
+- On plinth's own pull requests, an edit to the title or the description
+  re-runs only the checks that read them: `ci / docs`, `ci / release-gate`
+  and the canaries' `pr-title` and `diff-size`, in a new `ci-text.yml`
+  (#1133). It no longer restarts `ci / install`, `ci / tools` or the
+  canaries' code jobs, and it no longer cancels the run a push started.
+  Every check name stays; `python-ci.yml` and consumers are unchanged.
+  Pull requests open when this merges keep their older `ci / docs` and
+  `ci / release-gate` from `ci.yml` until their next push: GitHub requires
+  each workflow's latest run of a name, so a red one there still holds the
+  merge after an edit fixes the text. A push, or "Update branch", clears it.
+
+- The eval suite's floor-check grade holds the short report's shape (#1105,
+  third part). Besides naming every planted gap, a run fails when its final
+  report does not open with the verdict (a preamble is not one), has more than five action rows
+  (numbered, or bullets) or one about what could not be read, names a check id, asks anything
+  outside the rows but one last question offering the pull request, changes a file, or runs a
+  `gh api` call that writes (a method other than GET, or a field or an input
+  with none). Each rule is recorded in the grade and counted in the summary
+  row; the words are read in English and Korean.
+- `/plinth:floor-check`'s description names what it checks (the protection
+  rules, the base files and the agent's safety), the one pull request it
+  offers (made after the check), and that it changes nothing in the
+  repository and keeps one note on this machine.
+
+- `/plinth:floor-check` is lighter to read: its `SKILL.md` is 201 lines and
+  11,906 bytes, from 577 lines and 41,710, with no issue numbers, and opens
+  with the read-only rule. What each item reads and does not read moved to
+  `skills/floor-check/reference.md`, which the skill opens only when the
+  person asks about one item.
+
+- `/plinth:floor-check` gives a short report (#1105, second part). The skill
+  reads the checker's JSON through `scripts/floor-report.py`, which prints:
+  - one verdict line;
+  - at most five action rows, those that cannot be undone or reach others
+    first, each one of three kinds: do it yourself, one pull request for
+    every file item, or later;
+  - one line naming every other finding;
+  - what could not be read and what was not checked, each said not to be a
+    problem;
+  - the passes as one line;
+  - one question, last.
+  No check id appears in it. "Show everything" and `floor-check <area>`
+  print every line, the PASS lines included. The facts that are not findings
+  (the SSH-key and clean-credential lines, the wall expectation, the plugins
+  at their pin, the sandbox's lines) are left to the JSON and to those views.
+- A second run says what changed since the last one: fixed, still missing
+  and new, by check. The last run is kept in one note on this machine,
+  `~/.cache/plinth/<host>-<owner>-<repo>/floor.json`, written only from a run
+  on the default branch with a clean working tree; nothing is written in the
+  repository.
+
+- plinth's page-design skill is Anthropic's `frontend-design`, from the
+  official plugin directory (`anthropics/claude-plugins-official`,
+  `plugins/frontend-design`, pinned to `30202c7`), installed by default in
+  place of `taste-skill` (#1082). It is one 9,390-byte `SKILL.md` with no
+  scripts or hooks; taste-skill's pinned one was 87,253 bytes, and its
+  upstream added Node scripts, so its pin could not be raised. In #713's
+  blind trial (2026-10-31) `frontend-design` graded the same as or higher
+  than taste-skill on all three page briefs at about 63% of its cost a run,
+  by margins within the run-to-run spread. Type
+  `/frontend-design`, or name it in the ticket, for a page a person will look
+  at; dashboards and dense product UI still go to `/design` first.
+- To update from v2.45.0 or earlier: `claude plugin marketplace update plinth`,
+  `claude plugin update plinth@plinth`, then once, in this order,
+  `claude plugin install plinth@plinth` and
+  `claude plugin uninstall taste-skill@plinth`, then `/reload-plugins`.
+  `update` does not remove taste-skill; before Claude Code 2.1.319 it does
+  not install frontend-design either.
+  If you had already installed `frontend-design` from the official
+  marketplace, keep one copy:
+  `claude plugin uninstall frontend-design@claude-plugins-official`.
+
+- plinth's GitLab scope is written down: the GitLab pipeline is supported,
+  skills are GitHub-first. What exists for GitLab keeps working, and a new
+  check or skill need not reach GitLab parity until a GitLab user is recorded
+  ([GitLab pipeline, Scope](https://github.com/coolbress/plinth/blob/main/docs/reference/gitlab-ci.md#scope)) (#1137).
+
+- `/plinth:guide` says when a look back is due (#1145). A new `look back:`
+  line gives the last issue titled `Look back …` (or none yet), the `feat:`
+  merges by a person since, a tag since, and 30 days. A look back is due at
+  whichever comes first since the last one, or since the first merge: a
+  version tag pushed, 10 `feat:` merges, or 30 days with a merge; never with
+  nothing merged. 10 and 30 are starting values. When nothing else is open,
+  the next step is `/plinth:floor-check`, with a note that gives the
+  `Look back YYYY-MM-DD` issue's seven questions (the restore tried and the
+  bills, with `/usage` and the month's Actions usage, among them), `/insights`
+  and at most three tickets; otherwise it is one sentence after what is open.
+  The search rides on the guide's history read, so one run makes no more
+  GitHub calls than before. Step 9 of `docs/how-to/run-a-project.md` and the
+  arsenal no longer say "every week or two".
+
+- `/plinth:guide map` says each state in words (#1155): every mark is
+  followed by its word (`✓ done`, `✗ needs attention`, `· not yet`), so a
+  screen reader that skips the symbol still says it, and the return line
+  starts `repeat ↻`. Steps 7 and 8 carry their numbers, as step 9 does; the
+  "A `web` project to put online" row is under "When needed"; and the token
+  line has its `· not yet` mark when there is no repository yet. The guide
+  skill says a terminal answer prefers a list of short lines to a table
+  wider than four columns.
+
+- The loop names what comes after a merge, what users say and how to sketch a
+  page (#1081). Right after a person's merge, when the next ticket is up,
+  `/plinth:guide` adds an `after the merge:` line: if anything in that piece
+  of work should go differently next time, type `/retro` in that session
+  before `/clear`. The arsenal's "The project in use" row and step 7 of
+  `docs/how-to/run-a-project.md` say that what users report is written as an
+  issue and sorted with `/triage`. Step 2 and its arsenal row name the
+  built-in `/design` for an idea that is a page people look at, before or
+  beside `/grilling`, which stays the step's command.
+
+- After the first merge, only the agent's token stands before step 2 (#1078).
+  The agent's own account and the four things by hand stay strongly
+  recommended, in that order, but no longer hold the way: `/plinth:guide`
+  routes a project with one merge, nothing else open and the token step done
+  to step 2, and names the other two in a `then also:` line. While the token
+  step is not done or not verified, the first-merge row and the `token step:`
+  line name the token page first and the other two as recommended. For a
+  `web` project, that `then also:` line also names what waits for the first
+  deploy: the host's deploy-failure notification, an uptime monitor and an
+  error tracker, one copy of the data off the host, a restore rehearsal that
+  counts rows, and the bill to expect.
+- `docs/how-to/set-four-things-by-hand.md`, read 2026-11-26: step 2 gives each
+  provider's spend limit with its link (Anthropic, OpenAI, Railway, Fly.io,
+  Render, GitHub Actions, the agent's subscription) and says to set each
+  below what you can afford to lose; step 3's restore counts one table's rows
+  before and after; "After the first deploy" starts with Render's own
+  deploy-failure notification, names Better Stack beside UptimeRobot, and
+  adds a copy of the data off the host and the bill to expect on Render.
+  `docs/how-to/run-a-project.md` step 1 and the token and account pages say
+  the same order.
+
+- An incident in plinth yields a check or nothing: rule text goes into
+  `AGENTS.md` or a skill only when no check can hold it, and the pull request
+  says why ([CONTRIBUTING.md](https://github.com/coolbress/plinth/blob/main/CONTRIBUTING.md#after-something-goes-wrong)).
+  `tests/skill-size.sh` now also holds `AGENTS.md` to 110 lines and 7,500
+  bytes, with every cap in `tests/size_caps.py`, which `ci / diff-size` lists
+  as a change to the checks when a cap moves (#1138).
+
+- plinth's own `ci / install` runs its 43 tests in five jobs at once,
+  `ci / install-1` to `ci / install-5`, each on its own runner, instead of
+  one after another in one job (#1135). `ci / install` keeps its name and
+  is now their verdict: it passes only when all five did, and for a failed
+  one names the step and the test it runs. Nothing changes for a project
+  plinth made; `python-ci.yml` is untouched.
+
+- A failing `ci / lint` or `ci / typecheck` now says what failed, the next
+  step and a link, as `ci / test` does (#1099): the log ends with `failed:`,
+  `next:` and `more:` lines, and one annotation titled with the check's name
+  says the same. Each ruff finding and each mypy error is an annotation at
+  its file and line, with its code, nine at most in the job, then a line
+  saying how many there are; `ruff format --check` names the files and
+  `uv run ruff format`. `next:` is the local command that shows the same
+  errors (`uv run ruff check .`, `uv run mypy .`). ruff or mypy stopping on
+  its own error (exit 2) with no file and line named fails as "could not
+  run", not as findings; mypy's syntax error, also exit 2, is an error at
+  its line. The
+  ruff and mypy steps are named (`ruff check`, `ruff format --check`,
+  `mypy`); no job, step id, check name, input or secret is renamed, and no
+  package or action is added.
+
+- `/plinth:new-project` says what a choice costs beside it, with no new question. The public option says the history, issues and Actions logs are public too, and that a fork made while public stays public after a switch to private. The line after the archetype gives the month's total, dated and linked: Claude Pro US$20, plus about US$13 on Render for `web` (about US$33 in all). The private option estimates the Actions minutes a CI run uses (13 jobs, about 13 to 15 billed minutes; roughly 40 to 75 pull requests on GitHub Pro's US$18), marked as an estimate (#1154).
+
+- A `not yet confirmed:` line in `ci / test`, `ci / lint` and
+  `ci / typecheck` says one fact per sentence (#1156): `not yet confirmed:
+  <what>. Why: <reason>. What confirms it: <run>.`, in the job summary and
+  in its warning. So does the line each job's shared helper writes for a
+  step that did not run because an earlier step failed (`ci / deps` and
+  `ci / code-growth` write their own, which follow with #1100), and on
+  GitLab the `test` job's lines, which share the changed-lines code. The verdict's name stays
+  `not yet confirmed`; the other checks' own lines follow with #1100 and
+  #1101. `docs/reference/terms.md` adds `workflow run`, `job summary` and
+  `annotation`, the three places a failing check sends a person.
+
+- A failing `ci / build`, `ci / secrets`, `ci / deps`, `ci / migrations` or
+  `ci / deploy-check` now says what failed, the next step and a link, as
+  `ci / test` does (#1100): the log ends with `failed:`, `next:` and
+  `more:`, and one annotation titled with the check's name says the same.
+  `ci / secrets` annotates each secret gitleaks finds at its file and line,
+  nine at most, naming the rule and the commit and never the secret, and
+  gitleaks' own error fails as "could not run". `ci / deps` splits its one
+  `fail:` line into its causes: an added dependency version with an
+  advisory (named with its version and advisory, next: raise it) or a
+  review that could not run (next: re-run). `ci / build` names the module
+  and artifact the install smoke stopped on, and its own "no wheel or sdist"
+  annotation becomes a log line, so one cause gives one annotation.
+  `ci / deploy-check` names the first deployment issue it reports. Their own
+  `not yet confirmed:` lines say one fact per sentence. No job, step id,
+  check name, input or secret is renamed.
+
+- The last of #1100: `ci / code-growth`, `ci / web-audit` and
+  `third-party / review` say what they report in the shared shape's words.
+  Their `not yet confirmed:` lines say one fact per sentence (#1156's form),
+  `ci / code-growth`'s stopped-step line included. Each `ci / code-growth`
+  warning on a function or file is one sentence naming it and the fix
+  ("Function x has complexity 12 where the convention is 10, so ask Claude
+  to run /improve-codebase-architecture on ..."), and each annotation
+  `third-party / review` prints is one sentence too, the detail it carried
+  (gh's words, the value given) moved to a plain log line before it. Its
+  bare `(#205)`, `(#386)` and `(#674)` linked to the project's own issues;
+  they are now links to `docs/how-to/configure-the-third-party-reviewer.md`
+  at the plinth commit the project calls. Fixed with them: after the
+  wait, the step's links named the time of its last look instead of the
+  plinth commit (a variable the wait reused), so its existing summons-token
+  link opened nothing. The titled annotation every
+  failing check prints keeps #1098's form, what failed and the next step.
+  No job, step id, check name, input or secret is renamed.
+
+- A failing `ci / pr-title`, `ci / diff-size` or `ci / floor-check` now ends
+  its log with `failed:`, `next:` and `more:`, and says it in one annotation
+  titled with the check's name, as the other checks do (#1100); `more:`
+  opens the check's section of `docs/reference/required-checks.md` at the
+  plinth commit the project calls. One cause gives one annotation:
+  `closing-references.sh` and `conflict-markers.py` no longer print their
+  own beside it in these steps (`MESSAGE_FILE`; `ci / docs` keeps them), and
+  when `ci / diff-size` cannot compute the diff, the steps after the
+  measure step say so in the summary only, so a head that was not fetched
+  gives one annotation where it gave three. Over the limit, the next step
+  says to split the change and not to shorten docs, docstrings or tests to
+  fit, and the comment above the job states what its sources measured
+  (#1144). These checks' `not yet confirmed:` lines, the PR description's
+  fields included (on GitLab too), say one fact per sentence; the floor
+  checker's own lines keep their form. No job, step id, check name, input
+  or secret is renamed.
+
+- `ci / pr-title` on a pull request a bot wrote (GitHub's `user.type` Bot:
+  Dependabot's, and any GitHub App's or Actions workflow's, an AI agent's
+  under an app account included) says in one `pass:` line that the person-only
+  fields, `Review:` and `What I checked myself`, do not apply, instead of
+  two `not yet confirmed` lines that showed on every such pull request and
+  never cleared (#1141). The closing-keyword comparison and the bare `#N`
+  check still run on a bot's description.
+- On a push, `ci / pr-title` prints one line, that there is no title or
+  description to read, and no longer fetches plinth's description check,
+  which nothing on a push reads: a 503 from raw.githubusercontent.com had
+  turned the job red on a push to `main`, and left a curl error in the log
+  when a retry got through. No check name, job, step id, input or secret
+  changes.
+
+- When a release owes both the eval suite and the smoke run, one
+  `scripts/eval-suite.sh --release` on the release branch serves both (#1134).
+  The run starts with the smoke run's six rows and prints their verdict, the
+  line `--smoke` prints, before any other run starts. Its exit is the smoke
+  run's for those rows. The why says `eval suite: on the release candidate`,
+  and the run's link goes in the release pull request's description;
+  `scripts/make-release.sh` run 2 reads it there, refuses without it, and puts
+  it in the GitHub Release. `--smoke` alone stays for releases that owe only
+  the smoke run.
+
+- plinth releases on a weekly train: at most one release a week, with a named
+  hotfix path for a published advisory, a broken install or a consumer's
+  required check failing because of plinth (#1132). `scripts/make-release.sh`
+  run 1 stops when origin's highest `vX.Y.Z` tag is less than 7 days old,
+  naming the tag and its age, unless the why-file carries `hotfix: <reason>`,
+  which the release's section and GitHub Release then say.
+  [How to cut a release](https://github.com/coolbress/plinth/blob/main/docs/how-to/cut-a-release.md)
+  opens with the cadence.
+
+- The concepts page's review section, now
+  [About the review layers](https://github.com/coolbress/plinth/blob/main/docs/explanation/concepts.md#about-the-review-layers),
+  includes the fresh-context review as the default and says which review
+  each name means: the required checks, the fresh-context review,
+  `/implement`'s `code-review` and the built-in `/code-review` (same session,
+  not independent), and `third-party / review` (optional, CI) (#1083).
+
+- When a merged change broke `main`, plinth says to undo it first (#1079).
+  `/plinth:guide` reads the head of `main`'s latest failing CI run: when it is
+  a squash merge, the next step is to undo that pull request with the
+  project's own `docs/how-to/undo-a-merged-change.md` (a revert pull request
+  through the same checks), ahead of any open pull request's failing check.
+  A `then also:` line names what follows: restore lost or changed data, then
+  reproduce and fix, then a short blameless incident note in the issue's
+  Outcome. Step 7 of `docs/how-to/run-a-project.md` and the arsenal's
+  "Something broke" row give that order, a leaked secret revoked or rotated
+  before any history rewrite, a revoke list for something bad that ran on
+  this computer, and Claude Code's built-in `/rewind` for the agent's own
+  edits in a session, which never undoes a merge.
+
+- `/plinth:new-project` renders plinth-template v1.52.0 instead of v1.51.0.
+  A new project can be a `dashboard`, a Streamlit page of tables and charts,
+  local by default or on Render (coolbress/plinth-template#360; the door's
+  half is #1069). Its `AGENTS.md` keeps under Always only what a check or a
+  deny rule holds, is capped at 8,192 bytes, and ends with a `## This project`
+  section a template update never changes (coolbress/plinth-template#355,
+  coolbress/plinth-template#361). The pull-request form's comments are short pointers to
+  `CONTRIBUTING.md` (coolbress/plinth-template#357). GitHub projects get a
+  `Look back` issue form, and the end-or-hand-over form saves before it
+  deletes (coolbress/plinth-template#356). A `backend` image's SBOM is signed
+  and pytest fails an `xfail` test that passes
+  (coolbress/plinth-template#346). A new project calls plinth v2.45.0's workflows: the template's
+  `plinth_sha` default moved from v2.44.0, and its GitLab checksum with it.
+  An existing project gets these through `/plinth:template-update`; the
+  release notes name the lines that may conflict
+  (<https://github.com/coolbress/plinth-template/releases/tag/v1.52.0>).
+
+- `/plinth:template-update` no longer recommends one side whole for a
+  conflict that would lose a line the project added (#1186). On GitHub,
+  when copier leaves conflicts, `--apply` compares each file with copier's
+  render of the recorded answers at the recorded tag and lists the lines the
+  project added there that the template's side drops. For a file with any,
+  it writes a combination beside the update's record, never into the
+  worktree: the template's side with each line kept where it belongs now,
+  and where both sides set the same key (YAML or TOML), the project's value.
+  A line whose neighbours are gone is kept at the end of its block and
+  flagged; in `AGENTS.md` the skill proposes moving it under
+  `## This project`, its last section, and moves it only on the person's
+  word for that line. A file with no such line may still take the
+  template's side. The skill offers six choices per file (the combination
+  in full, the template's side, the project's side, the full diff, the
+  person edits it, or stop), recommendation first. The draft pull request's
+  description lists each such line and the file and section it is in now,
+  or that it is not there. Measured on a copy of coolbress/nexusbt, the
+  combinations of `ci.yml` and `pyproject.toml` keep its
+  `test-timeout-minutes: 20`, its widened `diff-size-exclude`, its
+  `extra-python-versions: ""`, its nine pytest markers and its `addopts`,
+  and parse. GitHub's plain update only. MINOR: no check, job, workflow
+  input or secret changes.
+
+- `/plinth:template-update` serves GitLab, where it used to stop and point at
+  the manual steps (#924). The plan, `--apply` and `--finish` run copier as on
+  GitHub; what differs is what reads and writes the host: `glab api`, asked
+  of the host and project origin's URL names, verifies the base, and the
+  update ends in a draft merge request (a `Draft:` title), not a draft pull
+  request. An archetype move (`--archetype <a>`) works there too: in place of
+  required checks, its plan names the jobs of `.gitlab-ci.yml` that start
+  and stop, whether "Pipelines must succeed" is on (skipped pipelines not
+  counted) and whether the default branch is protected, as
+  `/plinth:floor-check` reads them, and for one that is not, the `glab api`
+  command a Maintainer runs. Nothing changes the project's settings. On
+  GitLab the size of the update is not counted before it is pushed, so no
+  split is proposed; the pipeline's `diff-size` job counts it. The script
+  still stops on a GitLab checkout whose origin URL names no project, and a
+  move to or from `web` is still refused on both hosts. `/plinth:floor-check`'s
+  plugin-update steps on GitLab now end at `/plinth:template-update`, as on
+  GitHub (#1012).
+
+- `/plinth:template-update` asks each question the template added that the
+  project never answered, by name, before the yes (#1185). Until now
+  `copier update --defaults` gave such a question its default unasked: a
+  project rendered before plinth-template v1.51.0 recorded
+  `records_language: English` whatever language its person works in. On
+  GitHub the plan's run on a copy shows which questions copier recorded an
+  answer for that `.copier-answers.yml` had none for (so a question whose
+  `when:` is false for the project is not listed), and prints each with its
+  default and its help from the target tag's `copier.yml`. A question with no
+  default stops the plan, naming it, since copier's `--defaults` would
+  record null. The skill asks the listed questions one at a time, with the
+  default recommended unless the person's context says otherwise.
+  `--apply` takes `--answer <name> <value>` for each, passed to copier as
+  `--data`, quoted for display by the script's one quoting function so
+  Hangul shows as typed; a name the plan does not list exits 2 having
+  created nothing. The draft pull request's description records each answer,
+  or "default kept". GitHub's plain update only. MINOR: no check, job,
+  workflow input or secret changes.
+
+- `/plinth:template-update` raises the plinth pin first and updates the
+  template second (#1183). When a project's workflows call a plinth older
+  than the one the target template tag was tested with, the plan stops
+  (exit 1) before it writes anything, and `--apply` stops before it creates
+  a worktree or branch. It names both commits, the compare link, and the
+  open pull request that raises the pin (Dependabot's, or one a person
+  opened), by number, to merge first. When no such pull request is open, it
+  prints the change to make in one: every workflow that calls plinth moved
+  to the same SHA (on GitLab, the include's ref and checksum). Once that is
+  merged, the update runs with the pin the workflows call, with no pin
+  choice, and the plinth `uses:` lines are not in conflict for the pin. A
+  comparison that cannot be read stops the plan too. The update no longer
+  mixes a template change and a plinth change in one pull request.
+  `/plinth:floor-check` prints the same "raise it first" line in place of
+  an update line when the pin is behind. MINOR: no check, job, workflow
+  input or secret changes; the flags removed below were used only by
+  plinth's own skill, which ships with this script, and the monthly
+  template reminder in rendered projects runs `--print-update-command`
+  without them.
+
+- `/plinth:template-update`'s plan shows what the update will do before the
+  yes (#1184). On GitHub it runs the `copier update` line on a copy of the
+  default branch outside the repository, removed when done, and lists the
+  files that merge cleanly, the files that merge into the repository's own
+  changes (compared with copier's render of the recorded answers at the
+  recorded tag), and each file left in conflict with the lines the
+  repository added there. The lists come from what copier left, not its exit
+  code, which is 0 with conflicts left. It also prints the template
+  CHANGELOG's section headings between the two tags, quoting a section's
+  `### Files and questions` block where it has one (the compare link when
+  the CHANGELOG is not read), and how to undo the update: before it merges,
+  close the pull request and delete its branch and worktree; after, revert
+  it in a pull request of its own. The draft pull request's description
+  carries the same undo commands. copier failing on the copy stops the plan,
+  with nothing written. The plan takes longer by the time of two copier
+  runs (the update and the old render). The archetype move's plan and the
+  GitLab path are unchanged: they take bug fixes only until a real project
+  uses them. MINOR: no check, job, workflow input or secret changes.
+
+### Removed
+
+- `template-update.sh --plinth-pin live|tested` and `floor-check.py
+  --print-update-command --plinth-pin tested`, with the plan's
+  `With the tested pin:` and `Recommended:` lines, its second `--apply`
+  line, and the pull request description's "The plinth pin: moved / kept"
+  sentence (#1183). `template-update.sh --plinth-pin`, in any form, exits 2
+  with a message naming the new order.
+
+### Fixed
+
+- [Decisions in force](https://github.com/coolbress/plinth/blob/main/docs/reference/decisions-in-force.md) no longer
+  says the agent never sees the GitHub token: the deny rules close the common
+  ways of reading it, and the everyday token's scope (one repository, no
+  Workflows, no Administration) bounds what a token the agent does reach can
+  do. [Give the agent a token](https://github.com/coolbress/plinth/blob/main/docs/how-to/give-the-agent-a-token.md)
+  step 1 now names an expiration date and what an expired token looks like
+  (`Bad credentials (HTTP 401)` from `gh`, `Authentication failed` from
+  `git push`) (#1216).
+
+- `floor-check.py --format json --verdicts <path>` with a path that cannot be
+  written prints one document, the crashed one, instead of two.
+
+- [`/plinth:floor-check`](https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report)
+  opens its answer with the report's verdict line. A repository's output
+  style that asks for "who you work as" at a task's start no longer pushes
+  it down, and the note about the pull request coming after the check is
+  said only after the person says yes, so the question stays last.
+
+- `/plinth:guide`'s "so far" picks the newest five events by their whole
+  timestamp, not by the order GitHub returned them: when more than five
+  events share a day, the earliest of that day is the one left out (#1076).
+  A tag's date with a time-zone offset is read in UTC, like every other
+  event's, so near midnight it may show the day before or after it did.
+
+- `/plinth:template-update` and the eval suite stop with "could not make a temp folder" when the system refuses one, instead of going on with an empty path (#1123).
+
+- `/plinth:new-project` no longer accepts a git identity that git made up from your login and the computer's name: with no `user.name` and `user.email` set (or the `GIT_AUTHOR_*` and `GIT_COMMITTER_*` pairs), the readiness checklist lists it with the two `git config --global` lines before anything is created, on GitHub and GitLab.com, so the first commit of a public repository cannot carry the computer's name (#1153).
+
+- `/plinth:new-project` in text mode (`claude -p`) asks the last question as "type 0 to create it as shown, or the numbers of the rows to change", and never numbers Create as a choice, so `1` cannot mean both "create" and "change row 1"; with "I don't know" as the description it suggests plain names for the kind instead of none (#1067).
+
 ## [2.45.0] - 2026-11-25
 
 New projects start the way a person thinks about them: the host first, then what they want to make, a recommended archetype with its reason, the name, and one table of every answer before anything is created, with only the rows they pick asked again. They render plinth-template v1.51.0, which records the language of the project's records and a one-line description, gives a `web` project its own user model from the start, tests Python 3.14 in place of 3.13, and records a `data-ml` project's training-data hash. `/plinth:guide` says the next step first and keeps a one-screen map of the whole way, with one step in depth on request. A private repository without GitHub Code Security now compares its added dependencies with osv-scanner instead of reporting "not yet confirmed". Printed commands keep Hangul as typed.
@@ -6115,7 +6732,8 @@ tested with plinth-template v1.4.1
   them by their old numbers in the earlier repository; for #84 and up the new
   number is the old one minus 68, and the full table is pinned on #31.
 
-[Unreleased]: https://github.com/coolbress/plinth/compare/v2.45.0...HEAD
+[Unreleased]: https://github.com/coolbress/plinth/compare/v2.46.0...HEAD
+[2.46.0]: https://github.com/coolbress/plinth/releases/tag/v2.46.0
 [2.45.0]: https://github.com/coolbress/plinth/releases/tag/v2.45.0
 [2.44.0]: https://github.com/coolbress/plinth/releases/tag/v2.44.0
 [2.43.0]: https://github.com/coolbress/plinth/releases/tag/v2.43.0
