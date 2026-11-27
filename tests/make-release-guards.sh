@@ -349,7 +349,7 @@ is "  and nothing changed"         untouched
 EXC_RC=1 run "v$next" "$work/exception.md"; check "a 'train exception:' link gh cannot read is refused" no $?
 is "  and nothing changed"         untouched
 is "  and the refusal names the comment" says "coolbress/plinth comment 7210202040"
-EXC_BODY= run "v$next" "$work/exception.md"; check "a 'train exception:' comment with an empty body is refused" no $?
+EXC_BODY='' run "v$next" "$work/exception.md"; check "a 'train exception:' comment with an empty body is refused" no $?
 is "  and nothing changed"         untouched
 run "v$next" "$work/exception.md"; check "6 days after, with a 'train exception:' link gh reads, it bumps" ok $?
 is "  and the section carries the line above the first ###, so run 2 publishes it" \
