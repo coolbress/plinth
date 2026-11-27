@@ -9,7 +9,7 @@
 2. [What to make](#2-what-to-make)
 3. [Follow-ups](#3-follow-ups)
 4. [The archetype recommendation](#4-the-archetype-recommendation)
-5. [Where a web app runs](#5-where-a-web-app-runs)
+5. [Where a web app or a dashboard runs](#5-where-a-web-app-or-a-dashboard-runs)
 6. [The name](#6-the-name)
 7. [Who may see the project](#7-who-may-see-the-project)
 8. [Every answer in one table, before anything is created](#8-every-answer-in-one-table-before-anything-is-created)
@@ -101,12 +101,17 @@ names its language as the records language. With `--archetype=` given, steps 2, 
 
 Asked only when the answer to step 2 leaves the archetype open
 (it fits two kinds, says too little, or is "I don't know"); one that names
-what is made asks none. Ask only what decides between the kinds still open:
+what is made asks none. A description about charts, graphs, a dashboard or
+seeing data ("see my sales as charts", "see my data") names it: `dashboard`.
+Ask only what decides between the kinds still open:
 
 - Header `Use`: "How will it be used?" **Someone runs it, in a terminal or
   on a schedule** (cli). **Other code imports it** (library). **It keeps
-  running and answers requests** (backend). **People open it in a browser
-  and log in** (web; left out on GitLab.com).
+  running and answers requests** (backend). **People open it in a
+  browser** (web or dashboard; then `Login`).
+- Header `Login`: "Do people log in and keep their own data in it, or only
+  look at tables and charts?" **They log in** (web; on GitLab.com, say it
+  is made on GitHub only). **Only look at tables and charts** (dashboard).
 - Header `Model`: "Does it train a machine-learning model here?" **Yes**
   (data-ml). **No**: collecting, cleaning or processing data with no model
   trained is cli.
@@ -131,9 +136,9 @@ person always picks.
 | Not sure | Start with the narrowest, a terminal command (`--archetype=cli`); a kind can be changed later, with some work. |
 
 Until plinth has them, add one sentence for the gap the description falls
-into: there is no light dashboard kind (web brings logins, a database and
-a monthly cost); `cli` runs only on the person's computer; a bot needs a
-place to run, and that costs money.
+into: `cli` runs only on the person's computer; a bot needs a place to run,
+and that costs money. For `dashboard`, say also that it runs on their
+computer, has no login, and that where it runs is asked next.
 
 | Kind | Makes | Does not make |
 | --- | --- | --- |
@@ -142,9 +147,12 @@ place to run, and that costs money.
 | backend | A service in a container that keeps running and answers requests. | Web pages with logins, or a place to run it. |
 | data-ml | A model trained here, with a model card; on GitHub a `v*` tag publishes the model, its metrics and the card. | A server that answers with the model, or data collected on a schedule. |
 | web | A web app with logins and a Postgres database, on GitHub only. | A light page with no logins; it costs money to run. |
+| dashboard | A page of tables and charts, made with Streamlit, that runs on your computer; it can go online on Render, GitHub only. | Logins or a database: online, anyone with its address can read it. |
 
 **Another kind** asks header `Kind` again with the kinds below other than
-the one recommended, so at most four; on GitLab.com leave out `web`. When
+the one recommended, at most four: on GitLab.com leave out `web`; on GitHub,
+when that leaves five, leave out `library` and say in one line that it can
+be typed under Other. When
 the `Use` follow-up was asked, it is not asked again: this list is the
 next step after it, not a repeat. Every kind gets the same checks besides
 (title, lint, types, tests, build, secrets, dependencies, change size, the
@@ -157,6 +165,7 @@ project's own setup) and CodeQL; say so only if asked.
 | A service or API (backend) | A service that keeps running and answers requests, in a container. It also checks that its container builds and starts. |
 | A model you train (data-ml) | A model trained here, with a model card. On GitHub a `v*` tag publishes the model, its metrics and the card as release files. It also checks the container, and comes with a test of the training. Data processing, collection or a pipeline with no model trained is `cli`. |
 | A website people log in to (web) | A web app with logins and a database, on GitHub only. It costs money to run: about US $13 a month on Render. It also checks the container, the database changes and the production settings. |
+| A page of tables and charts (dashboard) | A page that shows your data as tables and charts, made with Streamlit. It runs on your computer, free, with no login and no database. It can go online on Render, about US $7 a month, GitHub only; there anyone with its address can read it. Its test opens the page with no browser. |
 
 Right after the archetype is set, say its prerequisites in one line, with
 the month's total, each figure with its link and the date it was read:
@@ -167,13 +176,17 @@ the month's total, each figure with its link and the date it was read:
   and a US$6 Postgres ([Render pricing](https://render.com/pricing), read
   2026-11-26), so about US$33 a month in all; where it runs is asked next.
 - `cli`, `library` and `data-ml`: no host cost; US$20 a month in all.
+- `dashboard`: no host cost on the person's computer, US$20 a month in all;
+  on Render about US$7 a month more, a web service
+  ([Render pricing](https://render.com/pricing), read 2026-11-27), so about
+  US$27 in all; where it runs is asked next.
 - `backend`: no host cost until its image runs somewhere, which then costs
   what that place charges; US$20 a month until then.
 
 Nothing else is needed beyond what the preflight checked. On a private
 GitHub repository, CI minutes can add to it (step 7).
 
-## 5. Where a web app runs
+## 5. Where a web app or a dashboard runs
 
 Only for `--archetype=web` on GitHub, and only when the arguments carry no
 `--hosting=`: before running the script, ask the person this, in these words,
@@ -228,6 +241,22 @@ For 3 or 4, before running the script, say this once more:
 
 A template that does not ask this question yet makes the script stop for 2,
 3 or 4 before anything is created; show that message as it is.
+
+For `--archetype=dashboard` on GitHub with no `--hosting=`, ask this instead,
+in these words, and wait for the answer. On GitLab.com do not ask it: the
+page runs on the person's computer there, and Render was not tried.
+
+> **Where will the page run?**
+>
+> 1. **On your computer — recommended.** Free. Only you see it, at a local
+>    address, while it runs.
+> 2. **Render.** About $7 a month. It puts the page online at an `https://`
+>    address. **The page has no login: anyone with its address can read it,
+>    and the data it shows.**
+
+Then add `--hosting=local` (1) or `--hosting=render` (2). If the person does
+not answer, says they do not know, or asks you to choose, use
+`--hosting=local`.
 
 ## 6. The name
 
@@ -349,7 +378,7 @@ as written:
 | # | Row | Default when not asked | Flag |
 | --- | --- | --- | --- |
 | 1 | Repository and host | `owner/name` on GitHub, or on GitLab.com; a bare name is shown under the login | `--host=github` or `--host=gitlab`, and the name |
-| 2 | Kind | The archetype of step 4, and for `web` where it runs | `--archetype=`, and `--hosting=` for `web` |
+| 2 | Kind | The archetype of step 4, and for `web` or `dashboard` where it runs | `--archetype=`, and `--hosting=` for `web` or `dashboard` |
 | 3 | Visibility | The answer of step 7 | `--public` or `--private` |
 | 4 | License | MIT for a public project, Proprietary for a private one | `--license=mit`, `--license=apache-2.0` or `--license=proprietary` |
 | 5 | Third-party reviewer | None | `--no-third-party-review` or `--third-party-review` |
@@ -422,7 +451,7 @@ read the repository can read it." The answer becomes
 
 The visibility, the kind and the host are changed by what is typed into
 Other ("make it private"), which goes back to that question: step 7, step
-4 (and step 5 for `web`), or step 1 with its preflight and the name's
+4 (and step 5 for `web` or `dashboard`), or step 1 with its preflight and the name's
 check again. A visibility changed this way asks the license again, with
 the new recommendation first. A host changed this way drops or adds the
 rows only GitHub carries. "Stop" ends it, with nothing created. A typed

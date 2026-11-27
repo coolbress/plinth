@@ -243,8 +243,9 @@ archetype it does not fit: a `data-ml` project that trains nothing, for
 example, which would otherwise delete the model example by hand and still get
 it offered again by every update. Moving is the person's call: never propose
 it as the fix for a warning, and run each step only on their word. It moves
-between any two archetypes but `web`, which it does not move to or from, on
-GitHub and on GitLab. Which names are archetypes
+between any two archetypes but `web` and `dashboard`, which it does not move
+to or from (their hosting answers change with them, and that move was not
+measured), on GitHub and on GitLab. Which names are archetypes
 is the template's to say: copier refuses one it does not offer, and the plan
 stops on that before anything is written. The project must already be
 at the template tag this plinth targets: when it is behind, the plan stops

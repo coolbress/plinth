@@ -757,9 +757,10 @@ missing_facts() {
     done
   done < <(release_sources "$tdir")
   # The other way round: the row's next-action cell names no archetype beyond
-  # those with a workflow (`web` deploys, `main` is the branch).
+  # those with a workflow (`web` deploys, a `dashboard` deploys on Render or
+  # is not put out, #1069; `main` is the branch).
   for arch in $(awk -F ' \\| ' '{ print $2 }' <<<"$row" | grep -oE '`[a-z-]+`' | tr -d '`'); do
-    case "$arch" in web|main) continue ;; esac
+    case "$arch" in web|dashboard|main) continue ;; esac
     case " $(echo $all_archs) " in *" $arch "*) ;; *) echo "the release row names \`$arch\`, and the template has no release workflow for it"; rc=1 ;; esac
   done
   if [ -f "$tdir/template/docs/how-to/publish-a-release.md.jinja" ]; then

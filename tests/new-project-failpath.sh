@@ -121,6 +121,8 @@ case "$step" in
   choices)       case "${MOCK_CHOICES:-ok}" in
                    garbage)   printf '!!! not base64 !!!' ;;
                    nochoices) printf 'plinth_sha:\n  type: str\n' | base64 ;;
+                   # plinth-template v1.52's shape (#1069): dashboard, and hosting with local.
+                   dashboard) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n    A page of tables and charts (dashboard): dashboard\n'; cat "$MOCK_VALIDATORS"; printf 'hosting:\n  type: str\n  choices:\n    "Render{{ x }}": render\n    Somewhere else: elsewhere\n    "On your computer{{ x }}": local\nplinth_sha:\n' ; answer_qs; } | base64 ;;
                    hosting) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'hosting:\n  type: str\n  default: render\n  choices:\n    Render (recommended): render\n    Somewhere else: elsewhere\n\n# No default\nhosting_elsewhere:\n  type: str\n  choices:\n    Railway: railway\n    DigitalOcean App Platform: digitalocean\n    Fly.io: fly\n    A server you rent: vps\n    A computer at home: home\nplinth_sha:\n' ; answer_qs; } | base64 ;;
                    *) { printf 'license:\n  type: str\n  default: MIT\n  choices:\n    MIT: MIT\n    Apache-2.0: Apache-2.0\n    Proprietary (nobody else may use it): Proprietary\narchetype:\n  type: str\n  choices:\n    CLI: cli\n    Library: library\n    Backend: backend\n    Data: data-ml\n    Web: web\n'; cat "$MOCK_VALIDATORS"; printf 'plinth_sha:\n'"${MOCK_REVIEW_Q:+third_party_review:\n  type: bool\n  default: false\n}${MOCK_COC_Q:+owner_has_security_policy:\n  type: bool\nowner_has_code_of_conduct:\n  type: bool\ncode_of_conduct:\n  type: bool\ncode_of_conduct_contact:\n  type: str\n}"; answer_qs; } | base64 ;;
                  esac ;;
@@ -508,7 +510,7 @@ E="MOCK_PLAN=free" run check-free err no no "is on GitHub Free" -- probe --priva
 # than passing a name it did not check, and the hosting and reviewer
 # validations run before a --check says ok.
 E="MOCK_VALIDATORS=/dev/null" run check-unread-rules err no no "so the name 'class' is not checked" -- class --check
-run check-hosting err no no "--hosting is for --archetype=web only" -- probe --archetype=cli --hosting=home --check
+run check-hosting err no no "--hosting is for --archetype=web or dashboard only" -- probe --archetype=cli --hosting=home --check
 if grep -F "public instead" "$work/home-check-free/out" | grep -qF -- "--check"
 then bad check-free "the command offered for public instead carries --check"
 else ok check-free "the command offered for public instead does not carry --check"; fi
@@ -1012,7 +1014,22 @@ else bad web-render-said "--hosting=render did not pass hosting=render"; fi
 run web-old-template   err no no "does not ask where a web app runs, so it would set the app up for Render anyway" -- probe --archetype=web --hosting=railway
 E="MOCK_CHOICES=garbage" run web-unread err no no "could not read whether the template asks where a web app runs" -- probe --archetype=web --hosting=vps
 E="MOCK_CHOICES=hosting" run web-typo err no no "the template accepts: render railway digitalocean fly vps home" -- probe --archetype=web --hosting=heroku
-E="MOCK_CHOICES=hosting" run hosting-not-web err no no "--hosting is for --archetype=web only" -- probe --archetype=backend --hosting=home
+E="MOCK_CHOICES=hosting" run hosting-not-web err no no "--hosting is for --archetype=web or dashboard only" -- probe --archetype=backend --hosting=home
+# A dashboard (#1069): on this computer unless --hosting=render; no tag
+# ruleset, since it releases nothing; Render's closing line says the page has
+# no login.
+E="MOCK_CHOICES=dashboard" run dash-local ok yes no "(public, MIT, dashboard on this computer, as owner)" -- probe --archetype=dashboard
+if grep -q '^uvx .* --data hosting=local --vcs-ref' "$work/home-dash-local/calls.log" && ! grep -q ruleset-tags.json "$work/home-dash-local/calls.log" \
+   && grep -qF 'where it runs: this computer only; README.md under "Run it on your computer" has the command, and nothing is put online' "$work/home-dash-local/out"
+then ok dash-local "no answer is this computer: copier gets hosting=local, no tag ruleset, and the closing line says nothing goes online"
+else bad dash-local "a dashboard with no --hosting"; grep -E 'hosting|ruleset-tags' "$work/home-dash-local/calls.log" | cut -c1-200 | sed 's/^/        /'; fi
+E="MOCK_CHOICES=dashboard" run dash-render ok yes no "(public, MIT, dashboard on Render, as owner)" -- probe --archetype=dashboard --hosting=render
+if grep -q '^uvx .* --data hosting=render --vcs-ref' "$work/home-dash-render/calls.log" \
+   && grep -qF 'the page has no login, so anyone with its address can read it' "$work/home-dash-render/out"
+then ok dash-render "--hosting=render passes hosting=render, and the closing line says anyone with the address can read the page"
+else bad dash-render "a dashboard on Render"; fi
+E="MOCK_CHOICES=dashboard" run dash-typo err no no "the template accepts: local render" -- probe --archetype=dashboard --hosting=fly
+run dash-old-template err no no "unknown archetype: dashboard" -- probe --archetype=dashboard
 E="MOCK_CHOICES=hosting" run cli-asked ok yes no "(public, MIT, cli, as owner)" -- probe
 if ! grep -q '^uvx .*--data hosting' "$work/home-cli-asked/calls.log"; then ok cli-asked "a non-web archetype is passed no hosting answer, even by a template that asks it"
 else bad cli-asked "a hosting answer reached copier for cli"; grep -n hosting "$work/home-cli-asked/calls.log" | cut -c1-200 | sed 's/^/        /'; fi
@@ -1870,6 +1887,10 @@ else bad gl-name-46 "46 characters did not reach GitLab's project read"; sed 's/
 # The web archetype is GitHub only (#615): refused before any tool or login
 # is read, so not one call reaches GitLab, and the message says why.
 gl_run gl-web err no no "the web archetype is GitHub only: its deployment and checks are built for GitHub" -- probe --host gitlab --archetype=web
+# A dashboard on GitLab runs on the person's computer only (#1069): Render is
+# refused before anything is read, and --hosting is not asked of another kind.
+gl_run gl-dash-render err no no "a dashboard on GitLab runs on the person's computer only: Render (--hosting=render) was not tried on GitLab" -- probe --host gitlab --archetype=dashboard --hosting=render
+gl_run gl-hosting-cli err no no "--hosting is not asked on GitLab for --archetype=cli" -- probe --host gitlab --hosting=local
 if ! grep -q '^glab ' "$work/home-gl-web/calls.log" && grep -qF "fix: drop --host gitlab" "$work/home-gl-web/out"
 then ok gl-web "nothing reached GitLab, and the fix names both ways on"
 else bad gl-web "a glab call ran before the refusal, or the fix line is missing"; grep '^glab ' "$work/home-gl-web/calls.log" | sed 's/^/        /'; fi
@@ -2111,12 +2132,15 @@ for pair in "(cli) |::also the choice for a tool that runs on a schedule on the 
             "(data-ml) |::Data processing, collection or a pipeline with no model trained is \`cli\`." \
             "(backend) |::A service that keeps running and answers requests, in a container." \
             "(library) |::A package other code imports." \
-            "(web) |::A web app with logins and a database, on GitHub only. It costs money to run: about US \$13 a month on Render."; do
+            "(web) |::A web app with logins and a database, on GitHub only. It costs money to run: about US \$13 a month on Render." \
+            "(dashboard) |::A page that shows your data as tables and charts, made with Streamlit. It runs on your computer, free, with no login and no database." \
+            "(dashboard) |::It can go online on Render, about US \$7 a month, GitHub only; there anyone with its address can read it."; do
   key="${pair%%::*}"; phrase="${pair#*::}"
   if row "$key" | grep -qF -- "$phrase"; then ok skill-archetype "the $key row says \"$phrase\""
   else bad skill-archetype "the skill's $key row does not say \"$phrase\""; fi
 done
-for old in 'Data processing, or a model you train' 'data processing and model training' 'Always-on server or data job'; do
+for old in 'Data processing, or a model you train' 'data processing and model training' 'Always-on server or data job' \
+           'there is no light dashboard kind'; do
   if both | grep -qF -- "$old"; then bad skill-archetype "the skill still says \"$old\""
   else ok skill-archetype "the skill no longer says \"$old\""; fi
 done
@@ -2225,12 +2249,20 @@ for phrase in 'With `--host` in the arguments the host is not asked' \
               'list **Only people you add (private) (Recommended)** first instead and say why' \
               'read the plan now, not at the end' \
               '**Public instead** (`--public`' '**Upgrade the plan and start again**' '**Stop**: nothing is created' \
-              'in the same order, with their choices numbered, one question at a time'; do
+              'in the same order, with their choices numbered, one question at a time' \
+              'A description about charts, graphs, a dashboard or seeing data ("see my sales as charts", "see my data") names it: `dashboard`.' \
+              '**Only look at tables and charts** (dashboard)' \
+              'For `dashboard`, say also that it runs on their computer, has no login, and that where it runs is asked next.' \
+              '`dashboard`: no host cost on the person'"'"'s computer, US$20 a month in all; on Render about US$7 a month more' \
+              '> **Where will the page run?**' \
+              '**The page has no login: anyone with its address can read it,' \
+              'Then add `--hosting=local` (1) or `--hosting=render` (2).' \
+              'on GitHub, when that leaves five, leave out `library`'; do
   if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-order "the skill says \"$phrase\""
   else bad skill-order "the skill does not say \"$phrase\""; fi
 done
 # The archetype step's makes / does-not-make table names every kind.
-for k in cli library backend data-ml web; do
+for k in cli library backend data-ml web dashboard; do
   if grep -qE "^\| $k \| .+ \| .+ \|$" "$questions"; then ok skill-order "the makes table has a row for $k"
   else bad skill-order "the makes table has no row for $k"; fi
 done
