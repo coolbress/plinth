@@ -845,8 +845,15 @@ finish() { # <worktree>
     echo "This script resolved no conflict; how each was resolved is what \`--resolved\`"
     echo "stated, which the script does not check, and \"not stated\" where nothing was."
     echo "copier's questions were answered with \`--defaults\`: each takes this"
-    echo "repository's recorded answer, and a question it never answered takes the"
-    echo "template's default (\`.copier-answers.yml\` in the diff shows any)."
+    if grep -q $'^question=[^\t]*\tanswered\t' "$sf"; then
+      # The person's answers, given as --data (#1185): not defaults.
+      echo "repository's recorded answer; of the questions it never answered, each listed"
+      echo "above takes the person's answer where one is given (as \`--data\` in the command)"
+      echo "and the template's default where \"default kept\" says so."
+    else
+      echo "repository's recorded answer, and a question it never answered takes the"
+      echo "template's default (\`.copier-answers.yml\` in the diff shows any)."
+    fi
     [ -z "$new" ] || echo "The one answer given is \`archetype\`, as \`--data archetype=$new\`."
     # The template's own line, in the words its CONTRIBUTING.md step 5 gives
     # (#1020): what was not checked is said once, here.

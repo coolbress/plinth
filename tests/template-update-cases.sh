@@ -464,9 +464,13 @@ if [ "$rc" = 0 ] && grep -qx "records_language: Korean" "$wt/.copier-answers.yml
 then ok "--apply with records_language answered Korean records Korean in .copier-answers.yml and in the rendered AGENTS.md; an answer with spaces stays one word"
 else bad "--apply, the answers (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; cat "$wt/.copier-answers.yml" 2>/dev/null | sed 's/^/        /'; fi
 if grep -qxF -- "- \`records_language\`: Korean" <<<"$body" && grep -qxF -- "- \`description\`: 한국어 설명, 두 단어" <<<"$body" \
-   && grep -qF -- " --data records_language=Korean --data 'description=한국어 설명, 두 단어'" <<<"$body" && ! grep -q "default kept" <<<"$body"
+   && grep -qF -- " --data records_language=Korean --data 'description=한국어 설명, 두 단어'" <<<"$body" && ! grep -qF "(default kept)" <<<"$body"
 then ok "the description records each answer, and the command with the answers quoted, Hangul as typed"
 else bad "the description, answers"; printf '%s\n' "$body" | sed 's/^/        /'; fi
+# Its verification prose says so too, not that each took the default (review on #1211).
+if grep -qF "takes the person's answer where one is given" <<<"$body" && ! grep -qF "a question it never answered takes the" <<<"$body"
+then ok "with answers given, the description's verification does not say each never-answered question took the default"
+else bad "the verification prose with answers"; section "$work/gh.log.body" "How it was verified" | sed 's/^/        /'; fi
 fixture questions-default
 base="$(git -C "$BARE" rev-parse main)"
 q_run MOCK_QUESTIONS="$work/questions.txt" -- --apply "$base"
