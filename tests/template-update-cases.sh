@@ -598,6 +598,38 @@ if ! python3 "$combine_py" where "$hx/w.yml" "  x: 1" 2 >/dev/null && [ "$(pytho
 then ok "a line the template's side already holds as often is not counted as kept; one more is found where it is"
 else bad "helper, where with a count"; fi
 
+# Round 2 of the review on #1224, each as the reviewer reproduced it.
+hc() { # <name> <file name> <ours> <theirs> <old> [<head>]: combine; sets $hout and $hrep
+  local d="$hx/$1"; mkdir -p "$d"
+  { printf '%b' "${6:-}"; echo "<<<<<<< before updating"; printf '%b' "$3"; echo "======="; printf '%b' "$4"; echo ">>>>>>> after updating"; } > "$d/$2"
+  printf '%b%b' "${6:-}" "$3" > "$d/base"; printf '%b%b' "${6:-}" "$5" > "$d/old"
+  python3 "$combine_py" combine "$d/$2" "$d/base" "$d/old" "$d/out/$2" > "$d/report"
+  hout="$(cat "$d/out/$2" 2>/dev/null)"; hrep="$(cat "$d/report")"
+}
+hc steps ci.yml '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest --custom\n' \
+  '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest -q\n' \
+  '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest\n' 'jobs:\n  t:\n    steps:\n'
+if [ "$hout" = "$(printf 'jobs:\n  t:\n    steps:\n      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest --custom')" ]
+then ok "a YAML key is matched within its own sequence item: the Test step's run is replaced, the Setup step's kept"
+else bad "helper, sequence items"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc scope a.toml '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\n' '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 30\n' '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 10\n'
+if [ "$hout" = "$(printf '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 20')" ] && grep -qF 'replaces timeout = 30' <<<"$hrep"
+then ok "a line the template's side holds under another table is not counted as kept: [tool.b]'s value stays the project's"
+else bad "helper, kept within its scope"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc order build.sh 'set -eu\nmkdir -p build\ncd build\nmake\n' 'set -eu\nmake -j4\n' 'set -eu\nmake\n'
+if [ "$hout" = "$(printf 'set -eu\nmkdir -p build\ncd build\nmake -j4')" ]
+then ok "consecutive additions after one shared line keep their order"
+else bad "helper, order"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc owner p.toml 'dependencies = [\n  "a",\n  "custom",\n]\n' 'dependencies = ["b"]\n' 'dependencies = [\n  "a",\n]\n' '[project]\n'
+if [ "$(grep -c '^dependencies' <<<"$hout")" = 1 ] && grep -qxF '  "custom",' <<<"$hout" && grep -qF 'replaces dependencies = ["b"]' <<<"$hrep"
+then ok "an item added inside a multi-line value is matched by the key that owns it: one assignment, the project's"
+else bad "helper, the owning key"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc tabs t.toml 'timeout = 20\n' 'timeout\t=\t30\n' 'timeout = 10\n'
+if [ "$(cut -f3 <<<"$hrep")" = 0 ] && [ "$(cut -f4- <<<"$hrep")" = "timeout = 20" ] && grep -qF 'replaces timeout\t=\t30' <<<"$hrep"
+then ok "a template line with tabs in the placement is shown with \\t, and the fields stay in place"
+else bad "helper, tabs in the placement"; printf '%s\n' "$hrep" | cat -t | sed 's/^/        /'; fi
+
+
 # ── the base must be the verified default branch ────────────────────────
 reset_logs
 run --apply "$(printf '%040d' 1)"

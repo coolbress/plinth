@@ -157,8 +157,9 @@ def units(side: list[str], kind: str) -> list[tuple[int, int, int]]:
 
 
 def parents(lines: list[str], n: int, kind: str) -> tuple[str, ...]:
-    """The keys line n sits under: the TOML table, or the YAML keys of the
-    lines above it with less indentation."""
+    """The scope line n sits in: the TOML table, or the YAML keys of the lines
+    above it with less indentation, a sequence item by its whole first line
+    (`- name: Test`), so two steps' `run:` keys are not the same key."""
     if kind == "toml":
         return tuple(t.strip() for t in reversed(lines[:n]) if re.match(r"^\s*\[", t))[:1]
     if kind != "yaml":
@@ -168,10 +169,14 @@ def parents(lines: list[str], n: int, kind: str) -> tuple[str, ...]:
     for t in reversed(lines[:n]):
         if not t.strip() or t.lstrip().startswith("#") or indent(t) >= limit:
             continue
-        k = key_of(t, kind)
-        if k is not None:
-            keys.insert(0, k)
+        if t.lstrip().startswith("- "):
+            keys.insert(0, t.strip())
             limit = indent(t)
+        else:
+            k = key_of(t, kind)
+            if k is not None:
+                keys.insert(0, k)
+                limit = indent(t)
         if limit == 0:
             break
     return tuple(keys)
@@ -179,53 +184,66 @@ def parents(lines: list[str], n: int, kind: str) -> tuple[str, ...]:
 
 def combine(ours: list[str], theirs: list[str], added: set[str], kind: str,
             closing: bool, head: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
+    # A line the template's side keeps is one it holds in the same scope (the
+    # same TOML table or YAML parents): the same text under another table is
+    # not this repository's line kept (review on #1224).
+    kept = {(parents(head + theirs, len(head) + i, kind), ln) for i, ln in enumerate(theirs)}
+    risky = [ln.strip() != "" and ln in added and not ln.startswith((OURS, THEIRS))
+             and (parents(head + ours, len(head) + i, kind), ln) not in kept for i, ln in enumerate(ours)]
     result = list(theirs)
-    kept = set(theirs)
-    risky = [ln.strip() != "" and ln in added and ln not in kept and not ln.startswith((OURS, THEIRS)) for ln in ours]
+    mine = [False] * len(result)  # which lines of result came from this repository's side
     report: list[tuple[str, str]] = []
     if not any(risky):
         return result, report
-    tail: list[str] = []
-    tail_report: list[tuple[int, int]] = []
+
+    def put(at: int, span: list[str]) -> None:
+        result[at:at] = span
+        mine[at:at] = [True] * len(span)
+
+    tail: list[tuple[str, bool]] = []
     for first, item, last in units(ours, kind):
         if not any(risky[first:last + 1]):
             continue
         span = ours[first:last + 1]
         placement = ""
-        k = key_of(ours[item], kind) if risky[item] else None
+        # The key that owns the at-risk lines: the item line's, whether the
+        # project changed that line or only its value's continuation.
+        k = key_of(ours[item], kind) if any(risky[item:last + 1]) else None
         if k is not None:
             where = parents(head + ours, len(head) + item, kind)
             for tf, ti, tl in units(result, kind):
                 if key_of(result[ti], kind) == k and indent(result[ti]) == indent(ours[item]) \
-                        and parents(head + result, len(head) + ti, kind) == where and result[ti] not in added:
+                        and parents(head + result, len(head) + ti, kind) == where and not any(mine[tf:tl + 1]):
                     placement = f"replaces {result[ti].strip()}"
                     result[tf:tl + 1] = span
+                    mine[tf:tl + 1] = [True] * len(span)
                     break
         if not placement:
-            before = next((ours[j] for j in range(first - 1, -1, -1) if not risky[j] and ours[j].strip() and ours[j] in result), None)
-            after = next((ours[j] for j in range(last + 1, len(ours)) if not risky[j] and ours[j].strip() and ours[j] in result), None)
+            before = next((j for j in range(first - 1, -1, -1) if not risky[j] and ours[j].strip() and ours[j] in result), None)
+            after = next((j for j in range(last + 1, len(ours)) if not risky[j] and ours[j].strip() and ours[j] in result), None)
             if before is not None:
-                at = result.index(before) + 1
-                result[at:at] = span
+                at = result.index(ours[before]) + 1
+                # After what this repository's side already put there, so
+                # consecutive additions keep their order (review on #1224).
+                while at < len(result) and mine[at]:
+                    at += 1
+                put(at, span)
                 placement = "in place"
             elif after is not None:
-                at = result.index(after)
-                result[at:at] = span
+                put(result.index(ours[after]), span)
                 placement = "in place"
         if placement:
             report += [(placement, ln) for ln, r in zip(span, risky[first:last + 1]) if r]
         else:
-            tail_report.append((len(tail), len(tail) + len(span)))
-            tail += span
-    for a, b in tail_report:
-        for ln in tail[a:b]:
-            if ln.strip() and ln in added and ln not in kept:
-                note = "no old place"
-                if kind == "md" and closing:
-                    note += "; propose: drop it, the file's last section is that heading" if ln.strip() == THIS_PROJECT \
-                        else f"; propose: under {THIS_PROJECT}, the file's last section"
-                report.append((note, ln))
-    result += tail
+            tail += list(zip(span, risky[first:last + 1]))
+    for ln, r in tail:
+        if r:
+            note = "no old place"
+            if kind == "md" and closing:
+                note += "; propose: drop it, the file's last section is that heading" if ln.strip() == THIS_PROJECT \
+                    else f"; propose: under {THIS_PROJECT}, the file's last section"
+            report.append((note, ln))
+    result += [ln for ln, _ in tail]
     return result, report
 
 
@@ -252,7 +270,10 @@ def cmd_combine(path: str, base_path: str, old_path: str, out_path: str) -> int:
         out += text[at:s] + res
         at = e + 1
         for placement, line in report:
-            print(f"risk\t{placement}\t{theirs_whole.count(line)}\t{line}")
+            # The placement may quote a template line: its tabs are shown as
+            # `\\t`, so the fields stay where the caller reads them (review on #1224).
+            shown = placement.replace("\t", "\\t")
+            print(f"risk\t{shown}\t{theirs_whole.count(line)}\t{line}")
     out += text[at:]
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text("\n".join(out) + "\n", encoding="utf-8")
