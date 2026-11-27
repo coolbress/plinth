@@ -651,6 +651,22 @@ hc entries r.toml '[[tool.sources]]\nname = "mine"\nurl = "a"\n[[tool.sources]]\
 if [ "$hout" = "$(printf '[[tool.sources]]\nname = "mine"\nurl = "a2"\n[[tool.sources]]\nname = "two"\nurl = "custom"')" ]
 then ok "each [[table]] entry is its own scope: the second entry's url stays there"
 else bad "helper, array-of-tables entries"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+# The fresh-context review of #1233: a comment above a step goes above that
+# step, not the first `- name:`; an entry the template's added entry shifts is
+# left for the person, never put in another entry.
+hc stepcomment ci.yml '      - name: Setup\n        run: echo setup\n      # runs the tests\n      - name: Test\n        run: pytest\n' \
+  '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest -q\n' \
+  '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest\n' 'jobs:\n  t:\n    steps:\n'
+if [ "$hout" = "$(printf 'jobs:\n  t:\n    steps:\n      - name: Setup\n        run: echo setup\n      # runs the tests\n      - name: Test\n        run: pytest -q')" ]
+then ok "a comment above a YAML step goes above that step, once"
+else bad "helper, a comment above a step"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc shifted e.toml '[[s]]\nname = "one"\nurl = "a"\n[[s]]\nname = "two"\nurl = "custom"\n' \
+  '[[s]]\nname = "new"\nurl = "n"\n[[s]]\nname = "one"\nurl = "a"\n[[s]]\nname = "two"\nurl = "b"\n' \
+  '[[s]]\nname = "one"\nurl = "a"\n[[s]]\nname = "two"\nurl = "b"\n'
+if grep -qxF $'risk\tno old place\t0\turl = "custom"' <<<"$hrep" && ! grep -q 'replaces' <<<"$hrep" \
+   && [ "$(grep -c '^url = "custom"' <<<"$hout")" = 1 ] && grep -qxF 'url = "a"' <<<"$hout"
+then ok "an entry the template's added [[table]] entry shifts is left for the person: no line is put in another entry"
+else bad "helper, a shifted [[table]] entry"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
 # A TOML combination that does not parse is said: here the project's `b`
 # has no old place and lands beside the head's own `b` (#1233).
 hc parse d.toml 'a = 2\nb = 1\n' 'a = 3\n' 'a = 2\n' '[x]\nb = 0\n'

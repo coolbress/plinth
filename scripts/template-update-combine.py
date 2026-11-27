@@ -20,8 +20,10 @@ this repository added there kept. Standard library only.
       `no old place` (its neighbours are gone: at the end of the block), or
       `no old place; propose: <where>` for a Markdown line, `under ## This
       project` when the file ends in that section, or `above <the template's
-      line>` (a comment added above a key whose value it left alone). A TOML
-      combination that does not parse adds a line `invalid<TAB><why>`. Exit 0; exit 2 when the
+      line>` (a comment added above a key whose value it left alone). A line
+      in a `[[table]]` entry is `no old place` when the two sides hold a
+      different number of those entries. On Python 3.11 or later (tomllib), a
+      TOML combination that does not parse adds a line `invalid<TAB><why>`. Exit 0; exit 2 when the
       markers cannot be read (nested, unclosed, or diff3's `|||||||`).
 
   template-update-combine.py where <file> <line> <count>
@@ -196,10 +198,13 @@ def parents(lines: list[str], n: int, kind: str) -> tuple[str, ...]:
 
 
 def combine(ours: list[str], theirs: list[str], added: set[tuple[tuple[str, ...], str]], kind: str,
-            closing: bool, head: list[str], oscope: list[tuple[str, ...]]) -> tuple[list[str], list[tuple[str, str]]]:
+            closing: bool, head: list[str], oscope: list[tuple[str, ...]],
+            shifted: set[str]) -> tuple[list[str], list[tuple[str, str]]]:
     """<oscope>: the scope of each line of <ours>, read in the file as this
     repository has it; <head>: the combined file above the block, for the
-    template's side and the result."""
+    template's side and the result; <shifted>: the `[[table]]` headers whose
+    entries the two sides count differently, so an entry's ordinal names
+    another entry on the other side."""
     def rscope(lines: list[str], i: int) -> tuple[str, ...]:
         return parents(head + lines, len(head) + i, kind)
 
@@ -232,22 +237,31 @@ def combine(ours: list[str], theirs: list[str], added: set[tuple[tuple[str, ...]
             continue
         span = ours[first:last + 1]
         placement = ""
+        if any(sc.split("#", 1)[0] in shifted for sc in oscope[item][:1]):
+            # Its entry cannot be named on the template's side: the person
+            # places it (review on #1233).
+            tail += list(zip(span, risky[first:last + 1]))
+            continue
         k = key_of(ours[item], kind) if not is_comment(ours[item], kind) else None
+        # A YAML sequence item is named by its whole first line: every step's
+        # `- name:` has the key `name` (review on #1233).
+        same_item = kind == "yaml" and ours[item].lstrip().startswith("- ")
         match = None
         if k is not None:
             for tf, ti, tl in units(result, kind):
                 if key_of(result[ti], kind) == k and indent(result[ti]) == indent(ours[item]) \
-                        and rscope(result, ti) == oscope[item] and not any(mine[tf:tl + 1]):
+                        and rscope(result, ti) == oscope[item] and not any(mine[tf:tl + 1]) \
+                        and (not same_item or result[ti] == ours[item]):
                     match = (tf, ti, tl)
                     break
-        if match and any(risky[item:last + 1]):
+        if match and any(risky[item:last + 1]) and not same_item:
             # The key that owns the at-risk lines, whether the project changed
             # its line or only its value's continuation: the project's value.
             tf, ti, tl = match
             placement = f"replaces {result[ti].strip()}"
             result[tf:tl + 1] = span
             mine[tf:tl + 1] = [True] * len(span)
-        elif match:
+        elif match and not any(risky[item:last + 1]):
             # Only comments above an unchanged key are this repository's: they
             # go above the template's line, which keeps its value (#1233).
             ti = match[1]
@@ -312,11 +326,16 @@ def cmd_combine(path: str, base_path: str, old_path: str, out_path: str) -> int:
         ours_whole += text[s + 1:m]
         at = e + 1
     ours_whole += text[at:]
+    shifted = set()
+    if kind == "toml":
+        for h in {ln.strip() for ln in ours_whole + theirs_whole if ln.strip().startswith("[[")}:
+            if sum(ln.strip() == h for ln in ours_whole) != sum(ln.strip() == h for ln in theirs_whole):
+                shifted.add(h)
     out: list[str] = []
     at = 0
     for (s, m, e), o in zip(found, starts):
         oscope = [parents(ours_whole, o + i, kind) for i in range(m - s - 1)]
-        res, report = combine(text[s + 1:m], text[m + 1:e], added, kind, closing, out + text[at:s], oscope)
+        res, report = combine(text[s + 1:m], text[m + 1:e], added, kind, closing, out + text[at:s], oscope, shifted)
         out += text[at:s] + res
         at = e + 1
         for placement, line in report:
