@@ -30,3 +30,40 @@ is dropped without an error (measured for #468, on Claude Code 2.1.296, before
   and `prune` does not take it (#468). The release note names, once and in this
   order, `claude plugin install plinth@plinth` then
   `claude plugin uninstall <old name>@plinth`.
+
+## Retired entries
+
+An entry plinth no longer installs, and what an installed user runs once.
+There are two kinds:
+
+- **Entry removed.** The name is gone from `marketplace.json`'s `plugins`,
+  and `renames` maps it to `null`. With `forceRemoveDeletedPlugins: true`,
+  Claude Code uninstalls it at the next session start, on 2.1.326 and on the
+  floor 2.1.274. Only plugins installed from plinth's marketplace are
+  affected. `update` alone leaves it installed and disabled (measured for
+  #1229). The release note still names `claude plugin uninstall <name>@plinth`
+  for a session not yet restarted. When that command exits 1 with
+  `not found in installed plugins`, Claude Code has already removed the
+  plugin.
+- **Dependency dropped, entry kept.** The name stays in `plugins`, and so it
+  is still installable by hand, but it is no longer in `plugin.json`'s
+  `dependencies`. `claude plugin prune` removes the auto-installed copy.
+
+`tests/marketplace-manifest.sh` holds the table to the manifests in both
+directions:
+
+- each removed name is a `renames` key mapped to `null`, and every such key
+  is a removed name;
+- no removed name is in `plugins`;
+- no dropped name is a dependency.
+
+`scripts/make-release.sh` run 1 stops a release that removes an entry or
+drops a dependency without a row here and the command in its section.
+`tests/install-smoke.sh` runs the commands on the upgrade from the latest
+release. A retired name that comes back later loses its row and its `renames`
+key.
+
+| Name | Kind | Left in | Replaced by | Issue | An installed user runs |
+| --- | --- | --- | --- | --- | --- |
+| `taste-skill` | entry removed | v2.46.0 | `frontend-design` | #1082 | `claude plugin uninstall taste-skill@plinth` |
+| `ponytail-skills` | dependency dropped | v2.2.0 | – | #598 | `claude plugin prune` |
