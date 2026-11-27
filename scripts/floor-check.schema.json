@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/coolbress/plinth/blob/main/scripts/floor-check.schema.json",
+  "title": "floor-check --format json",
+  "description": "One run of scripts/floor-check.py: every result it reported, the registered checks it did not evaluate, and its counts. tests/floor-check-golden.sh validates every fixture's run against this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "root",
+    "project",
+    "host",
+    "repo",
+    "results",
+    "not_evaluated",
+    "summary",
+    "exit",
+    "crashed"
+  ],
+  "properties": {
+    "schema": {
+      "const": "floor-check/1"
+    },
+    "root": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The checkout read, as an absolute path on this machine."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The project directory, relative to root; '.' for the root."
+    },
+    "host": {
+      "enum": [
+        "github",
+        "gitlab"
+      ]
+    },
+    "repo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "owner/name (group/name on GitLab), or null when the run had no --repo."
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/result"
+      }
+    },
+    "not_evaluated": {
+      "type": "array",
+      "description": "Registered checks that reported nothing in this run: another host, another archetype, or a flag not passed.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "area"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "area": {
+            "enum": [
+              "agent",
+              "ci",
+              "files",
+              "machine",
+              "plinth",
+              "project",
+              "records",
+              "wall"
+            ]
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pass",
+        "fail",
+        "warn",
+        "unknown",
+        "review",
+        "not_applicable",
+        "info",
+        "cannot_be_read_here"
+      ],
+      "properties": {
+        "pass": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fail": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warn": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "review": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_applicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "info": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cannot_be_read_here": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Of the unknowns, those no change to this machine or repository clears."
+        }
+      }
+    },
+    "exit": {
+      "enum": [
+        0,
+        1
+      ],
+      "description": "1 when a result is a fail or the run raised, as the process exits."
+    },
+    "crashed": {
+      "description": "null, or where the run stopped when it raised: the results before it are all it read.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "after",
+            "error"
+          ],
+          "properties": {
+            "after": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/id"
+                }
+              ]
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^FC-[A-Z][0-9][0-9]$"
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "state",
+        "shown",
+        "message",
+        "reason",
+        "cannot_be_read_here",
+        "reader",
+        "area",
+        "name",
+        "handoff",
+        "lifecycle",
+        "view",
+        "ci_visible"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "state": {
+          "enum": [
+            "pass",
+            "fail",
+            "warn",
+            "unknown",
+            "review",
+            "not_applicable",
+            "info"
+          ]
+        },
+        "shown": {
+          "enum": [
+            "FAIL",
+            "INFO",
+            "N/A",
+            "PASS",
+            "SKIP",
+            "WARN"
+          ],
+          "description": "The word the text report prints for the state."
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The text report's line without its state word; indented lines under it belong to it."
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Why an unknown was not read; null for every other state."
+        },
+        "cannot_be_read_here": {
+          "type": "boolean",
+          "description": "An unknown no change to this machine or repository clears."
+        },
+        "reader": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Who reads a review; null for every other state."
+        },
+        "area": {
+          "enum": [
+            "agent",
+            "ci",
+            "files",
+            "machine",
+            "plinth",
+            "project",
+            "records",
+            "wall"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "handoff": {
+          "enum": [
+            "agent",
+            "person",
+            "admin",
+            "ci"
+          ],
+          "description": "Who acts on a finding: the agent in a pull request, the person, an admin, or CI."
+        },
+        "lifecycle": {
+          "enum": [
+            "experimental",
+            "stable"
+          ]
+        },
+        "view": {
+          "enum": [
+            "report",
+            "json",
+            "opt-in:machine",
+            "opt-in:standards",
+            "opt-in:all"
+          ],
+          "description": "Where the result is shown: the report, the JSON only, or a view asked for."
+        },
+        "ci_visible": {
+          "type": "boolean",
+          "description": "Whether ci / floor-check prints this check."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "unknown"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reason": {
+                "type": "null"
+              },
+              "cannot_be_read_here": {
+                "const": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "review"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reader": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reader": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
