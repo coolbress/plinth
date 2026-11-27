@@ -115,11 +115,20 @@ Ask only what decides between the kinds still open:
 - Header `Model`: "Does it train a machine-learning model here?" **Yes**
   (data-ml). **No**: collecting, cleaning or processing data with no model
   trained is cli.
-- A schedule word ("daily", "every hour", "every morning") is not a
-  question: say what it means for where it runs. cli runs on the person's
-  own computer, only while it is on, started by a scheduler there (cron,
-  launchd) that plinth does not set up; running it in the cloud on a
-  schedule needs a place that costs money.
+- A schedule word ("daily", "every hour", "every morning") names `cli`
+  and decides where it runs, not the kind. On GitHub, a description that
+  says the computer is off ("even when my laptop is off", "while I sleep")
+  recommends `cli` with `--scheduled-run`: GitHub runs it on a schedule and
+  keeps each run's results as a download on the run's page. One that says
+  "run it on my machine" or "on my computer" recommends `cli` with
+  `--no-scheduled-run`: it runs only while the computer is on, started by a
+  scheduler there (cron, launchd) that plinth does not set up. One that says
+  neither asks header `Schedule`: "Should it keep running on GitHub while
+  your computer is off?" **On GitHub on a schedule** (`--scheduled-run`).
+  **Only on my computer** (`--no-scheduled-run`). On GitLab.com it is not
+  asked: say it runs on the computer only, since a GitLab pipeline schedule
+  was not tried. With `--archetype=cli` given and neither flag, nothing is
+  asked and it runs on the computer only, the default.
 
 ## 4. The archetype recommendation
 
@@ -135,14 +144,19 @@ person always picks.
 | Another kind | See the other kinds and pick one. |
 | Not sure | Start with the narrowest, a terminal command (`--archetype=cli`); a kind can be changed later, with some work. |
 
+For `cli` with a scheduled run, the recommendation names it: "I recommend
+`cli`, run on GitHub on a schedule (`--scheduled-run`): `REASON`", with
+`MAKES` and `NOT` from the table's `cli, on a schedule` row.
+
 Until plinth has them, add one sentence for the gap the description falls
-into: `cli` runs only on the person's computer; a bot needs a place to run,
-and that costs money. For `dashboard`, say also that it runs on their
+into: `cli` runs only on the person's computer unless it runs on GitHub on
+a schedule; a bot needs a place to run, and that costs money. For `dashboard`, say also that it runs on their
 computer, has no login, and that where it runs is asked next.
 
 | Kind | Makes | Does not make |
 | --- | --- | --- |
 | cli | A command people install and run in a terminal; on GitHub a release only when a tag is pushed. | A server, a web page, or anything that runs by itself away from the person's computer. |
+| cli, on a schedule | The same command, also run on GitHub every day and by hand, even while your computer is off; each run's results are a download on the run's page, kept 90 days, never a commit. GitHub only. | A run at an exact time: a run can start late, or be dropped, when GitHub is busy. |
 | library | A package other code imports. | A command, a server or a web page. |
 | backend | A service in a container that keeps running and answers requests. | Web pages with logins, or a place to run it. |
 | data-ml | A model trained here, with a model card; on GitHub a `v*` tag publishes the model, its metrics and the card. | A server that answers with the model, or data collected on a schedule. |
@@ -160,7 +174,7 @@ project's own setup) and CodeQL; say so only if asked.
 
 | Label | Description |
 | --- | --- |
-| A terminal command (cli) | A command people install and run in a terminal; also the choice for a tool that runs on a schedule on the owner's machine (a data collector, a pipeline). On GitHub its release workflow runs only when a tag is pushed (`v*`, or a member's `<prefix>-v*`), so a project that never tags publishes nothing. If you are not sure, choose this one. |
+| A terminal command (cli) | A command people install and run in a terminal; also the choice for a tool that runs on a schedule on the owner's machine (a data collector, a pipeline), or on GitHub while that machine is off (`--scheduled-run`). On GitHub its release workflow runs only when a tag is pushed (`v*`, or a member's `<prefix>-v*`), so a project that never tags publishes nothing. If you are not sure, choose this one. |
 | Code other code imports (library) | A package other code imports. |
 | A service or API (backend) | A service that keeps running and answers requests, in a container. It also checks that its container builds and starts. |
 | A model you train (data-ml) | A model trained here, with a model card. On GitHub a `v*` tag publishes the model, its metrics and the card as release files. It also checks the container, and comes with a test of the training. Data processing, collection or a pipeline with no model trained is `cli`. |
@@ -176,6 +190,15 @@ the month's total, each figure with its link and the date it was read:
   and a US$6 Postgres ([Render pricing](https://render.com/pricing), read
   2026-11-26), so about US$33 a month in all; where it runs is asked next.
 - `cli`, `library` and `data-ml`: no host cost; US$20 a month in all.
+- `cli` on a schedule: also no host cost, US$20 a month in all. In a
+  public repository GitHub's runners are free; in a private one the runs
+  use the plan's included Actions amount, on GitHub Free US$12 a month and
+  500 MB of artifact storage
+  ([GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions),
+  read 2026-11-27). The results are a download under Artifacts on each
+  run's page, kept 90 days; in a public repository GitHub turns the
+  schedule off after 60 days with no activity, and README.md says how to
+  turn it back on.
 - `dashboard`: no host cost on the person's computer, US$20 a month in all;
   on Render about US$7 a month more, a web service
   ([Render pricing](https://render.com/pricing), read 2026-11-27), so about
@@ -378,7 +401,7 @@ as written:
 | # | Row | Default when not asked | Flag |
 | --- | --- | --- | --- |
 | 1 | Repository and host | `owner/name` on GitHub, or on GitLab.com; a bare name is shown under the login | `--host=github` or `--host=gitlab`, and the name |
-| 2 | Kind | The archetype of step 4, and for `web` or `dashboard` where it runs | `--archetype=`, and `--hosting=` for `web` or `dashboard` |
+| 2 | Kind | The archetype of step 4, for `web` or `dashboard` where it runs, and for `cli` on GitHub whether it runs on GitHub on a schedule | `--archetype=`, `--hosting=` for `web` or `dashboard`, and `--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub |
 | 3 | Visibility | The answer of step 7 | `--public` or `--private` |
 | 4 | License | MIT for a public project, Proprietary for a private one | `--license=mit`, `--license=apache-2.0` or `--license=proprietary` |
 | 5 | Third-party reviewer | None | `--no-third-party-review` or `--third-party-review` |
@@ -519,8 +542,8 @@ before the run (below) asks nothing when typed again: the host
 (`--host=github` or `--host=gitlab`), `--archetype=`, `--public` or
 `--private`, `--license=`, `--dir=` with the home directory written out
 as an absolute path, the description's, `--records-language=`, and on
-GitHub the reviewer's and the code of conduct's (none when the owner's
-applies). For `web`, add `--custom-user-model` without asking, unless
+GitHub the reviewer's, the code of conduct's (none when the owner's
+applies) and, for `cli`, `--scheduled-run` or `--no-scheduled-run`. For `web`, add `--custom-user-model` without asking, unless
 the arguments give `--no-custom-user-model`: the new
 project starts with its own user model (`accounts.User`), which Django
 sets before the first `migrate` and which is changed later only by hand;
