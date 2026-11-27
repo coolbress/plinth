@@ -189,6 +189,10 @@ def columns(rows):
             m = ALSO.match(also)
             if not m:
                 out.append(f"{trig}: the Also cell is not one tool, its class and a condition: {also[:60]}")
+            elif len(tool_names(also)) > 1:
+                # One alternative, so no sequence: every tool in the whole
+                # cell counts, ", then" or not.
+                out.append(f"{trig}: the Also cell names more than one tool: {also[:70]}")
             else:
                 out += job_problems(trig, "Also", also, m.group(1))
     return out
@@ -328,7 +332,7 @@ case("must fail: a second tool after a job's colon",
      "two tools for one job")
 case("must fail: a second tool in an Also cell's condition",
      problems(arsenal.replace("(installed): when the code has grown hard to change", "(installed): when unsure use `/ask-matt` (listed), or when the code has grown hard to change"), howto, guide),
-     "two tools for one job")
+     "the Also cell names more than one tool")
 case("must fail: an installed tool marked listed",
      problems(arsenal.replace("| `/retro`: it reads the session and suggests rules and checks, most serious first, and changes nothing | installed |",
                               "| `/retro`: it reads the session and suggests rules and checks, most serious first, and changes nothing | listed |"), howto, guide),
@@ -343,6 +347,10 @@ case("must fail: a platform job marked installed",
 case("must fail: a sequence with a class for one step of two",
      problems(arsenal.replace("| built in, then installed; installed |", "| built in, then installed, then listed; installed |"), howto, guide),
      "2 steps in a Tool job and 3 classes")
+case("must fail: an Also cell with a second tool after ', then'",
+     problems(arsenal.replace("`/handoff` (installed): when another person or tool takes it over |",
+                              "`/handoff` (installed): when another person or tool takes it over, then `/retro` |"), howto, guide),
+     "the Also cell names more than one tool")
 case("must fail: an Also cell with two tools",
      problems(arsenal.replace("`/wayfinder` (installed): when the way is unclear", "`/wayfinder` (installed) or `/ask-matt`: when the way is unclear"), howto, guide),
      "the Also cell is not one tool")

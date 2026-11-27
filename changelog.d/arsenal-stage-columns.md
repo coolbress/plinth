@@ -23,9 +23,9 @@
 
 - `tests/skill-size.sh` holds the arsenal's `SKILL.md` to 250 lines and
   12,000 bytes, tighter than other skills' 500 and 20,000.
-- `tests/guidance-skills.sh` fails when a job in a Tool cell, or an Also
-  cell, names a second tool anywhere in its text (a sequence "X, then Y"
-  counts each step once), when a job's class is not the one its tool has
+- `tests/guidance-skills.sh` fails when a job in a Tool cell names a second
+  tool anywhere in its text (a sequence "X, then Y" counts each step once),
+  when an Also cell names more than one tool, a sequence included, when a job's class is not the one its tool has
   (installed or listed by plinth's manifests, built in, or platform when it
   names no tool), when an Also cell is not one tool with its class and
   condition, and when a tool on the "Not used with plinth" line is in an Also
