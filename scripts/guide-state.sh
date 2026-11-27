@@ -154,7 +154,7 @@ whys_full="$(why_full "A merged change to put out" && why_full "The project in u
 # names (`-` there is none), unless the state names another.
 # $milestone (#1147): at the first merge, the first release due and a look
 # back due, the person is asked to name the next step before the command is
-# shown; at every other state nothing is asked.
+# shown; at every other state, and on map, nothing is asked.
 before=""; note=""; said_cmd=""; shown=""; where_cell=""; milestone=""
 # show <row start>: that row goes in the table printed without map (#1060).
 show() { shown="$shown$(printf '%s\n' "$table" | awk -v p="| $1" 'index($0, p) == 1' | head -1)"$'\n'; }
@@ -170,7 +170,8 @@ say() {
   echo "command: $2"
   said_cmd="$2"
   [ -z "$note" ] || echo "note: $note"
-  [ -z "$milestone" ] || echo "ask first: $milestone: before the command, ask the person what they think the next step is; show the command once they answer, or at once if they ask for it"
+  # Not on map: its next command is the whole answer's one code block.
+  [ -z "$milestone" ] || [ -n "$map" ] || echo "ask first: $milestone: before the command, ask the person what they think the next step is; show the command once they answer, or at once if they ask for it"
   after="${3:-$(sed -n 6p <<<"$cells")}"
   if [ "$after" != - ]; then
     after="$(row "$after")" || exit 1

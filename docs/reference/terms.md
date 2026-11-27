@@ -30,5 +30,5 @@ language and leaves the term itself as it is.
 | **pin** | A version written down exactly, such as the plinth release whose checks the project calls: it stays the same until a pull request raises it. |
 | **floor** | What a repository needs before it counts as set up: its documents, its checks and the rules on `main`. `/plinth:floor-check` lists what is missing. |
 
-Words with a plinth-specific meaning (wall, floor, door) are in
+Words with a plinth-specific meaning (wall, door, and floor in full) are in
 [GLOSSARY.md](../../GLOSSARY.md).

@@ -2176,6 +2176,9 @@ state "ask first: a look back due" "$d" \
 state "no ask: three merges, nothing open" "$work/why-fade" "command: /grilling" "!ask first:"
 state "no ask: the first pull request open" "$work/created" "command: merge #2" "!ask first:"
 state "no ask: a ticket ready" "$work/release-ticket" "command: /implement #11" "!ask first:"
+out="$(MOCK_DIR="$work/ask-look-back" "$script" "$work/ask-look-back" map 2>&1)"
+grep -qx '    /plinth:floor-check' <<<"$out" && ! grep -q '^ask first:' <<<"$out" && ok "no ask on map, at a milestone: its next command is the answer's code block" ||
+  bad "map at a milestone: $(grep -E '^ask first:|next command' <<<"$out")"
 for w in 'With an `ask first:` line (the first merge, the first release due, a' \
          'show the command once they answer' 'show it anyway if they ask for it' \
          'whole tool cell while fewer than three pull' 'and one clause after that'; do
@@ -2189,14 +2192,20 @@ done
 terms="$root/docs/reference/terms.md"
 unglossed() { # <table file>: each beginner word left in a row without a gloss
   local w
+  local w forms
+  # Each word with the forms it takes: walls, pinned, boundaries, re-rendered.
   for w in wall floor pin boundary re-render listed; do
     grep -q "^| \*\*$w\*\* |" "$terms" && continue
-    grep '^| ' "$1" | sed 's/`[^`]*`//g' | grep -qiE "(^|[^a-z-])$w([^a-z-]|$)" && echo "$w"
+    case "$w" in pin) forms='pin(s|ned|ning)?' ;; boundary) forms='boundar(y|ies)' ;; listed) forms='listed' ;; *) forms="$w(s|ed|ing)?" ;; esac
+    grep '^| ' "$1" | sed 's/`[^`]*`//g' | grep -qiE "(^|[^a-z-])$forms([^a-z-]|$)" && echo "$w"
   done; return 0
 }
 sed 's/| Create it with its checks and rules;/| Create it behind the wall;/' "$joined" > "$work/joined-wall"
 [ "$(unglossed "$work/joined-wall")" = wall ] && ok "plain words: a row saying \"the wall\" fails" || bad "plain words: the wall passed: $(unglossed "$work/joined-wall")"
 sed 's/| Create it with its checks and rules;/| Create it with `\/plinth:floor-check` and a pin;/' "$joined" > "$work/joined-pin"
+sed 's/| Create it with its checks and rules;/| Create it behind its walls, at its boundaries, re-rendered;/' "$joined" > "$work/joined-forms"
+[ "$(unglossed "$work/joined-forms" | paste -sd ' ' -)" = "wall boundary re-render" ] && ok "plain words: walls, boundaries and re-rendered fail too" ||
+  bad "plain words: other forms: $(unglossed "$work/joined-forms" | paste -sd ' ' -)"
 [ -z "$(unglossed "$work/joined-pin")" ] && ok "plain words: a command in backticks and a glossed word pass" || bad "plain words: $(unglossed "$work/joined-pin")"
 [ -z "$(unglossed "$joined")" ] && ok "plain words: every printed row is plain or glossed" || bad "plain words unglossed in the table: $(unglossed "$joined" | paste -sd ' ' -)"
 
