@@ -215,6 +215,8 @@ map_line() {
     printf '  ▶ %s %s: %s (you are here)\n' "${num:- }" "$name" "${before:+$before, then }$said_cmd"
     printf '      why now: %s\n' "$why_now"
   else
+    # Each mark with its word (#1155): a screen reader skips many symbols.
+    case "$mark" in "✓") mark="✓ done" ;; "✗") mark="✗ needs attention" ;; "·") mark="· not yet" ;; esac
     printf '  %s %s %s: %s\n' "${mark:- }" "${num:- }" "$name" "$cmd"
   fi
 }
@@ -264,15 +266,20 @@ print_map() {
   dir_of="$(dirname "$(sed -n 1p <<<"$pages")")"
   for i in 1 2 3; do
     page="$(sed -n "${i}p" <<<"$pages")"; [ "$i" = 1 ] || page="$dir_of/$page"
-    case "$i" in 1) m="$token_mark" ;; *) m="·" ;; esac
+    # The token's mark is its read's (· before the first merge); with no
+    # repository at all the step is still ahead (#1155). A state not read
+    # keeps no mark.
+    case "$i" in 1) m="$token_mark"; case "$where_cell" in "No repository yet"*) m="·" ;; esac ;; *) m="·" ;; esac
     if [ "$i" = 1 ]; then map_line "$m" 1 "$(awk -F ', ' -v i="$i" '{ print $i }' <<<"$names")" "$page" "$(sed -n 1p <<<"$cells")"
     else map_line "$m" 1 "$(awk -F ', ' -v i="$i" '{ print $i }' <<<"$names") (recommended)" "$page" "-"; fi
   done
   echo "  Each ticket (repeat)"
   for i in 2 3 4 5 6; do r="$(step_row "$i")"; [ -n "$r" ] || { echo "guide-state: the arsenal's table has no row for step $i" >&2; exit 1; }; map_row "" "$i" "$r"; done
-  echo "  ↻ next ticket: back to 4; a new idea: back to 2 ($so_far)"
+  echo "  repeat ↻ next ticket: back to 4; a new idea: back to 2 ($so_far)"
   echo "  When needed"
-  for i in 7 8; do r="$(step_row "$i")"; [ -n "$r" ] || exit 1; map_row "" "" "$r"; done
+  # Numbered as their steps, as 9 is (#1155); the web placement row too.
+  for i in 7 8; do r="$(step_row "$i")"; [ -n "$r" ] || exit 1; map_row "" "$i" "$r"; done
+  map_row "" "" "A \`web\` project to put online"
   # Step 9 (#1087): ✗ when the template or the plinth pin is behind or a
   # dependency pull request is open, ✓ when both read current and the open
   # pull requests were read with none of Dependabot's; else no mark.

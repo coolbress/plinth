@@ -1953,6 +1953,10 @@ for w in '`✓ done`' '`… in progress`' '`‖ waiting`' '`✗ failed`' 'no bar
          'only from the `so far:` lines, titles as printed' 'this step and the next in depth only with `mode: full` or'; do
   grep -qF -- "$w" "$guide_md" && ok "the skill says: $w" || bad "the skill does not say: $w"
 done
+# Narrow terminal answers and marks with words (#1155).
+grep -qF 'A terminal answer prefers a list of short lines' "$guide_md" && grep -qF 'to a table wider than four columns: a wide table wraps at 200% zoom' "$guide_md" && ok "the skill prefers short lines to a table wider than four columns" ||
+  bad "the skill lost the short-lines rule"
+grep -qF 'each mark is printed with its word' "$guide_md" && ok "the skill says each map mark is printed with its word" || bad "the skill lost the marks' words"
 grep -qF 'clears this answer too' "$guide_md" && grep -qF '`before: /clear`' "$guide_md" &&
   ok "the skill says /clear takes the answer with it, and /plinth:guide brings it back" || bad "no /clear line in the skill"
 grep -qF 'Next action cell' <<<"$(grep -F 'first time you use a command' "$guide_md")" &&
@@ -1986,12 +1990,12 @@ has "map, past the first merge: the title, the legend, the three groups, the ret
   "  o/r: now An idea in your own words (step 2); " \
   "  legend: ▶ you are here  ✓ done  ✗ needs attention  · not yet" \
   "  Once (setup)" "  Each ticket (repeat)" "  When needed" \
-  "  ↻ next ticket: back to 4; a new idea: back to 2 (" \
+  "  repeat ↻ next ticket: back to 4; a new idea: back to 2 (" \
   "  next command:" "    /grilling" \
   "  /plinth:guide map <step>: " "  /plinth:guide features: "
 has "map: create and the first merge done, read from the lines the script prints" "$out" \
-  "  ✓ 1 Create it with the wall: /plinth:new-project <owner>/<name>" \
-  "  ✓ 1 Merge its first pull request on green: merge #N"
+  "  ✓ done 1 Create it with the wall: /plinth:new-project <owner>/<name>" \
+  "  ✓ done 1 Merge its first pull request on green: merge #N"
 has "map: the step the project is at, marked, with one line on why now" "$out" \
   "  ▶ 2 An idea in your own words: /grilling (you are here)" "      why now: "
 has "map: the loop's other steps, each with its command and no mark: they recur" "$out" \
@@ -1999,36 +2003,47 @@ has "map: the loop's other steps, each with its command and no mark: they recur"
   "    4 A ticket ready: /clear, /implement #N" \
   "    5 A pull request with checks running: /run" \
   "    6 Green, and seen working: merge #N" "!  ✓ 4" "!  ✓ 5"
-has "map: when needed, unnumbered except step 9, release for this archetype, /retro named" "$out" \
-  "      Something broke: diagnose this: " "      Stopping, or coming back: /plinth:guide" \
+has "map: when needed, steps 7 to 9 numbered, the web placement row, release for this archetype, /retro named" "$out" \
+  "    7 Something broke: diagnose this: " "    8 Stopping, or coming back: /plinth:guide" \
+  "      A \`web\` project to put online: " \
   "      A merged change to put out: on a version tag the person pushes, \`cli\` and \`library\` publish to PyPI" \
   "      The project in use: " "      Looking back on a piece of work: /retro" "      Ending the project, or handing it over: " \
-  "!    7 " "!    8 "
+  "!      Something broke" "!      Stopping"
 grep -qF '`backend`' <<<"$(map_of "$out")" && bad "map: the release line names another archetype's release" || ok "map: the release line names only this archetype's"
 has "map: the own-account step and the things set by hand: not yet, since nothing reads them" "$out" \
-  "  · 1 The agent's own account (recommended): " "  · 1 Four things by hand (recommended): "
+  "  · not yet 1 The agent's own account (recommended): " "  · not yet 1 Four things by hand (recommended): "
 n="$(map_of "$out" | grep -c .)"
 [ "$n" -ge 25 ] && [ "$n" -le 35 ] && ok "map: one screen ($n lines)" || bad "map: $n lines, not about 30"
 "$names" "$arsenal" <(map_of "$out") >/dev/null && ok "map: every command it names is in the table" || bad "map names a command outside the table"
 
 out="$(MOCK_DIR="$work/created" "$script" "$work/created" map 2>&1)"
 has "map, before the first merge: created done, the first merge here, the token not yet" "$out" \
-  "  ✓ 1 Create it with the wall: " "  ▶ 1 Merge its first pull request on green: merge #2 (you are here)" \
-  "  · 1 A token that cannot change the checks: " "  /plinth:guide map <step>: " "!  ▶ 2"
+  "  ✓ done 1 Create it with the wall: " "  ▶ 1 Merge its first pull request on green: merge #2 (you are here)" \
+  "  · not yet 1 A token that cannot change the checks: " "  /plinth:guide map <step>: " "!  ▶ 2"
 has "map, before the first merge: the next command is the ▶ row's" "$out" "  next command:" "    merge #2"
 out="$(MOCK_DIR="$work/plain" "$script" "$work/plain" map 2>&1)"
 has "map, no repository: create is here, nothing done" "$out" \
-  "  ▶ 1 Create it with the wall: /plinth:new-project <owner>/<name> (you are here)" "  · 1 Merge its first pull request on green: " "!  ✓"
+  "  ▶ 1 Create it with the wall: /plinth:new-project <owner>/<name> (you are here)" "  · not yet 1 Merge its first pull request on green: " "!  ✓" \
+  "  · not yet 1 A token that cannot change the checks: " "    7 Something broke: " "    8 Stopping, or coming back: " "      A \`web\` project to put online: "
+# A git checkout plinth did not make: nothing read, so the token has no mark.
+d="$(repo map-foreign none)"
+out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
+has "map, a repository plinth did not make: the token step unread, no mark" "$out" "    1 A token that cannot change the checks: " "!  · not yet 1 A token"
+# Each mark with its word (#1155): no line starts with a bare mark.
+miss=""; for o in "$work/idle" "$work/created" "$work/plain"; do
+  l="$(map_of "$(MOCK_DIR="$o" "$script" "$o" map 2>&1)" | grep -E '^  (✓|✗|·) ' | grep -vE '^  (✓ done|✗ needs attention|· not yet) ' || true)"
+  [ -z "$l" ] || miss="$miss $l"; done
+[ -z "$miss" ] && ok "map: every mark is followed by its word" || bad "map: a mark without its word:$miss"
 
 d="$(repo map-ticket)"
 put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
 put "$d/issues.json" "$(issue 5 'Show monthly totals' ready-for-agent)"
 out="$(MOCK_ADMIN=true MOCK_DIR="$d" "$script" "$d" map 2>&1)"
 has "map: the token step needs attention when the credential reaches Administration" "$out" \
-  "  ✗ 1 A token that cannot change the checks: " "  ▶ 4 A ticket ready: /clear, then /implement #5 (you are here)" "      why now: #5, not blocked"
+  "  ✗ needs attention 1 A token that cannot change the checks: " "  ▶ 4 A ticket ready: /clear, then /implement #5 (you are here)" "      why now: #5, not blocked"
 has "map: the next command after /clear, as on the ▶ row" "$out" "  next command:" "    /clear" "    /implement #5"
 out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
-has "map: the token step done when the credential does not reach Administration" "$out" "  ✓ 1 A token that cannot change the checks: "
+has "map: the token step done when the credential does not reach Administration" "$out" "  ✓ done 1 A token that cannot change the checks: "
 out="$(MOCK_ADMIN_FAIL=1 MOCK_DIR="$d" "$script" "$d" map 2>&1)"
 has "map: the admin-reach read unknown: the token step has no mark" "$out" "    1 A token that cannot change the checks: "
 out="$(MOCK_ADMIN=true MOCK_SCOPES=none MOCK_PROBE=ok MOCK_DIR="$d" "$script" "$d" map 2>&1)"
@@ -2039,7 +2054,7 @@ has "map, where not read: no ▶, the title says so" "$out" "  map-ticket: where
 # Step 9: ✗ behind or a dependency pull request open, ✓ current, else no mark.
 put "$d/open.json" "$(pr 10 'chore(deps): bump y' true SUCCESS)"
 out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
-has "map: step 9 needs attention with a dependency pull request open" "$out" "  ✗ 9 Between pieces of work: " "  ▶ 4 "
+has "map: step 9 needs attention with a dependency pull request open" "$out" "  ✗ needs attention 9 Between pieces of work: " "  ▶ 4 "
 printf '[]' > "$d/open.json"
 printf '_commit: %s\n_src_path: gh:coolbress/plinth-template\narchetype: backend\n' "$target" > "$d/.copier-answers.yml"
 out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
@@ -2048,7 +2063,7 @@ has "map: step 9 unmarked when the pin is not read and nothing is behind" "$out"
 mkdir -p "$d/.github/workflows"
 printf 'name: CI\non: pull_request\njobs:\n  ci:\n    uses: coolbress/plinth/.github/workflows/python-ci.yml@%s # v2.31.0\n' "$pin_at" > "$d/.github/workflows/ci.yml"
 out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
-has "map: step 9 done when the template and the pin are current and no dependency pull request is open" "$out" "  ✓ 9 Between pieces of work: "
+has "map: step 9 done when the template and the pin are current and no dependency pull request is open" "$out" "  ✓ done 9 Between pieces of work: "
 put "$d/open.json" "$(pr 10 'chore(deps): bump y' true SUCCESS)"
 out="$(MOCK_FAIL_ON="pr list open" MOCK_DIR="$d" "$script" "$d" map 2>&1)"
 has "map: step 9 not done when the open pull requests were not read" "$out" "    9 Between pieces of work: "
@@ -2064,7 +2079,7 @@ out="$(MOCK_DIR="$d5" "$script" "$d5" map 2>&1)"
 has "map: a web app on Render: it goes out by itself" "$out" "      A merged change to put out: A \`web\` app on Render goes out by itself"
 printf '_commit: v1.28.0\n_src_path: gh:coolbress/plinth-template\narchetype: cli\n' > "$d/.copier-answers.yml"
 out="$(MOCK_DIR="$d" "$script" "$d" map 2>&1)"
-has "map: step 9 needs attention when the template is behind" "$out" "  ✗ 9 Between pieces of work: "
+has "map: step 9 needs attention when the template is behind" "$out" "  ✗ needs attention 9 Between pieces of work: "
 
 # map <step>: one step in depth, before or after the folder; features.
 depth() { awk '/^step: /{ on = 1 } on' <<<"$1"; }
