@@ -1405,7 +1405,7 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
     assert (state == "unknown") == (reason is not None), (cid, state, reason)
     assert (state == "review") == (reader is not None), (cid, state, reader)
     msg = e["messages"][msg_key].format(**(values or {}))
-    r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader}
+    r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader, "key": msg_key}
     results.append(r)
     verdicts.extend(verdict_lines(r))
     line = render_text(r)
@@ -1490,7 +1490,8 @@ def run_record(rs: list[dict], run: dict | None = None, crashed: dict | None = N
         e = REGISTRY[r["id"]]
         results.append({"id": r["id"], "state": r["state"], "shown": SHOWN[r["state"]], "message": r["msg"],
                         "reason": r["reason"], "cannot_be_read_here": r["reason"] == HERE, "reader": r["reader"],
-                        "area": AREAS[e["area"]], "name": e["name"], "handoff": e["handoff"],
+                        "key": r["key"], "area": AREAS[e["area"]], "name": e["name"], "handoff": e["handoff"],
+                        "fix": e["fix"], "keepable": e["keepable"],
                         "lifecycle": e["lifecycle"], "view": e["view"], "ci_visible": e["ci_visible"]})
     return {"schema": SCHEMA_ID, **(run or {}), "results": results,
             "not_evaluated": [{"id": i, "name": e["name"], "area": AREAS[e["area"]]}
@@ -6403,11 +6404,15 @@ def main() -> int:
         check_database_urls(root)
 
     if out_format == "json":
+        # The verdicts file first: when it cannot be written, the one
+        # document printed is the crashed one, not a whole run and then it.
+        if a.verdicts:
+            Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
         print_json(results)
     else:
         print(render_summary(results))
-    if a.verdicts:
-        Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
+        if a.verdicts:
+            Path(a.verdicts).write_text(render_verdicts(results), encoding="utf-8")
     return 1 if any(r["state"] == "fail" for r in results) else 0
 
 
