@@ -96,8 +96,9 @@ type an answer instead):
    owner's machine (a data collector, a pipeline); code other code imports
    (`library`); a service or API (`backend`); a model trained here, with a
    model card (`data-ml`; on GitHub a `v*` tag publishes the model, its
-   metrics and the card as release files); or a website people log in to
-   (`web`, then where it runs). Data processing, collection or a pipeline
+   metrics and the card as release files); a website people log in to
+   (`web`, then where it runs); or a page of tables and charts with no login
+   (`dashboard`, then whether it runs on your computer or on Render). Data processing, collection or a pipeline
    with no model trained is `cli`. Accept it, pick another kind, or say you
    are not sure (`cli`).
 4. **The name**, when the command gave none: two or three suggestions in
@@ -159,10 +160,12 @@ you can type instead:
 - `--license=proprietary`: grants nothing; nobody else may use, copy or
   share the code without your permission. The agent recommends it for a
   private repository (`--private`, or GitLab's default).
-- `--archetype=<kind>`: `cli`, `library`, `backend`, `data-ml`, or `web` for
+- `--archetype=<kind>`: `cli`, `library`, `backend`, `data-ml`, `web` for
   a web app with a database, which costs money to run (about US $13 a month
   on Render; [where else it can run](../how-to/choose-where-a-web-app-runs.md), named
-  with `--hosting=<place>`).
+  with `--hosting=<place>`), or `dashboard` for a page of tables and charts
+  with no login, on your computer (`--hosting=local`, the default) or on
+  Render, about US $7 a month (`--hosting=render`, GitHub only).
 - `--third-party-review`: the reviewer's check, for an account with a code
   reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
   `--no-third-party-review` says no without being asked.
