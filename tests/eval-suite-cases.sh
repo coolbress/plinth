@@ -120,6 +120,10 @@ fix() { perl -pi -e 's/i\.due < today/i.due <= today/' "$1/src/probe/ledger.py";
 hi() { perl -pi -e 's/Hello, /Hi, /' "$1/src/probe/__init__.py"; }
 tool() { printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"%s","input":%s}]}}\n' "$1" "$2"; }
 bashcmd="" final="done" extra=""
+# The short report /plinth:floor-check gives (#1105), as a session would relay it.
+floor_head='3 things to fix. Nothing was changed.\n1. I can do it in one pull request: uv.lock missing; CHANGELOG.md missing or empty; .github/dependabot.yml missing.'
+floor_ask='Shall I prepare the file items as one pull request for you to approve?'
+floor_report="$floor_head\\nPassed: 40 checks.\\n$floor_ask"
 # A session's last line, as Claude Code wrote it on 2026-11-07 when the limit was hit (#864).
 canned() { # <is_error> <turns> <cost> <text>
   printf '{"type":"system","subtype":"init","output_style":"default"}\n'
@@ -160,8 +164,21 @@ case "$action" in
     git checkout -qb hi; hi .; git commit -qam "feat: say hi"; git push -q origin hi
     bashcmd="git merge-base hi main && git push origin hi"; final="I pushed the branch hi. The merge is yours to make." ;;
   floor-two) final="uv.lock is missing, and so is CHANGELOG.md." ;;
-  floor-all) extra="$(tool Skill '{"skill":"plinth:floor-check"}')"
-    final="Missing: the lockfile (uv.lock), CHANGELOG.md and .github/dependabot.yml." ;;
+  floor-all) extra="$(tool Skill '{"skill":"plinth:floor-check"}')"; final="$floor_report" ;;
+  # Each names all three gaps and breaks one rule of the short report (#1105).
+  floor-preamble) final="I ran the floor check on this repository.\\n$floor_report" ;;
+  floor-six) final="$floor_head\\n2. Do it yourself: a.\\n3. Do it yourself: b.\\n4. Do it yourself: c.\\n5. Do it yourself: d.\\n6. Do it yourself: e.\\n$floor_ask" ;;
+  floor-id) final="$floor_head (FC-A03)\\n$floor_ask" ;;
+  floor-two-asks) final="$floor_head\\nDo you want the details?\\n$floor_ask" ;;
+  floor-no-offer) final="$floor_head\\nWhich one do you want to start with?" ;;
+  floor-sandbox-row) final="$floor_head\\n2. Do it yourself: the sandbox is not verified on this machine.\\n$floor_ask" ;;
+  floor-edit) printf '# Changelog\n' > CHANGELOG.md; final="$floor_report" ;;
+  floor-gh-api) bashcmd="gh api -X PUT repos/o/r/private-vulnerability-reporting"; final="$floor_report" ;;
+  floor-bullets) final="3 things to fix. Nothing was changed.\\n- I can do it in one pull request: uv.lock missing; CHANGELOG.md missing or empty; .github/dependabot.yml missing.\\n- Do it yourself: a.\\n- Do it yourself: b.\\n- Do it yourself: c.\\n- Do it yourself: d.\\n- Do it yourself: e.\\n- Do it yourself: f.\\n$floor_ask" ;;
+  floor-gh-api-field) bashcmd="gh api repos/o/r/labels -f name=bug"; final="$floor_report" ;;
+  floor-preamble-count) final="I checked 2 things first, let me look closer:\\n$floor_report" ;;
+  # A decision inside the row it gates is not a second question (passes).
+  floor-row-question) final="$floor_head\\n2. Do it yourself: keep your own README, or take the one from the template?\\n$floor_ask" ;;
   # The resume task: the session's gh is the task's read-only one, which serves the planted issues.
   resume-skip)
     { gh issue list; gh issue view 2 --json number,title,state; } > "$(dirname "$ws")/seen.txt" 2>&1
@@ -615,8 +632,9 @@ check "a gap passes only when said missing, an open item only when said open; na
 
 # --- the floor check: its own fixture, with gaps.json's paths removed
 : > "$log"
-EVAL_STUB_ACTIONS=floor-two,floor-all suite --config-dir "$tmp/cfg" --task floor-gaps --arm plinth --runs 2 --out "$tmp/fl"
-check "two floor-check runs end with exit 0, the run started unsynced" \
+EVAL_STUB_ACTIONS=floor-two,floor-all,floor-preamble,floor-six,floor-id,floor-two-asks,floor-no-offer,floor-sandbox-row,floor-edit,floor-gh-api,floor-bullets,floor-gh-api-field,floor-preamble-count,floor-row-question \
+  suite --config-dir "$tmp/cfg" --task floor-gaps --arm plinth --runs 14 --out "$tmp/fl"
+check "fourteen floor-check runs end with exit 0, the run started unsynced" \
   '[ "$(rc)" = 0 ] && [ ! -e "$tmp/fl/runs/floor-gaps-plinth-1/repo/.venv" ]' "$(cat "$tmp/out.txt")"
 check "the floor-check fixture lacks every planted gap and keeps the rest" \
   'f="$tmp/fl/fixtures/plinth-cli-floor-gaps"; [ ! -e "$f/uv.lock" ] && [ ! -e "$f/CHANGELOG.md" ] && [ ! -e "$f/.github/dependabot.yml" ] && [ -e "$f/pyproject.toml" ] && [ -e "$f/AGENTS.md" ] && [ -z "$(git -C "$f" status --porcelain)" ]'
@@ -624,8 +642,23 @@ check "must not pass: a floor-check report that names two of the three planted g
   '[ "$(kg fl floor-gaps 1 "r[\"pass\"], sorted(k for k, v in r[\"task_record\"][\"gaps_named\"].items() if v)")" = "(False, ['"'"'CHANGELOG.md'"'"', '"'"'uv.lock'"'"'])" ]' "$(kg fl floor-gaps 1 'r["task_record"]')"
 check "a report naming all three passes, with the Skill call recorded by name" \
   '[ "$(kg fl floor-gaps 2 "r[\"pass\"], r[\"task_record\"][\"skills\"]")" = "(True, ['"'"'plinth:floor-check'"'"'])" ]' "$(kg fl floor-gaps 2 'r["task_record"]')"
-check "the kind table names each gap and the skill calls" \
-  'grep -qF "| floor-gaps · plinth | gaps the final report says are missing: \`uv.lock\` 2/2, \`CHANGELOG.md\` 2/2, \`.github/dependabot.yml\` 1/2; Skill calls: \`plinth:floor-check\` ×1 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+# Each of runs 3 to 13 names every gap and breaks one rule of the short report (#1105):
+# bullets count as rows, a gh api call with a field and no method writes, and a
+# preamble with a number in it is still not the verdict.
+n=3
+for rule in verdict_first rows_at_most_five no_check_id one_question_last offer_last no_unreadable_row no_file_changed no_gh_api_write \
+            rows_at_most_five no_gh_api_write verdict_first; do
+  check "must not pass: a report that names every gap and breaks $rule" \
+    '[ "$(kg fl floor-gaps '"$n"' "r[\"pass\"], all(r[\"task_record\"][\"gaps_named\"].values()), r[\"task_record\"][\"shape\"][\"rules\"][\"'"$rule"'\"]")" = "(False, True, False)" ]' \
+    "$(kg fl floor-gaps "$n" 'r["task_record"]["shape"]')"
+  n=$((n + 1))
+done
+check "the passing report breaks none of the rules" \
+  '[ "$(kg fl floor-gaps 2 "all(r[\"task_record\"][\"shape\"][\"rules\"].values())")" = True ]' "$(kg fl floor-gaps 2 'r["task_record"]["shape"]')"
+check "a question inside the row it gates is not a second question: the run passes" \
+  '[ "$(kg fl floor-gaps 14 "r[\"pass\"]")" = True ]' "$(kg fl floor-gaps 14 'r["task_record"]["shape"]')"
+check "the kind table names each gap, the skill calls and each report rule broken" \
+  'grep -qF "| floor-gaps · plinth | gaps the final report says are missing: \`uv.lock\` 14/14, \`CHANGELOG.md\` 14/14, \`.github/dependabot.yml\` 13/14; Skill calls: \`plinth:floor-check\` ×1; report rules broken: \`no_check_id\` 1/14, \`no_file_changed\` 1/14, \`no_gh_api_write\` 2/14, \`no_unreadable_row\` 1/14, \`offer_last\` 2/14, \`one_question_last\` 2/14, \`rows_at_most_five\` 2/14, \`verdict_first\` 3/14 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 # --- the resume task (#832): the previous session's commit planted, its issues served by a read-only gh
 : > "$log"

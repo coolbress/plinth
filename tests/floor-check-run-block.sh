@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The `## Run` block of skills/floor-check/SKILL.md hands the checker the same
-# arguments under bash and zsh. Offline.
+# arguments under bash and zsh, the read-only rule opens it, and its
+# description names what it checks. Offline.
 #
 # The agent runs that block in whatever shell the machine has, and zsh does not
 # split an unquoted expansion into words: `${repo:+--repo "$repo"}` arrived as
@@ -65,6 +66,19 @@ rule="$(awk -v n="${n:-0}" 'NR >= n && n > 0 { print } NR > n && /^$/ { exit }' 
 if [ -n "$n" ] && [ "$n" -le 40 ] && grep -qF 'do not run anything that writes' <<<"$rule" && grep -qF 'never run it' <<<"$rule"
 then ok "the read-only rule is at line $n of SKILL.md, within the first 40"
 else bad "no '**Read-only.**' paragraph within SKILL.md's first 40 lines that says not to write and never to run a printed command (found at line ${n:-none})"; fi
+
+# The description says what the skill reads and what it leaves (#1105): the
+# protection rules, the base files and the agent's safety, the offer of one
+# pull request the person approves, nothing changed in the repository and one
+# note kept on this machine. The records join when the checker reads them.
+desc="$(sed -n 's/^description: //p' "$skill" | head -1)"
+missing=""
+for w in "protection rules" "base files" "the agent's safety" "one pull request the person approves" \
+         "Changes nothing in the repository" "keeps one note on this machine"; do
+  grep -qF -- "$w" <<<"$desc" || missing="$missing; $w"
+done
+if [ -n "$desc" ] && [ -z "$missing" ]; then ok "the description names what it checks, the pull request it offers, and the one note it keeps"
+else bad "the description lacks: ${missing#; }"; fi
 
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

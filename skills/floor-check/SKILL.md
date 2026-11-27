@@ -1,6 +1,6 @@
 ---
 name: floor-check
-description: Read-only check of an existing repository against the plinth floor (the document set, agent settings, lockfile, container image, the live ruleset) plus what this machine's Claude Code settings say about the sandbox. Reports what is missing as a list with one fix per item and never changes anything. Use when the user asks whether a repository is set up, protected, "has the floor", or what /plinth:new-project would have given it.
+description: Read-only check of a repository through plinth's eyes: its protection rules, its base files and the agent's safety settings, plus what this machine's Claude Code settings say. Gives a short list of what is missing and offers the missing files as one pull request the person approves, made after the check. Changes nothing in the repository and keeps one note on this machine, so the next run says what changed. Use when the user asks whether a repository is set up, protected, "has the floor", or what /plinth:new-project would have given it.
 argument-hint: "[owner/name]"
 disallowed-tools: Edit, Write, NotebookEdit
 ---
@@ -152,6 +152,11 @@ it.
 An INFO naming a product the plan lacks (GitHub Code Security or Secret
 Protection on a private repository) is a fact about the plan: buying it is the
 user's choice, never a step to run or to recommend as a repair.
+
+A yes to the pull-request question ends this check, which changed nothing.
+Say that the pull request is a change of its own, made after the check in a
+new session the way the project makes every change (a branch, the plan
+approved, a pull request), and that `/plinth:guide` names the step.
 
 When the report says the check stopped early, say so first: what it read
 before stopping is all there is, and the rest was not checked.
