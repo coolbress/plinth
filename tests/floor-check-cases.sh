@@ -691,6 +691,18 @@ merge_wall "CODEOWNERS names o and b (write), o merges: a PASS, not one-person" 
 merge_wall "one approval and only o with write: a WARN" "FC-E31 warn" "count 1; collab o:admin; nco" "${M[@]}"
 merge_wall "one approval and two admins: a PASS" "FC-E31 pass" "count 1; collab o:admin b:admin agent:write" "${M[@]}"
 merge_wall "a bot with admin is not a person" "FC-E31 pass" "count 0; collab o:admin dependabot:bot" "${M[@]}"
+# The review of #1235: an author cannot approve their own pull request, so
+# two people with two approvals required leaves each one short; and a team
+# in CODEOWNERS may hold approvers this does not read, so the count is not
+# made and nothing weaker is suggested.
+merge_wall "two approvals and two people who can approve: a WARN" "FC-E31 warn" "count 2; collab o:admin b:admin; nco" "${M[@]}"
+merge_wall "  with the two-people command, not one-person" "add-ruleset-rule.sh o/r two-people" "count 2; collab o:admin b:admin; nco" "${M[@]}"
+merge_wall "two approvals and three who can approve: a PASS" "FC-E31 pass" "count 2; collab o:admin b:admin c:write; nco" "${M[@]}"
+merge_wall "code owners' review on, CODEOWNERS names a team and only o: not counted, an INFO" "FC-E31 info" "count 1 owners; collab o:admin agent:write; co '* @o @acme/maintainers'" "${M[@]}"
+merge_wall "  naming the team" "CODEOWNERS names @acme/maintainers, whose members are not read here" "count 1 owners; collab o:admin agent:write; co '* @o @acme/maintainers'" "${M[@]}"
+fc_out="$(FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "${M[@]}" 2>&1)"
+if grep -q "one-person" <<<"$fc_out"; then bad "  and no one-person command beside a team"; else ok "  and no one-person command beside a team"; fi
+nco
 # Without the merge ruleset, everyone with write can merge: the agent's own
 # account is one of them (FC-E25 says to add the ruleset).
 merge_wall "no merge ruleset: write counts" "FC-E31 warn" "count 0; collab o:admin agent:write; jq -c 'map(select(.type != \"update\"))' \"$mapi/repos/o/r/rules/branches/main.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"

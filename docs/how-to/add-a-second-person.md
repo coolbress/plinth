@@ -97,9 +97,11 @@ with write access (GitHub Docs, read 2026-11-25). The preset leaves it on:
 with two people, that is still the two of you.
 
 `/plinth:floor-check` warns when this and the people do not match: two or
-more people can merge and no approval is required, or one approval is
-required and only one person can give an approval that counts (with code
-owners' review on, that is the people CODEOWNERS names).
+more people can merge and no approval is required, or no more people can give
+an approval that counts than the approvals required (an author cannot approve
+their own pull request; with code owners' review on, those who count are the
+people CODEOWNERS names). When CODEOWNERS names a team, its members are not
+read, so it says the count was not made instead.
 
 ## 5. A token and a plinth install for each person
 

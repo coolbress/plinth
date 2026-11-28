@@ -15,5 +15,7 @@
   file is there. Its end row opens the issue form "End or hand over this
   project", and a handover goes through the second-person page first (#1150).
 - `/plinth:floor-check` warns (FC-E31, never a FAIL) when two or more people can
-  merge and no approval is required, or when one approval is required and only
-  one person can give an approval that counts (#1150).
+  merge and no approval is required, or when no more people can give an
+  approval that counts than the approvals required, since an author cannot
+  approve their own; with a team in CODEOWNERS it says the count was not made
+  (#1150).
