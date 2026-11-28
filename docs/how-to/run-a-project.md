@@ -70,6 +70,11 @@ missing:
 1. [Its own account](give-the-agent-its-own-account.md), whose step 6 removes your own login, the token included.
 2. [The four things by hand](set-four-things-by-hand.md).
 
+Once the token is done, type `/run-skill-generator` once (built in): it
+writes a skill that teaches `/run` to drive the app, beside the template's
+`verify`; commit it through a pull request like any change
+([#1084](https://github.com/coolbress/plinth/issues/1084)).
+
 An uptime monitor and an error tracker wait for the first deploy: the
 four-things page's [after the first
 deploy](set-four-things-by-hand.md#after-the-first-deploy) names them, with
