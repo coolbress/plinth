@@ -473,6 +473,9 @@ jobs:
       - name: No release without a why, the tested template tag, and a green e2e run on the tagged commit or its tree
         run: ./tests/make-release-guards.sh
 
+      - name: A decisions-page marker whose issue closed as completed is named and fails; one closed not planned is left to a person
+        run: ./tests/stale-decision-markers-cases.sh
+
       - name: A template pin raise edits only the tag and the commit, and changes nothing for a tag that is missing or names another commit
         run: ./tests/raise-template-pin-cases.sh
 
