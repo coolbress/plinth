@@ -1113,7 +1113,7 @@ check "every run cut short counts before the ceiling is read, a later one too: U
   '[ "$(rc)" = 3 ] && [ "$(sessions)" = 0 ] && grep -qF "ceiling reached: spent \$2.2500 of \$1" "$tmp/out.txt"' "$(cat "$tmp/out.txt"; grep '^session' "$log")"
 # The real checkout's state, on a copy: tests must pass from a dirty tree as well as a clean one.
 cl="$tmp/clone"; mkdir -p "$cl"
-cp -R "$root/scripts" "$root/eval-suite" "$root/.claude-plugin" "$cl/"
+cp -R "$root/scripts" "$root/eval-suite" "$root/.claude-plugin" "$root/tools" "$cl/"
 git -C "$cl" init -q -b main; git -C "$cl" add -A; git -C "$cl" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false commit -qm copy
 copy_suite() { "$cl/scripts/eval-suite.sh" --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --out "$tmp/rcopy" > "$tmp/out.txt" 2>&1; echo $? > "$tmp/rc"; }
 EVAL_STUB_ACTIONS=limit copy_suite

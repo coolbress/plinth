@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The two workflow checks of `ci / tools`, with its flags: the workflow calls
 # this file, and its install step reads the actionlint pin below, so that pin
-# is here only; zizmor's is in tests/lint-tools.in. actionlint's binary is per platform: CI installs the
+# is here only; zizmor's is in tools/lint/pyproject.toml. actionlint's binary is per platform: CI installs the
 # checksum-verified Linux build, a laptop runs what it has. Another version
 # still runs here and says so; in CI (GITHUB_ACTIONS) it is a FAIL.
 set -uo pipefail
@@ -11,10 +11,10 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 actionlint_version="1.7.12"
 # shellcheck disable=SC2034  # read by the install step of plinth-ci.yml
 actionlint_sha256="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
-# zizmor is pinned in tests/lint-tools.in and installed hash-checked from
-# tests/lint-tools.txt (tests/lib/lint-tools.sh). 1.30.0 adds a low finding that
-# asks for the `$/` self-repository syntax, which actionlint 1.7.12 does not know
-# yet; raise both together.
+# zizmor is pinned in tools/lint/pyproject.toml and installed hash-checked from
+# its uv.lock (tests/lib/lint-tools.sh). From 1.30.0 a low finding asks for the
+# `$/` self-repository syntax, which actionlint 1.7.12 does not know yet: that
+# audit is off in .github/zizmor.yml until both move to it (#1220).
 # shellcheck source=tests/lib/lint-tools.sh
 . "$root/tests/lib/lint-tools.sh"
 zizmor_version="$(lint_tool_version zizmor)"

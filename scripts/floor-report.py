@@ -246,6 +246,14 @@ def report(doc: dict, prev: dict | None, now: dict | None) -> list[str]:
     merge = next((r for r in res if r["id"] == "FC-E26" and r["state"] in ("pass", "info")), None)
     if merge:
         out.append(first_line(merge)[0].upper() + first_line(merge)[1:])
+    # What .plinth-adoption.yml holds off (#1112): said on any machine, not counted.
+    later = next((r for r in res if r["id"] == "FC-E12" and r["key"] == "later"), None)
+    if later:
+        out.append(first_line(later)[0].upper() + first_line(later)[1:] + ".")
+    kept = [r for r in res if r.get("kept")]
+    if kept:
+        out.append("Kept by you in .plinth-adoption.yml, not counted: "
+                   + "; ".join(f"{r['name']} ({r['kept']['reason']})" for r in kept) + ".")
     unknowns = [r for r in res if r["state"] in ("unknown", "review") and r["area"] != "machine" and not json_only(r)]
     if unknowns:
         names = []

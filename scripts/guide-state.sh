@@ -407,10 +407,12 @@ echo "archetype: ${archetype:-not recorded}"
 
 # behind [--no-network]: the template tag against the one this plinth targets,
 # the plinth pin against plinth's latest release, as floor-check reads them.
-behind() {
-  local out
-  if out="$(python3 "$plugin/scripts/floor-check.py" --root "$top" --print-behind "$@" 2>&1)" &&
-     grep -q '^template: ' <<<"$out" && grep -q '^plinth pin: ' <<<"$out"; then
+behind_read() { python3 "$plugin/scripts/floor-check.py" --root "$top" --print-behind "$@" 2>&1; }
+behind() { local out; out="$(behind_read "$@")"; behind_said $? "$out"; }
+# behind_said <floor-check's status> <its output>: the two lines.
+behind_said() {
+  local out="$2"
+  if [ "$1" = 0 ] && grep -q '^template: ' <<<"$out" && grep -q '^plinth pin: ' <<<"$out"; then
     behind_lines="$(grep -E '^(template|plinth pin): ' <<<"$out")"
   else
     behind_lines="template: not read (floor-check: $(tail -1 <<<"$out"))
@@ -461,7 +463,24 @@ if ! repo="$(cd "$top" && gh repo view --json nameWithOwner --jq .nameWithOwner 
   finish
 fi
 echo "repository: $repo"; repo_name="$repo"
-behind
+
+# The reads that wait on nothing but the repository's name run at once
+# (#1180): one after another they were most of a run's time (8.6 to 8.9 s
+# on nexusbt, eleven calls at 0.4 to 1.5 s each). start <key> <command>...:
+# runs it in the background, its standard output into a file of its own.
+# take <key> <variable>: waits for it, sets the variable as $(...) would and
+# returns its status. Each is taken where its line was said before, so a
+# failed read says what it said, in the same order.
+bg="$(mktemp -d)" || { echo "guide-state: could not make a temp folder" >&2; exit 1; }
+# At exit, a read not taken (a run that ends early, on a failed read) is
+# waited for, not killed: killing reaches only its subshell, which leaves gh
+# running and says Terminated on standard error.
+trap 'wait; rm -rf "$bg"' EXIT
+start() { local k="$1"; shift; "$@" > "$bg/$k" & printf -v "pid_$k" '%s' "$!"; }
+take() { local p="pid_$1" rc; wait "${!p}"; rc=$?; printf -v "$2" '%s' "$(cat "$bg/$1")"; return "$rc"; }
+# in_top <command>...: in the checkout, its errors with its output.
+in_top() { (cd "$top" && "$@" 2>&1); }
+in_repo_gh() { (cd "$top" && gh "$@"); }
 
 # A check run has status and conclusion; a commit status has only state.
 rollup='def state: (.conclusion // .state // "") as $c | (.status // "COMPLETED") as $s
@@ -519,16 +538,105 @@ for_issues='def for_issues: [(.body // "") | scan("(?i)(?:^|[^a-z0-9_])(?:close[
 read=100
 prs=""; merged=""; issues=""; failed=""
 issue_rows="$kind$refs$blockers"' sort_by(.number) | .[] | [.number, ([.labels[].name] | join(",")), (.title | '"$clean"'), kind, blockers] | @tsv'
+# What happened so far (#1076), from one GraphQL call: when the repository
+# was made and last pushed to (a push to any branch, a bot's too), the true
+# totals, and the records below. Its own read: failing, started, so far and
+# totals say not read and every other line stays as it is. The events that
+# count, each a date, a reference, a kind and the record's title as recorded:
+#   - the repository's creation;
+#   - the first merge by a person: the earliest merged of the first 20 pull
+#     requests opened that a person (not a Bot) wrote, or of the merged ones
+#     read above when that read was not cut (nexusbt's first merge was
+#     Dependabot's);
+#   - closed records: issues labelled spec or wayfinder:* (not
+#     wayfinder:task), among the 50 closed issues updated last;
+#   - releases (not drafts) and tags with no release, the 10 newest of each;
+#   - feat: merges by people, from the merged pull requests read above.
+# The same call finds the last look back (#1145): the newest issue, open or
+# closed, whose title starts with "Look back" in any case, from a search of
+# the repository's issue titles, newest first (search finds the words
+# anywhere, so the start is checked here; by best match, the newest could
+# fall past the first 10), and the moment 30 days ago, for the line below.
+# Every other merge is counted only. The newest five are printed, newest
+# first; with a problem open, only the totals line. Each event keeps its whole
+# timestamp, in UTC (a tag's date may carry an offset), until the five are
+# picked: only the printed date is cut to the day.
+history_q='query($owner: String!, $name: String!, $lookq: String!) {
+  lookBack: search(query: $lookq, type: ISSUE, first: 10) { nodes { ... on Issue { number title createdAt } } }
+  repository(owner: $owner, name: $name) {
+  createdAt pushedAt
+  mergedPulls: pullRequests(states: MERGED) { totalCount }
+  closedIssues: issues(states: CLOSED) { totalCount }
+  records: issues(states: CLOSED, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number title closedAt labels(first: 20) { nodes { name } } } }
+  releases(first: 10, orderBy: {field: CREATED_AT, direction: DESC}) { totalCount nodes { tagName name isDraft publishedAt createdAt } }
+  tags: refs(refPrefix: "refs/tags/", first: 10, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { totalCount
+    nodes { name target { ... on Commit { committedDate associatedPullRequests(first: 1) { nodes { mergedAt } } } ... on Tag { tagger { date } target { ... on Commit { committedDate associatedPullRequests(first: 1) { nodes { mergedAt } } } } } } } }
+  firstMerges: pullRequests(states: MERGED, first: 20, orderBy: {field: CREATED_AT, direction: ASC}) { nodes { number title mergedAt author { __typename login } } }
+} }'
+history_jq='def clean: gsub("[\t\n\r]"; " ");
+  def ago: ((now - fromdate) / 86400 | floor | if . < 0 then 0 else . end) as $d | "\(.[0:10]) (\($d) day\(if $d == 1 then "" else "s" end) ago)";
+  def many($n; $w): "\($n) \($w)\(if $n == 1 then "" else "s" end)";
+  def utc: if test("[+-][0-9]{2}:[0-9]{2}$") then ((.[0:19] + "Z" | fromdate) - ((.[19:20] + "1" | tonumber) * ((.[20:22] | tonumber) * 3600 + (.[23:25] | tonumber) * 60)) | todate) else . end;
+  .data.repository as $r
+  | (["started", "started: \($r.createdAt | ago); last activity: \(($r.pushedAt // $r.createdAt) | ago)"],
+     ["totals", "totals: \($r.mergedPulls.totalCount) merged, \(many($r.closedIssues.totalCount; "closed issue")), \(many($r.releases.totalCount; "release")), \(many($r.tags.totalCount; "tag"))"],
+     ["event", $r.createdAt, $repo, "created", ""],
+     ([$r.tags.nodes[] | (.target.committedDate // .target.target.committedDate // .target.tagger.date // "") as $at | select($at != "")
+        | [.name, ([($at | utc), (.target.associatedPullRequests.nodes[0].mergedAt // .target.target.associatedPullRequests.nodes[0].mergedAt // "")] | max)]]
+      | first // empty | ["lasttag", .[0], .[1]]),
+     ($r.records.nodes[] | ([.labels.nodes[].name | select(. == "spec" or (startswith("wayfinder:") and . != "wayfinder:task"))] | first) as $l
+       | select($l != null and .closedAt != null) | ["event", .closedAt, "#\(.number)", "closed \($l)", (.title | clean)]),
+     ($r.releases.nodes[] | select(.isDraft | not) | ["event", (.publishedAt // .createdAt), .tagName, "release", ((.name // "") | clean)]),
+     ([$r.releases.nodes[] | select(.isDraft | not) | .tagName] as $rel | $r.tags.nodes[] | select(.name as $t | $rel | index($t) | not)
+       | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", ($at | utc), .name, "tag", ""]),
+     ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
+       | ["first", .mergedAt, "#\(.number)", (.title | clean)]),
+     ([.data.lookBack.nodes[]? | select((.title // "") | ascii_downcase | startswith("look back")) | select(.createdAt != null)] | max_by(.createdAt)
+       | ["lookback", (if . then .createdAt else "" end), (if . then "#\(.number)" else "" end), (now - 2592000 | todate)]))
+  | @tsv'
 prs_read=""
-if ! prs="$(cd "$top" && gh pr list --state open --limit 100 \
+# The read of GitHub's native issue dependencies (below), on its own so that
+# it starts once the open issues are in.
+deps_query() { (cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f query='
+    query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+      issues(states: OPEN, labels: ["ready-for-agent"], first: 100, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number
+        blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } }
+        blocking(first: 50) { nodes { number state repository { nameWithOwner } } } } } } }' \
+    --jq '"'"$(tr 'A-Z' 'a-z' <<<"$repo")"'" as $me
+      | def ref: if (.repository.nameWithOwner | ascii_downcase) == $me then (.number | tostring) else "\(.repository.nameWithOwner)#\(.number)" end;
+      .data.repository.issues.nodes[] | .number as $n
+      | ((.blockedBy.nodes[] | select(.state == "OPEN") | [($n | tostring), ref]),
+         (.blocking.nodes[] | select(.state == "OPEN" and (.repository.nameWithOwner | ascii_downcase) == $me) | [(.number | tostring), ($n | tostring)]))
+      | @tsv' 2>&1); }
+start prs in_top gh pr list --state open --limit 100 \
       --json number,title,body,isDraft,author,headRefOid,statusCheckRollup,createdAt,mergeStateStatus \
-      --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers] | @tsv' 2>&1)"; then
+      --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers] | @tsv'
+start merged in_top gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
+      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"'), .mergedAt, (if (.mergedAt // "") != "" and now - (.mergedAt | fromdate) < 86400 then "recent" else "" end)] | @tsv'
+start issues in_top gh issue list --state open --limit 100 --json number,title,labels,body --jq "$issue_rows"
+start behind behind_read
+start history in_top gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f lookq="repo:$repo is:issue in:title \"Look back\" sort:created-desc" -f query="$history_q" \
+      --jq "\"$repo\" as \$repo | $history_jq"
+start run in_top gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
+      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10], ((.head_commit.message // "") | (split("\n")[0] // "") | gsub("\t"; " "))] | @tsv'
+take behind out; behind_said $? "$out"
+if ! take prs prs; then
   failed="open pull requests: $(tail -1 <<<"$prs")"
-elif ! merged="$(cd "$top" && gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
-      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"'), .mergedAt, (if (.mergedAt // "") != "" and now - (.mergedAt | fromdate) < 86400 then "recent" else "" end)] | @tsv' 2>&1)"; then
+elif ! take merged merged; then
   failed="merged pull requests: $(tail -1 <<<"$merged")"
-elif ! issues="$(cd "$top" && gh issue list --state open --limit 100 --json number,title,labels,body --jq "$issue_rows" 2>&1)"; then
+elif ! take issues issues; then
   failed="open issues: $(tail -1 <<<"$issues")"
+fi
+# The reads that wait on one of those, started as soon as it is in: the
+# token step's reach (after the first merge, as said below) and the issue
+# dependencies (with a ready ticket open). Each is taken where it is used.
+if [ -z "$failed" ]; then
+  if [ "$(awk -F '\t' '$2 == "person"' <<<"$merged" | grep -c . || true)" -gt 0 ] || [ "$(grep -c . <<<"$merged" || true)" -ge "$read" ]; then
+    start reach admin_reach in_repo_gh "$repo" "?" "?"
+  fi
+  if [ "$(awk -F '\t' '$4 == "ticket" && ("," $2 ",") ~ /,ready-for-agent,/' <<<"$issues" | grep -c . || true)" -ge 1 ]; then
+    start deps deps_query
+  fi
 fi
 [ -n "$failed" ] || prs_read=yes
 if [ -n "$failed" ]; then
@@ -620,91 +728,46 @@ if [ "$(grep -c . <<<"$merged" || true)" -ge "$read" ]; then
   past_first=yes; counted="$counted of the last $read read; older ones not read"
 fi
 
-# What happened so far (#1076), from one GraphQL call: when the repository
-# was made and last pushed to (a push to any branch, a bot's too), the true
-# totals, and the records below. Its own read: failing, started, so far and
-# totals say not read and every other line stays as it is. The events that
-# count, each a date, a reference, a kind and the record's title as recorded:
-#   - the repository's creation;
-#   - the first merge by a person: the earliest merged of the first 20 pull
-#     requests opened that a person (not a Bot) wrote, or of the merged ones
-#     read above when that read was not cut (nexusbt's first merge was
-#     Dependabot's);
-#   - closed records: issues labelled spec or wayfinder:* (not
-#     wayfinder:task), among the 50 closed issues updated last;
-#   - releases (not drafts) and tags with no release, the 10 newest of each;
-#   - feat: merges by people, from the merged pull requests read above.
-# The same call finds the last look back (#1145): the newest issue, open or
-# closed, whose title starts with "Look back" in any case, from a search of
-# the repository's issue titles, newest first (search finds the words
-# anywhere, so the start is checked here; by best match, the newest could
-# fall past the first 10), and the moment 30 days ago, for the line below.
-# Every other merge is counted only. The newest five are printed, newest
-# first; with a problem open, only the totals line. Each event keeps its whole
-# timestamp, in UTC (a tag's date may carry an offset), until the five are
-# picked: only the printed date is cut to the day.
-history_q='query($owner: String!, $name: String!, $lookq: String!) {
-  lookBack: search(query: $lookq, type: ISSUE, first: 10) { nodes { ... on Issue { number title createdAt } } }
-  repository(owner: $owner, name: $name) {
-  createdAt pushedAt
-  mergedPulls: pullRequests(states: MERGED) { totalCount }
-  closedIssues: issues(states: CLOSED) { totalCount }
-  records: issues(states: CLOSED, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number title closedAt labels(first: 20) { nodes { name } } } }
-  releases(first: 10, orderBy: {field: CREATED_AT, direction: DESC}) { totalCount nodes { tagName name isDraft publishedAt createdAt } }
-  tags: refs(refPrefix: "refs/tags/", first: 10, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) { totalCount
-    nodes { name target { ... on Commit { committedDate associatedPullRequests(first: 1) { nodes { mergedAt } } } ... on Tag { tagger { date } target { ... on Commit { committedDate associatedPullRequests(first: 1) { nodes { mergedAt } } } } } } } }
-  firstMerges: pullRequests(states: MERGED, first: 20, orderBy: {field: CREATED_AT, direction: ASC}) { nodes { number title mergedAt author { __typename login } } }
-} }'
-history_jq='def clean: gsub("[\t\n\r]"; " ");
-  def ago: ((now - fromdate) / 86400 | floor | if . < 0 then 0 else . end) as $d | "\(.[0:10]) (\($d) day\(if $d == 1 then "" else "s" end) ago)";
-  def many($n; $w): "\($n) \($w)\(if $n == 1 then "" else "s" end)";
-  def utc: if test("[+-][0-9]{2}:[0-9]{2}$") then ((.[0:19] + "Z" | fromdate) - ((.[19:20] + "1" | tonumber) * ((.[20:22] | tonumber) * 3600 + (.[23:25] | tonumber) * 60)) | todate) else . end;
-  .data.repository as $r
-  | (["started", "started: \($r.createdAt | ago); last activity: \(($r.pushedAt // $r.createdAt) | ago)"],
-     ["totals", "totals: \($r.mergedPulls.totalCount) merged, \(many($r.closedIssues.totalCount; "closed issue")), \(many($r.releases.totalCount; "release")), \(many($r.tags.totalCount; "tag"))"],
-     ["event", $r.createdAt, $repo, "created", ""],
-     ([$r.tags.nodes[] | (.target.committedDate // .target.target.committedDate // .target.tagger.date // "") as $at | select($at != "")
-        | [.name, ([($at | utc), (.target.associatedPullRequests.nodes[0].mergedAt // .target.target.associatedPullRequests.nodes[0].mergedAt // "")] | max)]]
-      | first // empty | ["lasttag", .[0], .[1]]),
-     ($r.records.nodes[] | ([.labels.nodes[].name | select(. == "spec" or (startswith("wayfinder:") and . != "wayfinder:task"))] | first) as $l
-       | select($l != null and .closedAt != null) | ["event", .closedAt, "#\(.number)", "closed \($l)", (.title | clean)]),
-     ($r.releases.nodes[] | select(.isDraft | not) | ["event", (.publishedAt // .createdAt), .tagName, "release", ((.name // "") | clean)]),
-     ([$r.releases.nodes[] | select(.isDraft | not) | .tagName] as $rel | $r.tags.nodes[] | select(.name as $t | $rel | index($t) | not)
-       | (.target.committedDate // .target.tagger.date // "") as $at | select($at != "") | ["event", ($at | utc), .name, "tag", ""]),
-     ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
-       | ["first", .mergedAt, "#\(.number)", (.title | clean)]),
-     ([.data.lookBack.nodes[]? | select((.title // "") | ascii_downcase | startswith("look back")) | select(.createdAt != null)] | max_by(.createdAt)
-       | ["lookback", (if . then .createdAt else "" end), (if . then "#\(.number)" else "" end), (now - 2592000 | todate)]))
-  | @tsv'
 # Read here, before the route: the release signal (#1077) takes its last
 # tag from it. Printed at the end, after main ci.
-history_ok=""
-history="$(cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f lookq="repo:$repo is:issue in:title \"Look back\" sort:created-desc" -f query="$history_q" \
-      --jq "\"$repo\" as \$repo | $history_jq" 2>&1)" && history_ok=yes
+history_ok=""; history=""
+take history history && history_ok=yes
 # The latest completed run of ci.yml on main, read here too: a release is not
 # the next step while it fails (#1077 review). Printed after the route.
-run_ok=""; main_red=""
-run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=1" \
-      --jq '.workflow_runs[0] // empty | [.id, (.conclusion // ""), (.created_at // "")[0:10], ((.head_commit.message // "") | (split("\n")[0] // "") | gsub("\t"; " "))] | @tsv' 2>&1)" && run_ok=yes
+run_ok=""; main_red=""; run=""
+take run run && run_ok=yes
 # A merge broke main (#1079): the latest completed run failed (a failure,
 # not a cancelled or timed-out run) and its head is a squash merge, its title
 # ending in (#N) as GitHub writes it, and #N is still the newest merge (else
 # main moved on, the run is an older commit's). Not when #N is itself a
 # revert (that would undo the undo), nor while a revert of #N is open (that
 # pull request is the way, routed below). The route undoes #N first.
-main_undo=""; main_undo_title=""
+# is_revert <title>: a title that reverts, in every form ci / pr-title
+# accepts (#1203): GitHub's `Revert "<title>"`, and the type revert, with a
+# scope or a `!` or both (`revert!:`, `revert(api)!:`). The scope's letters
+# are python-ci.yml's; tests/guide-cases.sh fails when the two disagree.
+revert_type='^revert(\([a-zA-Z0-9_.,/ -]+\))?!?: .+'
+is_revert() { case "$1" in 'Revert "'*) return 0 ;; esac; grep -qE "$revert_type" <<<"$1"; }
+main_undo=""; main_undo_title=""; open_revert=""; open_reverts=""
 if [ -n "$run_ok" ] && [ -n "$run" ]; then
   case "$(cut -f2 <<<"$run")" in success|neutral|skipped) ;; *) main_red=yes ;; esac
   if [ "$(cut -f2 <<<"$run")" = failure ]; then
     main_undo_title="$(cut -f4 <<<"$run")"
     main_undo="$(sed -nE 's/.* \(#([0-9]+)\)$/\1/p' <<<"$main_undo_title")"
-    case "$main_undo_title" in 'Revert "'*|revert:*|revert\(*) main_undo="" ;; esac
+    ! is_revert "$main_undo_title" || main_undo=""
     [ -z "$main_undo" ] || [ "$(head -1 <<<"$merged" | cut -f1)" = "$main_undo" ] || main_undo=""
     # An open revert of #N: GitHub titles it Revert "<#N's title>", with no
     # (#N) inside the quotes (ci / pr-title refuses one there); a title that
     # does carry (#N) counts too (#1196 review).
-    [ -z "$main_undo" ] || ! REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
-      'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { found = 1 } END { exit !found }' <<<"$prs" || main_undo=""
+    # That pull request is then the route itself, ahead of any other (#1203).
+    # A revert in the type form (revert: or revert!:) counts when it names #N.
+    [ -z "$main_undo" ] || open_revert="$(REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
+      'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { print $1; exit }' <<<"$prs")"
+    [ -n "$open_revert" ] || [ -z "$main_undo" ] || open_revert="$(while IFS= read -r row; do
+        t="$(cut -f6 <<<"$row")"
+        [[ "$t" =~ (^|[^0-9A-Za-z_])#$main_undo([^0-9]|$) ]] && grep -qE "$revert_type" <<<"$t" && { cut -f1 <<<"$row"; break; }
+      done <<<"$prs")"
+    [ -z "$open_revert" ] || { open_reverts="$main_undo"; main_undo=""; }
   fi
 fi
 
@@ -729,8 +792,7 @@ fi
 # with why. Before the first merge the step is still ahead: no read.
 reach=""
 if [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; then
-  in_repo_gh() { (cd "$top" && gh "$@"); }
-  reach="$(admin_reach in_repo_gh "$repo" "?" "?")"
+  take reach reach
 fi
 release_due=""; release_line=""
 if [ "$archetype" != web ] && [ "$archetype" != dashboard ]; then
@@ -825,17 +887,8 @@ read_deps() {
   [ -z "$deps_read" ] && [ "$ready_n" -ge 1 ] || return 0
   deps_read=yes
   owner="${repo%%/*}"; name="${repo#*/}"
-  deps="$(cd "$top" && gh api graphql -f owner="$owner" -f name="$name" -f query='
-    query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
-      issues(states: OPEN, labels: ["ready-for-agent"], first: 100, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number
-        blockedBy(first: 50) { nodes { number state repository { nameWithOwner } } }
-        blocking(first: 50) { nodes { number state repository { nameWithOwner } } } } } } }' \
-    --jq '"'"$(tr 'A-Z' 'a-z' <<<"$repo")"'" as $me
-      | def ref: if (.repository.nameWithOwner | ascii_downcase) == $me then (.number | tostring) else "\(.repository.nameWithOwner)#\(.number)" end;
-      .data.repository.issues.nodes[] | .number as $n
-      | ((.blockedBy.nodes[] | select(.state == "OPEN") | [($n | tostring), ref]),
-         (.blocking.nodes[] | select(.state == "OPEN" and (.repository.nameWithOwner | ascii_downcase) == $me) | [(.number | tostring), ($n | tostring)]))
-      | @tsv' 2>&1)" || { deps_failed="$(tail -1 <<<"$deps" | tr '\t' ' ')"; deps=""; }
+  if [ -n "${pid_deps:-}" ]; then take deps deps; else deps="$(deps_query)"; fi ||
+    { deps_failed="$(tail -1 <<<"$deps" | tr '\t' ' ')"; deps=""; }
 }
 order=""; order_failed=""; order_read=""
 read_order() {
@@ -1074,7 +1127,24 @@ fi
 # and said as not read if it is still UNKNOWN. What it cannot know is a line
 # of its own.
 merge_next=""; merge_n=""
-if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<"$people_prs")" -ge 2 ]; then
+# The revert's own Blocked by (#1257 review): a number still open in the
+# issues and pull requests read waits, and one past those reads is not known
+# to be closed, so it waits too; the revert is not merged before either.
+revert_waits=""
+if [ -n "$open_revert" ]; then
+  revert_open_nums="$( { field 1 <<<"$issues"; field 1 <<<"$prs"; } | grep . || true)"
+  for b in $(awk -F '\t' -v n="$open_revert" '$1 == n { print $12; exit }' <<<"$prs" | tr ',' ' '); do
+    if grep -qxF "$b" <<<"$revert_open_nums"; then revert_waits="${revert_waits:+$revert_waits, }#$b, still open"
+    else revert_waits="${revert_waits:+$revert_waits, }#$b, not read"; fi
+  done
+fi
+if [ -n "$open_revert" ] && [ -n "$revert_waits" ]; then
+  merge_next="merge next: none: #$open_revert, the revert of #$open_reverts, comes first, and it waits on its Blocked by ($revert_waits)"
+elif [ -n "$open_revert" ]; then
+  # An open revert of the merge that broke main (#1203) is merged before any
+  # other: main stays broken until it does, so no other is ranked first.
+  merge_next="merge next: #$open_revert, the revert of #$open_reverts: main stays broken until it merges, so it comes before any other"
+elif { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<"$people_prs")" -ge 2 ]; then
   person_rows="$(awk -F '\t' '$2 == "person"' <<<"$prs")"
   unknown="$(awk -F '\t' '$3 == "ready" && $4 == "pass" && $11 == "UNKNOWN" { print $1 }' <<<"$person_rows")"
   reread=""
@@ -1193,6 +1263,33 @@ elif [ -n "$main_undo" ]; then
   if [ "$archetype" = web ]; then restore="with the README's \"Where it runs\" and the restore you tried (step 3 of $plugin/docs/how-to/set-four-things-by-hand.md)"
   else restore="this archetype's project has no restore steps of its own"; fi
   echo "then also: after the undo, restore any data the change lost or changed ($restore), then reproduce and fix, and leave a short blameless note in the issue's Outcome when it lost data, needed a revert or reached users"
+elif [ -n "$open_revert" ]; then
+  # The undo is open (#1203): its pull request comes before any other's
+  # failing check, since main stays broken until it merges.
+  run_id_red="$(cut -f1 <<<"$run")"
+  row="$(awk -F '\t' -v n="$open_revert" '$1 == n { print; exit }' <<<"$prs")"
+  checks="$(field 4 <<<"$row")"; draft="$(field 3 <<<"$row")"; merge_state="$(field 11 <<<"$row")"
+  said_checks="$(awk -F '\t' -v n="$open_revert" '$1 == n { print $9; exit }' <<<"$people_prs")"
+  note="pull request #$open_revert reverts #$open_reverts, whose merge failed main's latest CI run (run $run_id_red); it comes before any other pull request"
+  if [ "$checks" = fail ]; then
+    note="$note; it has a failing check: the agent reads its log first, as for any other"
+    say "Something broke" "diagnose this: pull request #$open_revert has a failing check"
+  elif [ "$merge_state" = DIRTY ]; then
+    note="$note; it conflicts with main: the conflict is resolved in its branch first"
+    say "Something broke" "diagnose this: pull request #$open_revert conflicts with main"
+  elif [ "$draft" = draft ]; then
+    note="$note; it is a draft: mark it ready for review on its page, then merge it once its checks are green"
+    say "A pull request with checks running" "/run"
+  elif [ -n "$revert_waits" ]; then
+    note="$note; it waits on what its Blocked by names ($revert_waits): that is done first, then it is merged"
+    say "A pull request with checks running" "none: pull request #$open_revert waits on its Blocked by ($revert_waits)"
+  elif [ "$checks" = pass ]; then
+    note="$note; its checks are green, so saying merge #$open_revert is the person's word for it"
+    say "Green, and seen working" "merge #$open_revert"
+  else
+    note="$note; ${said_checks:-its checks were not read}: merge it once they are green"
+    say "A pull request with checks running" "/run"
+  fi
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
   if [ -n "$broken" ] && [ -n "$plinth_failing" ] && [ -n "$pin_behind" ]; then

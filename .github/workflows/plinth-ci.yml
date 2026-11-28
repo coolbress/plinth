@@ -134,7 +134,11 @@ jobs:
 
   install-2:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # 20, not 12 (#1220): floor-check-golden.sh runs the whole floor-check
+    # cases test again to record each run, so this job grows with every case.
+    # It took 524 to 691 s of its 720 on main's last four runs (2026-11-28),
+    # and was cut off twice at 12 minutes; the limit is for a hang.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -391,9 +395,29 @@ jobs:
       # files, so a local run is the same call. A failed step skips the ones
       # after it, so after checkout the steps that need nothing from the
       # network run first, and the ones that download (actionlint's binary,
-      # then zizmor, ruff and mypy from a hash-checked venv) run last.
+      # then zizmor, ruff and mypy from a hash-checked venv) run last. uv
+      # comes first: it reads tools/lint/uv.lock, the tools' one source (#1220),
+      # for the lint files and their cases.
+      - name: Install uv (official release, SHA256 verified)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UV_VERSION: "0.13.7"
+          UV_SHA256: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/uv"; mkdir -p "$d"
+          f="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} -o "$d/$f" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$f"
+          echo "${UV_SHA256}  $d/$f" | sha256sum -c -
+          tar -xzf "$d/$f" -C "$d" --strip-components=1 "${f%.tar.gz}/uv" "${f%.tar.gz}/uvx"
+          echo "$d" >> "$GITHUB_PATH"
+
       - name: Shell syntax and static analysis (bash -n, shellcheck)
         run: ./tests/shell-lint.sh
+
+      - name: Each tool version has one source, and every copy agrees with it
+        run: ./tests/tool-pins.sh
 
       - name: The two lint files fail on a missing tool or a version that is not the pin
         run: ./tests/lint-wrappers-cases.sh
@@ -451,6 +475,9 @@ jobs:
 
       - name: No release without a why, the tested template tag, and a green e2e run on the tagged commit or its tree
         run: ./tests/make-release-guards.sh
+
+      - name: A decisions-page marker whose issue closed as completed is named and fails; one closed not planned is left to a person
+        run: ./tests/stale-decision-markers-cases.sh
 
       - name: A template pin raise edits only the tag and the commit, and changes nothing for a tag that is missing or names another commit
         run: ./tests/raise-template-pin-cases.sh
