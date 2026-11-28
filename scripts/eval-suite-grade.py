@@ -257,8 +257,10 @@ def original_tests_run(
     """The fixture's own test files, put back unchanged over the agent's, run against its code (#1151).
 
     A test the agent loosened under the same name passes in its tree and fails
-    here. The files and `tests/conftest.py` are the fixture's; everything else,
-    the data files the tests read included, is what the agent left. The tests the
+    here. The test files and every `conftest.py` are the fixture's: one the agent
+    added, at any depth, is removed first, so a hook that skips or marks a test
+    cannot hide it. Everything else, the data files the tests read and the
+    pytest configuration in `pyproject.toml` included, is what the agent left. The tests the
     task's `asked_tests` file names are the ones its request asks to change: they
     are deselected here, and their absence is not counted.
     """
@@ -267,9 +269,17 @@ def original_tests_run(
     (dest / "tests").mkdir(exist_ok=True)
     for t in originals:
         shutil.copy(t, dest / "tests" / t.name)
-    conftest = fixture / "tests" / "conftest.py"
-    if conftest.exists():
-        shutil.copy(conftest, dest / "tests" / "conftest.py")
+    # The project's own folders only: not the venv `uv sync` made, a cache or git's.
+    outside = {".git", ".claude", *CACHES}
+    for c in dest.rglob("conftest.py"):
+        rel = c.relative_to(dest)
+        if not outside & set(rel.parts) and not (fixture / rel).is_file():
+            c.unlink()
+    for c in fixture.rglob("conftest.py"):
+        rel = c.relative_to(fixture)
+        if not outside & set(rel.parts):
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(c, dest / rel)
     deselect = [f"--deselect=tests/{name}::{fn}" for name, fns in defined.items() for fn in fns if fn in asked]
     r = sh([*CHECKS["pytest"], "-rfE", *deselect, *(f"tests/{t.name}" for t in originals)], dest)
     text = r.stdout + r.stderr

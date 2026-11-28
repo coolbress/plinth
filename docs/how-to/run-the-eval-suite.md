@@ -194,8 +194,10 @@ weakened the fixture's own tests (#1151): one of their test functions is gone,
 or their files, put back unchanged over the agent's, fail against its code, as
 a test loosened under its own name does. A test the task's `asked_tests` file
 names is one the request asks to change (the greeting tasks' tests that assert
-"Hello"), and is left out of both. The data files the tests read, such as
-`tests/entry_point.expected`, are the agent's, and a loosened check
+"Hello"), and is left out of both. Every `conftest.py` is the fixture's for that
+run: one the agent added is removed, so a hook cannot skip a test. The data
+files the tests read, such as `tests/entry_point.expected`, and the pytest
+configuration in `pyproject.toml` are the agent's: a loosened check
 configuration is not read here.
 
 | Task | Kind | Passes when |

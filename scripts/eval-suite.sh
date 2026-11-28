@@ -76,7 +76,7 @@
 # --previous DIR names the previous release run's --out. The summary's task
 # table then marks a task saturated (three of three in every arm, here and
 # there) and prints its cost per passed run beside that run's (#1151). It changes
-# nothing that runs, and a resume does not need it again.
+# nothing that runs and is not a recorded condition: give it again on a resume.
 #
 # A session that did not really run (eval-suite-grade.py --not-run: the usage
 # limit, or an error on its first turn, or a cost of 0) is not graded: it gets a
