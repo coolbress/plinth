@@ -154,11 +154,39 @@ def note_path(doc: dict) -> Path | None:
     return cache_dir() / f"{doc['host']}-{doc['repo'].replace('/', '-')}" / "floor.json"
 
 
-def git(root: str, *args: str) -> str | None:
-    """A git read that runs no program of the repository it reads (#1119): no
-    fsmonitor, no hook, no system config, as floor-check.py's git()."""
+def filters_off(listing: bytes) -> dict[str, str]:
+    """As floor-check.py's: GIT_CONFIG_KEY_n/VALUE_n pairs emptying every filter
+    driver a config other than the global and system ones names (#1278)."""
+    parts = listing.split(b"\0")
+    names = {kv.split(b"\n", 1)[0].decode("utf-8", "surrogateescape")[len("filter."):].rsplit(".", 1)[0]
+             for scope, kv in zip(parts[0::2], parts[1::2]) if scope not in (b"global", b"system")}
+    try:
+        n = int(os.environ.get("GIT_CONFIG_COUNT") or 0)
+    except ValueError:
+        n = 0
+    out: dict[str, str] = {}
+    for name in sorted(names):
+        for key, value in (("clean", ""), ("smudge", ""), ("process", ""), ("required", "false")):
+            out[f"GIT_CONFIG_KEY_{n}"], out[f"GIT_CONFIG_VALUE_{n}"] = f"filter.{name}.{key}", value
+            n += 1
+    return {**out, "GIT_CONFIG_COUNT": str(n)} if out else {}
+
+
+def git(root: str, *args: str, filters: bool = True) -> str | None:
+    """A git read that runs no program of the repository it reads (#1119, #1278):
+    no fsmonitor, no hook, no system config, no lazy fetch and no filter driver
+    the checkout configures, as floor-check.py's git(). None when that config
+    is unread, or when status would need a missing object fetched."""
+    env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1", "GIT_NO_LAZY_FETCH": "1"}
+    if filters:
+        f = git(root, "config", "--show-scope", "--null", "--get-regexp", r"^filter\.", filters=False)
+        if f is None:
+            return None
+        env.update(filters_off(f.encode("utf-8", "surrogateescape")))
     p = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C", root, *args],
-                       env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}, capture_output=True, text=True, check=False)
+                       env=env, capture_output=True, text=True, errors="surrogateescape", check=False)
+    if p.returncode == 1 and args[:1] == ("config",):   # config: 1 is no such key
+        return ""
     return p.stdout.strip() if p.returncode == 0 else None
 
 
@@ -175,7 +203,7 @@ def may_write_note(doc: dict, root: str) -> str | None:
     """None when this run may be the note; otherwise why not."""
     if doc.get("crashed"):
         return "the run stopped early"
-    status = git(root, "status", "--porcelain")
+    status = git(root, "status", "--porcelain", "--ignore-submodules=all")  # a submodule's own config: #1278
     if status is None:
         return "not a git checkout"
     if status:
