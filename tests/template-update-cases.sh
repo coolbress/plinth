@@ -599,10 +599,12 @@ then ok "a line the template's side already holds as often is not counted as kep
 else bad "helper, where with a count"; fi
 
 # Round 2 of the review on #1224, each as the reviewer reproduced it.
-hc() { # <name> <file name> <ours> <theirs> <old> [<head>]: combine; sets $hout and $hrep
+hc() { # <name> <file name> <ours> <theirs> <old> [<head>] [<the base's head>]: combine; sets $hout and $hrep
+  # <the base's head>: what the base and the old render had above the block,
+  # when the template changed it cleanly (the file now holds <head> there).
   local d="$hx/$1"; mkdir -p "$d"
   { printf '%b' "${6:-}"; echo "<<<<<<< before updating"; printf '%b' "$3"; echo "======="; printf '%b' "$4"; echo ">>>>>>> after updating"; } > "$d/$2"
-  printf '%b%b' "${6:-}" "$3" > "$d/base"; printf '%b%b' "${6:-}" "$5" > "$d/old"
+  printf '%b%b' "${7-${6:-}}" "$3" > "$d/base"; printf '%b%b' "${7-${6:-}}" "$5" > "$d/old"
   python3 "$combine_py" combine "$d/$2" "$d/base" "$d/old" "$d/out/$2" > "$d/report"
   hout="$(cat "$d/out/$2" 2>/dev/null)"; hrep="$(cat "$d/report")"
 }
@@ -616,6 +618,18 @@ hc scope a.toml '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\n' '[tool.a]\nti
 if [ "$hout" = "$(printf '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 20')" ] && grep -qF 'replaces timeout = 30' <<<"$hrep"
 then ok "a line the template's side holds under another table is not counted as kept: [tool.b]'s value stays the project's"
 else bad "helper, kept within its scope"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+# A header the template renamed cleanly, outside the block (review on #1234):
+# the project's line is read in the base's table, where it was added.
+keys='k1 = 1\nk2 = 2\nk3 = 3\nk4 = 4\nk5 = 5\nk6 = 6\nk7 = 7\nk8 = 8\nk9 = 9\nk10 = 10\n'
+hc renamed a.toml 'timeout = 20\n' 'timeout = 30\n' 'timeout = 10\n' "[tool.b]\n$keys" "[tool.a]\n$keys"
+if [ "$hout" = "$(printf "[tool.b]\n${keys}timeout = 20")" ] && grep -qF 'replaces timeout = 30' <<<"$hrep"
+then ok "a table the template renamed outside the block: the project's timeout is still its own, and replaces the template's"
+else bad "helper, a header changed cleanly"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+# An unnamed step whose command continues on the next line (review on #1234).
+hc runstep ci.yml '      - run: |\n          pytest --custom\n' '      - run: |\n          pytest -q\n' '      - run: |\n          pytest\n' 'jobs:\n  t:\n    steps:\n'
+if [ "$hout" = "$(printf 'jobs:\n  t:\n    steps:\n      - run: |\n          pytest --custom')" ] && grep -qF 'replaces - run: |' <<<"$hrep"
+then ok "a step matched by its first line whose command changed below it is replaced, not run twice"
+else bad "helper, a step's continuation"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
 hc order build.sh 'set -eu\nmkdir -p build\ncd build\nmake\n' 'set -eu\nmake -j4\n' 'set -eu\nmake\n'
 if [ "$hout" = "$(printf 'set -eu\nmkdir -p build\ncd build\nmake -j4')" ]
 then ok "consecutive additions after one shared line keep their order"

@@ -199,12 +199,16 @@ def parents(lines: list[str], n: int, kind: str) -> tuple[str, ...]:
 
 def combine(ours: list[str], theirs: list[str], added: set[tuple[tuple[str, ...], str]], kind: str,
             closing: bool, head: list[str], oscope: list[tuple[str, ...]],
-            shifted: set[str]) -> tuple[list[str], list[tuple[str, str]]]:
-    """<oscope>: the scope of each line of <ours>, read in the file as this
-    repository has it; <head>: the combined file above the block, for the
-    template's side and the result; <shifted>: the `[[table]]` headers whose
-    entries the two sides count differently, so an entry's ordinal names
-    another entry on the other side."""
+            shifted: set[str], bscope: list[tuple[str, ...]] | None = None) -> tuple[list[str], list[tuple[str, str]]]:
+    """<oscope>: the scope of each line of <ours>, read in the file as it is
+    now, where the result goes; <bscope>: the same lines' scope in the base,
+    where <added> was read (defaults to <oscope>): a header the template
+    changed cleanly outside the block moves the first, not the second (review
+    on #1234); <head>: the combined file above the block, for the template's
+    side and the result; <shifted>: the `[[table]]` headers whose entries the
+    two sides count differently, so an entry's ordinal names another entry on
+    the other side."""
+    bscope = oscope if bscope is None else bscope
     def rscope(lines: list[str], i: int) -> tuple[str, ...]:
         return parents(head + lines, len(head) + i, kind)
 
@@ -212,7 +216,7 @@ def combine(ours: list[str], theirs: list[str], added: set[tuple[tuple[str, ...]
     # same TOML table or YAML parents): the same text under another table is
     # not this repository's line kept (review on #1224).
     kept = {(rscope(theirs, i), ln) for i, ln in enumerate(theirs)}
-    risky = [ln.strip() != "" and (oscope[i], ln) in added and not ln.startswith((OURS, THEIRS))
+    risky = [ln.strip() != "" and (bscope[i], ln) in added and not ln.startswith((OURS, THEIRS))
              and (oscope[i], ln) not in kept for i, ln in enumerate(ours)]
     result = list(theirs)
     mine = [False] * len(result)  # which lines of result came from this repository's side
@@ -254,9 +258,11 @@ def combine(ours: list[str], theirs: list[str], added: set[tuple[tuple[str, ...]
                         and (not same_item or result[ti] == ours[item]):
                     match = (tf, ti, tl)
                     break
-        if match and any(risky[item:last + 1]) and not same_item:
+        if match and any(risky[item:last + 1]):
             # The key that owns the at-risk lines, whether the project changed
             # its line or only its value's continuation: the project's value.
+            # A sequence item matched by its whole first line too, when only
+            # its continuation is at risk (`- run: |`, review on #1234).
             tf, ti, tl = match
             placement = f"replaces {result[ti].strip()}"
             result[tf:tl + 1] = span
@@ -305,7 +311,8 @@ def cmd_combine(path: str, base_path: str, old_path: str, out_path: str) -> int:
     if found is None:
         print("the conflict markers could not be read", file=sys.stderr)
         return 2
-    added = added_lines(lines_of(base_path), None if old_path == "-" else lines_of(old_path), kind)
+    base = lines_of(base_path)
+    added = added_lines(base, None if old_path == "-" else lines_of(old_path), kind)
     # The file without its blocks' "before" sides: does it close with the section?
     theirs_whole: list[str] = []
     at = 0
@@ -331,11 +338,18 @@ def cmd_combine(path: str, base_path: str, old_path: str, out_path: str) -> int:
         for h in {ln.strip() for ln in ours_whole + theirs_whole if ln.strip().startswith("[[")}:
             if sum(ln.strip() == h for ln in ours_whole) != sum(ln.strip() == h for ln in theirs_whole):
                 shifted.add(h)
+    # Each line of the file as this repository has it, at its place in the
+    # base: `added` was read there, in the base's scopes.
+    in_base: dict[int, int] = {}
+    for tag, i1, i2, j1, _ in difflib.SequenceMatcher(a=ours_whole, b=base, autojunk=False).get_opcodes():
+        if tag == "equal":
+            in_base.update((i1 + k, j1 + k) for k in range(i2 - i1))
     out: list[str] = []
     at = 0
     for (s, m, e), o in zip(found, starts):
         oscope = [parents(ours_whole, o + i, kind) for i in range(m - s - 1)]
-        res, report = combine(text[s + 1:m], text[m + 1:e], added, kind, closing, out + text[at:s], oscope, shifted)
+        bscope = [parents(base, in_base[o + i], kind) if o + i in in_base else oscope[i] for i in range(m - s - 1)]
+        res, report = combine(text[s + 1:m], text[m + 1:e], added, kind, closing, out + text[at:s], oscope, shifted, bscope)
         out += text[at:s] + res
         at = e + 1
         for placement, line in report:
