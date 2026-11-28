@@ -22,6 +22,9 @@ mypy_version="$(lint_tool_version mypy)"
 # agree. 3.10 is the oldest mypy 2.3.1 accepts; these scripts also run on older
 # python3 (a user's system one), which only compiling on it would show.
 mypy_target="3.10"
+# ruff gets the same target. Given none, ruff 0.17 assumes a newer Python and
+# asks for datetime.UTC (UP017), which 3.10 and older do not have (#1272).
+ruff_target="py${mypy_target/./}"
 cd "$root" || exit 1
 fail=0
 
@@ -33,7 +36,7 @@ if [ "${#files[@]}" = 0 ]; then echo "  FAIL  no Python file under scripts/ (git
 if ! bin="$(lint_tools_bin)"; then echo "${bin/FAIL  /FAIL  ruff, mypy: }"; exit 1; fi
 from="${PLINTH_LINT_TOOLS_BIN:+, from PLINTH_LINT_TOOLS_BIN, not hash-checked}"
 
-if "$bin/ruff" check --isolated --no-cache "${files[@]}"; then
+if "$bin/ruff" check --isolated --no-cache --target-version "$ruff_target" "${files[@]}"; then
   echo "  PASS  ruff $ruff_version (${#files[@]} files$from)"
 else
   echo "  FAIL  ruff $ruff_version"; fail=1
