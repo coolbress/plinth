@@ -21,7 +21,7 @@ CODE = re.compile(r"^`([^`]+)`$")
 
 def rows(text: str) -> list[dict[str, str]]:
     """The rows under `## Retired entries`; ValueError on one that does not read."""
-    m = re.search(r"^## Retired entries\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    m = re.search(r"^## Retired entries\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
     if not m:
         raise ValueError("no '## Retired entries' section")
     out: list[dict[str, str]] = []
