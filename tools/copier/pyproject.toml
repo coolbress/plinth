@@ -1,0 +1,16 @@
+# copier, the renderer scripts/new-project.sh and /plinth:template-update run,
+# pinned exactly, and its dependencies, locked with hashes in uv.lock beside
+# this file: scripts/lib/copier-pin.sh hands them to uv as constraints, so no
+# package published later is resolved. Dependabot (uv) raises the pin and its
+# lock in one pull request (#1220); by hand, edit the pin here, then
+# `uv lock --project tools/copier`.
+[project]
+name = "plinth-copier"
+version = "0"
+requires-python = ">=3.10"
+dependencies = [
+    "copier==9.19.1",
+]
+
+[tool.uv]
+package = false

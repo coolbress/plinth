@@ -81,9 +81,9 @@ directory exactly as the README says, so it needs network and a few minutes.
 downloads the one version pinned in that file, the same file `ci / docs` runs,
 and lints from its cache afterwards. `tests/shell-lint.sh` needs shellcheck and
 `tests/workflow-lint.sh` needs actionlint, and it and `tests/python-lint.sh`
-need `python3` 3.10 or later that can make a venv (on Debian and Ubuntu, the
-`python3-venv` package): zizmor, ruff and mypy install into a venv from
-`tests/lint-tools.txt`, every file checked against its hash, with network the
+need `python3` 3.11 or later that can make a venv (on Debian and Ubuntu, the
+`python3-venv` package) and `uv`: zizmor, ruff and mypy install into a venv from
+`tools/lint/uv.lock`, every file checked against its hash, with network the
 first time; a missing tool is a FAIL that names the install command, never a
 skip. `tests/weakened-checks-cases.sh` needs `python3` 3.11 or later, the
 version whose standard library parses TOML, as the runner's does.
@@ -109,10 +109,11 @@ The lint files are what `ci / tools` calls, with the same flags, but a
 local pass is the CI pass only where the tool is the same one:
 
 - zizmor, ruff and mypy are: both sides install the same hash-checked files
-  from `tests/lint-tools.txt`. ruff and mypy run with their defaults and no
+  from `tools/lint/uv.lock`. ruff and mypy run with their defaults and no
   configuration file, and mypy checks against the same Python version
-  whatever runs it. To raise one of these pins, edit `tests/lint-tools.in` and
-  regenerate `tests/lint-tools.txt` with the command written at its top.
+  whatever runs it. Dependabot raises these pins, and copier's in
+  `tools/copier`, as a pull request (#1220); by hand, edit the pin in the
+  group's `pyproject.toml`, then `uv lock --project tools/<group>`.
 - actionlint is pinned there too, and CI installs that checksum-verified Linux
   build. A laptop runs the actionlint it has. Another version still runs, and
   the output names it and says the pass is not the pinned pass; in CI another
@@ -386,7 +387,12 @@ it. Then the pull request says why: the check it considered, and what that
 check could not see (a judgement no file or command output shows, say).
 `tests/skill-size.sh` holds the sizes, `AGENTS.md` at most 110 lines and
 7,500 bytes and each `skills/*/SKILL.md` at most 500 lines and 20,000 bytes.
-Text that needs more raises its cap in `tests/size_caps.py` in the same pull
+It also holds what one invocation of each skill reads: its `SKILL.md` and
+every file its body says to read before acting ("read it before", "read it
+first"; `tests/lib/skill_reads.py` says how), against that skill's
+`READS_<NAME>_MAX_BYTES`, and its description against
+`DESCRIPTION_<NAME>_MAX_BYTES`, so moving text into a file beside the skill
+lowers nothing. Text that needs more raises its cap in `tests/size_caps.py` in the same pull
 request; `ci / diff-size` lists that file as a change to the checks (here
 `canary / diff-size`, which runs the same step), so an admin approves the
 raise, or decides it by pushing it.

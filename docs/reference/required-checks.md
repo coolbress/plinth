@@ -76,7 +76,7 @@
 | `ruff format --check: <N> files not formatted: <files>` | Run `uv run ruff format` here, commit what it changes, and push. Each file is also an annotation, within the same nine |
 | `ruff check could not run` or `ruff format --check could not run` | ruff stopped with its own error and named no file and line (exit 2: a setting it cannot read, an unknown rule, ruff missing from the dev dependencies), not a finding: run the same command here and fix what stops it; its error is in that step's log |
 | `uv sync --locked` | Run `uv sync --locked` here; when it says `uv.lock` needs updating, run `uv lock`, commit `uv.lock` and push |
-| `zizmor's audits` | Run `uvx zizmor@1.29.0 --min-severity medium .github/workflows/` here, fix what it names, and push |
+| `zizmor's audits` | Run `uvx zizmor@1.33.1 --min-severity medium .github/workflows/` here, fix what it names, and push |
 
 ### ci / typecheck
 

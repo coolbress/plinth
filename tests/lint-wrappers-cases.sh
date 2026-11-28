@@ -10,9 +10,9 @@ set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pin="$(sed -n 's/^actionlint_version="\(.*\)"$/\1/p' "$root/tests/workflow-lint.sh")"
 [ -n "$pin" ] || { echo "  FAIL  actionlint_version= not found in tests/workflow-lint.sh"; exit 1; }
-lock_pin() { sed -n "s/^$1==\([^ ;]*\).*/\1/p" "$root/tests/lint-tools.txt"; }
+lock_pin() { sed -n "s/^ *\"$1==\([^\"]*\)\",\{0,1\}\$/\1/p" "$root/tools/lint/pyproject.toml"; }
 zizmor_pin="$(lock_pin zizmor)"; ruff_pin="$(lock_pin ruff)"; mypy_pin="$(lock_pin mypy)"
-[ -n "$zizmor_pin" ] && [ -n "$ruff_pin" ] && [ -n "$mypy_pin" ] || { echo "  FAIL  zizmor, ruff or mypy not pinned in tests/lint-tools.txt"; exit 1; }
+[ -n "$zizmor_pin" ] && [ -n "$ruff_pin" ] && [ -n "$mypy_pin" ] || { echo "  FAIL  zizmor, ruff or mypy not pinned in tools/lint/pyproject.toml"; exit 1; }
 
 tmp="$(mktemp -d)" || { echo "lint-wrappers-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$tmp"' EXIT
 base="$tmp/base"; mkdir -p "$base"
@@ -29,6 +29,8 @@ stub al-old actionlint 'echo 0.0.1'
 stub al-bad actionlint "case \"\$1\" in -version) echo $pin;; *) exit 1;; esac"
 # A python3 new enough but without venv's pip bootstrap (Debian's python3 without python3-venv).
 stub py-novenv python3 'case "$*" in *ensurepip*) exit 1;; *version_info*) exit 0;; *) exit 1;; esac'
+# A python3 that can make a venv, with no uv beside it to read tools/lint/uv.lock (#1220).
+stub py-ok python3 'case "$*" in *ensurepip*|*version_info*) exit 0;; *) exit 1;; esac'
 for tool in zizmor ruff mypy; do
   stub tools-ok  "$tool" "echo \"ran-$tool \$*\""
   stub tools-bad "$tool" 'exit 1'
@@ -70,14 +72,16 @@ check workflow-lint.sh local 0 "not hash-checked" al-pin tools-ok
 echo "-- python-lint.sh: one failing tool does not hide the other"
 check python-lint.sh local 1 "FAIL  ruff, mypy: python3 not found"
 check python-lint.sh local 1 "FAIL  ruff, mypy: python3 cannot make a venv with pip: install python3-venv" py-novenv
+check python-lint.sh local 1 "FAIL  ruff, mypy: uv not found: it reads tools/lint/uv.lock" py-ok
 check python-lint.sh local 0 "PASS  ruff $ruff_pin" tools-ok
 check python-lint.sh local 0 "PASS  mypy $mypy_pin" tools-ok
 check python-lint.sh local 1 "FAIL  ruff" tools-bad
 check python-lint.sh local 1 "FAIL  mypy" tools-bad
 # No Python file found is a FAIL, not a pass that checked nothing: the script,
 # copied into a repository that has no scripts/*.py, with tools that would pass.
-empty="$tmp/empty"; mkdir -p "$empty/tests/lib"
-cp "$root/tests/python-lint.sh" "$root/tests/lint-tools.txt" "$empty/tests/"; cp "$root/tests/lib/lint-tools.sh" "$empty/tests/lib/"
+empty="$tmp/empty"; mkdir -p "$empty/tests/lib" "$empty/tools/lint"
+cp "$root/tests/python-lint.sh" "$empty/tests/"; cp "$root/tests/lib/lint-tools.sh" "$empty/tests/lib/"
+cp "$root/tools/lint/pyproject.toml" "$root/tools/lint/uv.lock" "$empty/tools/lint/"
 git -C "$empty" init -q && git -C "$empty" add tests
 out="$(PATH="$base" PLINTH_LINT_TOOLS_BIN="$tmp/tools-ok" "$base/bash" "$empty/tests/python-lint.sh" 2>&1)"; got=$?
 if [ "$got" = 1 ] && printf '%s' "$out" | grep -qF "FAIL  no Python file under scripts/"; then
@@ -94,7 +98,7 @@ cache_case() { # <XDG_CACHE_HOME> -> what lint_tools_bin prints
 }
 # A symlink to A reaches the same venv under A's real path, the one its scripts name.
 real_a="$(mkdir -p "$tmp/cache-a/plinth/lint-tools" && cd -P "$tmp/cache-a/plinth/lint-tools" && pwd -P)"
-key_a="$(. "$root/tests/lib/lint-tools.sh"; lint_tools_key "$(command -v python3)" "$root/tests/lint-tools.txt" "$real_a")"
+key_a="$(. "$root/tests/lib/lint-tools.sh"; lint_tools_key "$(command -v python3)" "$root/tools/lint/uv.lock" "$real_a")"
 mkdir -p "$real_a/$key_a.planted/bin" && touch "$real_a/$key_a.planted/.installed"
 got_a="$(cache_case "$tmp/cache-a")"; ln -s "$tmp/cache-a" "$tmp/cache-link"; got_link="$(cache_case "$tmp/cache-link")"
 cp -R "$tmp/cache-a" "$tmp/cache-b"; got_b="$(cache_case "$tmp/cache-b")"
@@ -111,16 +115,19 @@ touch "$tmp/afile"; got_file="$(cache_case "$tmp/afile")"; want="FAIL  cannot ma
 if printf '%s' "$got_file" | grep -qxF "  $want"; then pass=$((pass+1)); echo "  PASS  a cache that cannot be made says: $want"
 else fail=$((fail+1)); echo "  FAIL  wanted '$want', got '$got_file'"; fi
 
-echo "-- tests/lint-tools.txt: every pin of lint-tools.in, every package hashed"
+echo "-- tools/lint/uv.lock: every pin of pyproject.toml, every package hashed"
 bad=""
-while read -r req; do
-  grep -qx "${req} \\\\" "$root/tests/lint-tools.txt" || grep -q "^${req} ;" "$root/tests/lint-tools.txt" || bad="$bad $req"
-done < <(grep -E '^[a-z0-9_-]+==' "$root/tests/lint-tools.in")
-if [ -z "$bad" ]; then pass=$((pass+1)); echo "  PASS  every pin in lint-tools.in is in lint-tools.txt at the same version"
-else fail=$((fail+1)); echo "  FAIL  pinned in lint-tools.in but not in lint-tools.txt:$bad (regenerate it; the command is in lint-tools.in)"; fi
-unhashed="$(awk '/^[a-z0-9_.-]+==/ {if (pkg && !h) print pkg; pkg=$1; h=0} /--hash=sha256:[0-9a-f]{64}/ {h=1} END {if (pkg && !h) print pkg}' "$root/tests/lint-tools.txt")"
-if [ -z "$unhashed" ]; then pass=$((pass+1)); echo "  PASS  every package in lint-tools.txt carries a sha256 hash"
-else fail=$((fail+1)); echo "  FAIL  no hash in lint-tools.txt for: $unhashed"; fi
+for p in zizmor ruff mypy; do
+  v="$(lock_pin "$p")"
+  awk -v n="$p" -v v="$v" '$0 == "name = \"" n "\"" {getline; if ($0 == "version = \"" v "\"") f=1} END {exit !f}' "$root/tools/lint/uv.lock" || bad="$bad $p==$v"
+done
+if [ -z "$bad" ]; then pass=$((pass+1)); echo "  PASS  every pin in tools/lint/pyproject.toml is in its uv.lock at the same version"
+else fail=$((fail+1)); echo "  FAIL  pinned in tools/lint/pyproject.toml but not in its uv.lock:$bad (uv lock --project tools/lint)"; fi
+exported="$(uv export --quiet --frozen --no-emit-project --no-header --no-annotate --project "$root/tools/lint" 2>&1)" \
+  || { fail=$((fail+1)); echo "  FAIL  uv export of tools/lint/uv.lock: $exported"; exported=""; }
+unhashed="$(awk '/^[a-z0-9_.-]+==/ {if (pkg && !h) print pkg; pkg=$1; h=0} /--hash=sha256:[0-9a-f]{64}/ {h=1} END {if (pkg && !h) print pkg}' <<<"$exported")"
+if [ -n "$exported" ] && [ -z "$unhashed" ]; then pass=$((pass+1)); echo "  PASS  every package tools/lint/uv.lock installs carries a sha256 hash"
+else fail=$((fail+1)); echo "  FAIL  no hash in tools/lint/uv.lock for: ${unhashed:-(nothing exported)}"; fi
 
 echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]
