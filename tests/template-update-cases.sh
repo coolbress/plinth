@@ -651,7 +651,8 @@ else bad "unverified base (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /';
 cat > "$work/bin/glab" <<'MOCK'
 #!/usr/bin/env bash
 set -u
-printf 'glab %s\n' "$*" >> "$GLAB_LOG"
+# The API host glab was told apart from --hostname (#1152), when there is one.
+printf 'glab %s%s\n' "${GITLAB_API_HOST:+[api-host=$GITLAB_API_HOST] }" "$*" >> "$GLAB_LOG"
 [ "${1:-}" = api ] || { echo "mock glab: unexpected: $*" >&2; exit 1; }
 shift; method=GET; input=""; host=""; path=""
 while [ $# -gt 0 ]; do
@@ -664,6 +665,8 @@ while [ $# -gt 0 ]; do
     *)             path="$1"; shift ;;
   esac
 done
+# As glab 1.122.0 answers a port in --hostname (measured for #1152).
+case "$host" in *:*) echo "Error parsing --hostname: invalid hostname." >&2; exit 1 ;; esac
 [ "$host" = "${MOCK_GL_HOST:-gitlab.com}" ] || { echo "mock glab: no project on host '$host'" >&2; exit 1; }
 case "$method $path" in
   "GET projects/o%2Fr")
@@ -700,8 +703,9 @@ gl_fixture() { # <name> [<tag> <archetype>]
   printf 'include:\n  - remote: %s\n    integrity: %s\n' "$gl_include" "$gl_int" > "$repo/.gitlab-ci.yml"
   mkdir -p "$repo/.gitlab/merge_request_templates"; printf '## What and why\n' > "$repo/.gitlab/merge_request_templates/Default.md"
   git -C "$repo" add -A && git -C "$repo" commit -q -m "on GitLab" && git -C "$repo" push -q origin main
-  git -C "$repo" remote set-url origin "https://${MOCK_GL_HOST:-gitlab.com}/o/r.git"
-  git -C "$repo" config url."$BARE".insteadOf "https://${MOCK_GL_HOST:-gitlab.com}/o/r.git"
+  local url="${MOCK_GL_URL:-https://${MOCK_GL_HOST:-gitlab.com}/o/r.git}"
+  git -C "$repo" remote set-url origin "$url"
+  git -C "$repo" config url."$BARE".insteadOf "$url"
 }
 no_post() { ! grep -qE -- '-X (POST|PUT)' "$work/glab.log"; }
 
@@ -730,6 +734,27 @@ if [ "$rc" = 0 ] && grep -qF "api --hostname gitlab.example.com projects/o%2Fr" 
 then ok "GitLab: on a self-hosted gitlab.* origin, glab is asked that host"
 else bad "GitLab self-hosted (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 unset MOCK_GL_HOST
+# A self-hosted GitLab on its own HTTPS port (#1152): glab refuses a port in
+# --hostname, so the port goes to it as GITLAB_API_HOST beside the bare host.
+# An ssh:// origin's port is the SSH server's: dropped.
+export MOCK_GL_HOST=gitlab.example.com MOCK_GL_URL=https://gitlab.example.com:8443/o/r.git
+gl_fixture gl-port; reset_logs; run
+if [ "$rc" = 0 ] && grep -qF "glab [api-host=gitlab.example.com:8443] api --hostname gitlab.example.com projects/o%2Fr" "$work/glab.log" \
+   && ! grep -q -- "--hostname [^ ]*:" "$work/glab.log"
+then ok "GitLab on https://<host>:8443: glab is asked --hostname <host> with GITLAB_API_HOST=<host>:8443"
+else bad "GitLab https port (rc=$rc)"; sed 's/^/        /' "$work/glab.log"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+gl_fixture gl-portmove "$target_ref" cli; reset_logs
+out="$(cd "$repo" && MOCK_GL_PIPELINE=off MOCK_GL_PROTECTED=none PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if grep -qF "GITLAB_API_HOST=gitlab.example.com:8443 glab api --hostname gitlab.example.com -X PUT projects/o%2Fr" <<<"$out" \
+   && grep -qF "GITLAB_API_HOST=gitlab.example.com:8443 glab api --hostname gitlab.example.com -X POST projects/o%2Fr/protected_branches" <<<"$out"
+then ok "  and the commands printed for a Maintainer carry the same port"
+else bad "printed Maintainer commands on a port (rc=$rc)"; printf '%s\n' "$out" | grep -i glab | sed 's/^/        /'; fi
+export MOCK_GL_URL=ssh://git@gitlab.example.com:2222/o/r.git
+gl_fixture gl-sshport; reset_logs; run
+if [ "$rc" = 0 ] && grep -qF "glab api --hostname gitlab.example.com projects/o%2Fr" "$work/glab.log" && ! grep -qF "api-host=" "$work/glab.log"
+then ok "GitLab on ssh://<host>:2222: the SSH port is not the API's; glab is asked <host> alone"
+else bad "GitLab ssh port (rc=$rc)"; sed 's/^/        /' "$work/glab.log"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+unset MOCK_GL_URL MOCK_GL_HOST
 
 # The stop that is left: a checkout whose answers say GitLab, with an origin
 # whose URL names no GitLab project.
