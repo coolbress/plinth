@@ -21,8 +21,10 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 door="$root/scripts/new-project.sh"
 # shellcheck source=tests/lib/template-checkout.sh
 . "$root/tests/lib/template-checkout.sh"
-copier_version="$(sed -n 's/^copier_version="\(.*\)"$/\1/p' "$door")"
-copier_newer="$(sed -n 's/^copier_newer="\(.*\)"$/\1/p' "$door")"
+# copier and its dependencies from tools/copier, as the door runs them (#1220).
+# shellcheck source=scripts/lib/copier-pin.sh
+. "$root/scripts/lib/copier-pin.sh"
+copier_version="$(copier_pin_version "$root")"
 work="$(mktemp -d)" || { echo "release-allowlist: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
@@ -42,7 +44,7 @@ grep -q -- '-F github_owned_allowed=true -F verified_allowed=false "${allow_args
 
 render() { # <dest> <copier --data args...>
   local dest="$1"; shift
-  env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+  copier_pinned "$root" env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" \
     copier copy --defaults --quiet --data project_name=probe --data owner=o --data license=MIT "$@" \
     --vcs-ref HEAD "$template_dir" "$dest" </dev/null >/dev/null 2>&1
 }
