@@ -20,6 +20,26 @@ agents.
 Gated where a check can. Guided where it can't.
 You decide. The checks answer. The record remembers.
 
+## Install plinth
+
+No one but the author has used plinth yet.
+
+plinth installs as a Claude Code plugin:
+
+<!-- install-block:start -->
+```bash
+claude plugin marketplace add coolbress/plinth
+claude plugin install plinth@plinth
+```
+<!-- install-block:end -->
+
+In Claude Code, type `/plinth:new-project my-app`. You'll see the proposed
+setup in one table before anything is created
+([the tutorial](docs/tutorials/getting-started.md#create-the-repository) walks
+through each choice). From there, [run a project](docs/how-to/run-a-project.md)
+is the loop, stage by stage, and `/plinth:guide` names the next command at any
+point.
+
 ## How a change gets in
 
 On GitHub, a proposed change waits until the required checks report a pass.
@@ -72,26 +92,6 @@ Claude:  No check failed in what was read; 2 things to look at.
          command to type next.
 ```
 
-## Install plinth
-
-No one but the author has used plinth yet.
-
-plinth installs as a Claude Code plugin:
-
-<!-- install-block:start -->
-```bash
-claude plugin marketplace add coolbress/plinth
-claude plugin install plinth@plinth
-```
-<!-- install-block:end -->
-
-In Claude Code, type `/plinth:new-project my-app`. You'll see the proposed
-setup in one table before anything is created
-([the tutorial](docs/tutorials/getting-started.md#create-the-repository) walks
-through each choice). From there, [run a project](docs/how-to/run-a-project.md)
-is the loop, stage by stage, and `/plinth:guide` names the next command at any
-point.
-
 ## What you get
 
 In a new project `/plinth:new-project` makes on GitHub:
@@ -100,7 +100,7 @@ In a new project `/plinth:new-project` makes on GitHub:
 | --- | --- |
 | Automatic checks on every proposed change: tests, type checks, a linter and a build | A change waits until the tests pass and the code builds |
 | Rules for accepting changes into the main version | While the rules stand, every change arrives as a pull request, and the main version cannot be overwritten or deleted |
-| A scan for exposed passwords and keys | The scan looks through the project's saved history for exposed passwords and keys. When it finds one, the check fails and tells you to revoke it. The secret may already be on GitHub |
+| A scan for exposed passwords and keys | The scan looks through the project's saved history for exposed passwords and keys. When it finds one, the check fails and tells you to revoke it. By then the secret is already on GitHub |
 | A check of new packages | plinth checks newly added or upgraded packages for serious known security problems |
 | Code scanning | GitHub's code scanner holds a change with a serious security finding. On private GitHub projects, it requires GitHub Code Security |
 | A size limit on each change | A change too large to review is sent back to be split |
@@ -108,8 +108,9 @@ In a new project `/plinth:new-project` makes on GitHub:
 | A check of the setup itself | A check flags some changes that weaken the setup. If a change removes that check altogether, a separate inspection can spot the missing check after the change is accepted |
 | Instructions and skills for the agent | The agent is guided to work in small steps and explain them in plain words; `/plinth:guide` names the next step |
 
-On GitLab.com Free, the full set of checks must pass before a change can be
-accepted, but GitLab does not require each individual check by name.
+On GitLab.com Free, the pipeline must pass as a whole before a change can be
+accepted, but GitLab does not require each check by name, and a change can
+drop a check from its own pipeline.
 
 They come from three parts: a plugin for the agent (six skills, listed
 [below](#skills-and-dependencies)), a project template (a Python project
