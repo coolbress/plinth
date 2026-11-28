@@ -54,6 +54,12 @@ case "$*" in
     [ "${PULLS_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$PULLS_RC"; }
     [ -z "${RELEASE_PR_BODY:-}" ] || printf '%s\n' "$RELEASE_PR_BODY"
     exit 0 ;;
+  # A decisions-page marker's issue (#1221): MARKER_STATE, open by default;
+  # MARKER_RC fails the read.
+  "issue view"*)
+    [ "${MARKER_RC:-0}" = 0 ] || { echo "error connecting to api.github.com" >&2; exit "$MARKER_RC"; }
+    printf '%s\n' "${MARKER_STATE:-OPEN:}"
+    exit 0 ;;
   # The comment a `train exception:` line names, as the script's --jq prints
   # its body: EXC_RC fails the read, EXC_BODY= is an empty body.
   "api repos/"*"/issues/comments/"*)
@@ -79,7 +85,10 @@ repo="$work/repo"; origin="$work/origin.git"
 mkdir -p "$repo/.claude-plugin" "$repo/scripts/lib"
 cp "$root"/.claude-plugin/plugin.json "$root"/.claude-plugin/marketplace.json "$repo/.claude-plugin/"
 cp "$root"/CHANGELOG.md "$repo/"
-cp "$root"/scripts/make-release.sh "$root"/scripts/new-project.sh "$root"/scripts/changelog-fragments.py "$repo/scripts/"
+cp "$root"/scripts/make-release.sh "$root"/scripts/new-project.sh "$root"/scripts/changelog-fragments.py "$root"/scripts/stale-decision-markers.sh "$repo/scripts/"
+# A decisions page with one marker, whatever the real page holds today (#1221).
+mkdir -p "$repo/docs/reference"
+printf -- '- A decision being built. 2026-11-25, #1 (decided; not built yet: #1)\n' > "$repo/docs/reference/decisions-in-force.md"
 cp "$root"/scripts/lib/template-reads.sh "$repo/scripts/lib/"
 cp "$root"/scripts/retired-entries.py "$repo/scripts/"
 mkdir -p "$repo/docs/reference"; cp "$root"/docs/reference/dependency-entries.md "$repo/docs/reference/"
@@ -359,6 +368,17 @@ is "  and the section carries the line above the first ###, so run 2 publishes i
 is "  and gh was asked for that comment" grep -qF "gh api repos/coolbress/plinth/issues/comments/7210202040" "$GH_LOG"
 undo_bump
 untag; tag_aged $(( 7 * day ))
+# The decisions page (#1221): a `not built yet` marker whose issue is closed
+# as completed stops run 1, as does one gh cannot read; one closed as not
+# planned is printed for the person and does not.
+MARKER_STATE=CLOSED:COMPLETED run "v$next" "$work/why.md"; check "a decisions-page marker whose issue is closed as completed is refused" no $?
+is "  and nothing changed"         untouched
+is "  and the refusal names the marker's line" says "stale: line 1: #1 is closed as completed"
+MARKER_RC=1 run "v$next" "$work/why.md"; check "a decisions-page marker whose issue gh cannot read is refused" no $?
+is "  and nothing changed"         untouched
+MARKER_STATE=CLOSED:NOT_PLANNED run "v$next" "$work/why.md"; check "a marker closed as not planned does not stop the release" ok $?
+is "  and it is printed for the person" says "for a person: line 1: #1 is closed (NOT_PLANNED)"
+undo_bump
 run "v$next" "$work/why.md";       check "7 days after, without a hotfix line, it bumps" ok $?
 undo_bump
 run "v$next" "$work/hotfix-empty.md"; check "an empty hotfix reason is refused on any day" no $?
