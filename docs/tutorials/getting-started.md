@@ -99,7 +99,10 @@ type an answer instead):
    model card (`data-ml`; on GitHub a `v*` tag publishes the model, its
    metrics and the card as release files); a website people log in to
    (`web`, then where it runs); or a page of tables and charts with no login
-   (`dashboard`, then whether it runs on your computer or on Render). Data processing, collection or a pipeline
+   (`dashboard`, then whether it runs on your computer or on Render). A
+   chatbot, an assistant or AI answers is the kind its interface fits,
+   calling Claude (`--calls-claude`): a terminal is `cli`, a page
+   `dashboard`, a service or a bot `backend`. Data processing, collection or a pipeline
    with no model trained is `cli`. Accept it, pick another kind, or say you
    are not sure (`cli`).
 4. **The name**, when the command gave none: two or three suggestions in

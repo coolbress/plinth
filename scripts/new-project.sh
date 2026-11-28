@@ -543,6 +543,15 @@ if [ -n "$copier_yml" ]; then
     esac
   fi
 fi
+# With --calls-claude the template also refuses two package names (#1071):
+# `claude`, whose own test would be the shipped tests/test_claude.py, and
+# `anthropic`, which would hide the SDK's package. The rules above do not
+# know the answer, so a --check says it here.
+if [ "$claude" = 1 ]; then
+  case "$(printf '%s' "$name" | tr '. -' '___' | tr '[:upper:]' '[:lower:]')" in
+    claude|anthropic) stop "the template refuses the name '$name' with --calls-claude: its package would collide with the shipped tests/test_claude.py or the Anthropic SDK's own package; nothing was created" "  fix: choose another name, for example '$name-app'" ;;
+  esac
+fi
 # Where a web app runs (#677): `render`, or a place plinth lists and does not
 # deploy to or check, passed as copier's `hosting` and `hosting_elsewhere`.
 # A template without those questions renders for Render whatever it is given:

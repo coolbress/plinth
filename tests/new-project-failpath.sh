@@ -1042,6 +1042,10 @@ done
 run claude-not-here err no no "--calls-claude and --no-calls-claude are for --archetype=cli, dashboard or backend only" -- probe --archetype=library --calls-claude
 run claude-no-not-here err no no "--calls-claude and --no-calls-claude are for --archetype=cli, dashboard or backend only" -- probe --archetype=web --no-calls-claude
 run claude-both err no no "--calls-claude and --no-calls-claude: choose one" -- probe --calls-claude --no-calls-claude
+# The template refuses these names with the answer on; --check says so first.
+E="MOCK_CLAUDE_Q=1" run claude-name err no no "the template refuses the name 'Claude' with --calls-claude" -- Claude --calls-claude --check
+E="MOCK_CLAUDE_Q=1" run claude-name-sdk err no no "the template refuses the name 'anthropic' with --calls-claude" -- anthropic --calls-claude
+E="MOCK_CLAUDE_Q=1" run claude-name-off ok no no "check: ok (tester/claude, public, cli, folder" -- claude --check
 # The pinned template before coolbress/plinth-template#371 does not ask it.
 run claude-old-template err no no "does not ask calls_claude, so --calls-claude would be dropped; nothing was created" -- probe --calls-claude
 E="MOCK_CLAUDE_Q=1 MOCK_CLAUDE_NORECORD=1" run claude-dropped err no no "did not record calls_claude: true" -- probe --calls-claude
