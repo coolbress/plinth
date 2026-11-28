@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# `ci / web-audit` (#709): Lighthouse CI and axe-core on a web project's pages,
-# reported and never failing. The steps are not copied here; they are
+# `ci / web-audit` (#709): Lighthouse CI and axe-core on a web project's pages.
+# It fails on a critical or serious violation of the WCAG 2.2 A and AA rules
+# (#1149), the gate step's red, and on nothing else. The steps are not copied here; they are
 # extracted from python-ci.yml and run as the runner runs them, so the rule
 # tested is the rule shipped.
 #
@@ -51,7 +52,8 @@ for l in lines[i + 1:end]:
     print(l[indent:] if l.strip() else "")
 PY
 }
-for s in "Verdict:verdict" "Audit the pages:audit" "Install Node (official release, SHA256 verified):node" "Install Chrome for Testing (SHA256 verified):chrome"; do
+fx="$root/tests/fixtures/web-audit"
+for s in "Verdict:verdict" "Critical or serious accessibility violations (axe-core, WCAG 2.2 A and AA):gate" "Audit the pages:audit" "Install Node (official release, SHA256 verified):node" "Install Chrome for Testing (SHA256 verified):chrome"; do
   job_step web-audit "${s%%:*}" > "$tmp/${s##*:}.sh" || { echo "  FAIL  web-audit / ${s%%:*}: step not found in python-ci.yml"; exit 1; }
 done
 # A web-audit step's literal `env:` values as KEY=VALUE words: the pins the
@@ -76,9 +78,16 @@ for l in lines[e + 1:]:
 verdict() { # case-dir [NAME=outcome ...]
   local d="$1"; shift
   : > "$d/summary"
-  env WEB=true CHECKOUT=success APP=success NODE=success CHROME=success TOOLS=success AUDIT=success \
-    "$@" RUNNER_TEMP="$d" GITHUB_STEP_SUMMARY="$d/summary" bash "$tmp/verdict.sh" > "$d/stdout" 2>&1
+  env WEB=true CHECKOUT=success APP=success NODE=success CHROME=success TOOLS=success AUDIT=success GATE=success \
+    PLINTH_SHA=0123456789abcdef "$@" RUNNER_TEMP="$d" GITHUB_STEP_SUMMARY="$d/summary" bash "$tmp/verdict.sh" > "$d/stdout" 2>&1
   echo "exit $?" >> "$d/stdout"
+}
+# One run of the gate step on the same results: its exit, then the Verdict with that outcome.
+gate() { # case-dir
+  local d="$1" rc
+  OUT="$d/web-audit" bash "$tmp/gate.sh" > "$d/gate.log" 2>&1; rc=$?
+  echo "$rc" > "$d/gate.rc"
+  [ "$rc" = 0 ] && verdict "$d" GATE=success || verdict "$d" GATE=failure
 }
 fresh() { local d="$tmp/c$((pass+fail))"; rm -rf "$d"; mkdir -p "$d/web-audit"; echo "$d"; }
 pages() { # dir [no-login]
@@ -124,11 +133,14 @@ for st in steps:
     if name == "Verdict":
         if not any(l.strip() == "if: ${{ !cancelled() }}" for l in st):
             print("the Verdict step does not run after a failed step")
+    elif name.startswith("Critical or serious accessibility violations"):
+        if any(l.strip() == "continue-on-error: true" for l in st):
+            print("the gate step continues on error: a violation would not turn the job red")
     elif not any(l.strip() == "continue-on-error: true" for l in st):
         print(f"no continue-on-error: {name}")
 PY
 )"
-if [ -z "$shape" ]; then ok "no job-level if:, every step before the Verdict continues on error, the Verdict runs after a failure"
+if [ -z "$shape" ]; then ok "no job-level if:, every step but the gate continues on error, the gate does not, the Verdict runs after a failure"
 else bad "the job's shape" "$shape"; fi
 
 echo "-- the Verdict step on written results"
@@ -140,24 +152,91 @@ else bad "not a web project" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 1; lhr "$d/web-audit/1.lhr.json" 0.95
 clean_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; verdict "$d"
-if has "$d/summary" "pass: Lighthouse scored / (logged in): accessibility 100, best practices 100, seo 90, performance 97, out of 100; no score is judged yet" \
-   && has "$d/summary" "pass: axe-core's automated rules found no accessibility violation on /accounts/login/ (not logged in) (31 rules applied); they catch only part of accessibility" \
+if has "$d/summary" "pass: Lighthouse scored / (logged in): accessibility 100, best practices 100, seo 90, performance 97, out of 100; no score fails this job" \
+   && has "$d/summary" "pass: no critical or serious violation of the WCAG 2.2 A and AA rules on /accounts/login/ (not logged in): axe-core found none (31 rules applied); automated rules catch only part of accessibility" \
    && has "$d/summary" "| \`/accounts/login/\` (not logged in) | 95 | 100 | 90 | 97 | 0 |" \
-   && has "$d/summary" "Automated checks catch only part of accessibility." \
+   && has "$d/summary" "Automated checks catch only part of accessibility:" \
    && ! has "$d/stdout" "::warning::" && has "$d/stdout" "exit 0" \
    && has "$d/stdout" "- pass: Lighthouse scored / (logged in)" && has "$d/stdout" "### Lighthouse and axe-core on the app's pages"; then
   ok "clean pages: the scores per page, a pass per page for axe-core, the limits of automated checks, no warning; the same text in the log"
 else bad "clean pages" "$(cat "$d/summary" "$d/stdout")"; fi
 
 d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 0.78; lhr "$d/web-audit/1.lhr.json" 1
-bad_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; verdict "$d"
-if has "$d/summary" "not yet confirmed: no accessibility violation axe-core's automated rules find on / (logged in). Why: it found 2, image-alt on 1 element (critical: Images must have alternative text); label on 2 elements (critical: Form elements must have labels). What confirms it: fixing them." \
-   && has "$d/stdout" "::warning::not yet confirmed: no accessibility violation axe-core's automated rules find on / (logged in)" \
+bad_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; gate "$d"
+if [ "$(cat "$d/gate.rc")" = 1 ] \
+   && has "$d/summary" "fail: no critical or serious violation of the WCAG 2.2 A and AA rules on / (logged in): axe-core found 2, image-alt on 1 element (critical: Images must have alternative text); label on 2 elements (critical: Form elements must have labels)" \
    && has "$d/summary" "#### What axe-core found on / (logged in)" \
    && has "$d/summary" "| [label](https://dequeuniversity.com/rules/axe/4.14/label) | critical | 2 | Form elements must have labels | \`input[name=\"text\"]\` |" \
-   && has "$d/summary" "Automated checks catch only part of accessibility." && has "$d/stdout" "exit 0"; then
-  ok "known violations: each rule named with its elements, in the summary and as a warning, and the job still passes"
-else bad "known violations" "$(cat "$d/summary" "$d/stdout")"; fi
+   && has "$d/summary" "Automated checks catch only part of accessibility" && has "$d/stdout" "exit 0"; then
+  ok "known critical violations: the gate step exits 1, the Verdict names each rule with its elements"
+else bad "known violations" "$(cat "$d/gate.log" "$d/summary" "$d/stdout")"; fi
+
+echo "-- the gate (#1149), on committed axe-core output"
+# tests/fixtures/web-audit: serious.axe.json has a critical, a serious and a
+# moderate violation; minor.axe.json a moderate and a minor one.
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 1; lhr "$d/web-audit/1.lhr.json" 1
+cp "$fx/serious.axe.json" "$d/web-audit/0.axe.json"; cp "$fx/minor.axe.json" "$d/web-audit/1.axe.json"; gate "$d"
+if [ "$(cat "$d/gate.rc")" = 1 ] && has "$d/gate.log" "2 critical or serious violation(s) of the WCAG A and AA rules" \
+   && has "$d/summary" "fail: no critical or serious violation of the WCAG 2.2 A and AA rules on / (logged in): axe-core found 2, button-name on 1 element (critical: Buttons must have discernible text); color-contrast on 3 elements (serious:" \
+   && ! grep -q "^- fail: .*meta-viewport" "$d/summary"; then
+  ok "a critical and a serious violation: the gate step fails, and the fail line names those two and not the moderate one"
+else bad "the gate on serious.axe.json" "$(cat "$d/gate.log" "$d/summary")"; fi
+if has "$d/stdout" "::error title=ci / web-audit::no critical or serious violation of the WCAG 2.2 A and AA rules on / (logged in)" \
+   && has "$d/stdout" "failed: no critical or serious violation of the WCAG 2.2 A and AA rules on / (logged in)" \
+   && has "$d/stdout" "next: fix what axe-core names on / (logged in) (each rule's link in the job summary says how), and push" \
+   && has "$d/stdout" "more: https://github.com/coolbress/plinth/blob/0123456789ab/docs/reference/required-checks.md#ci--web-audit" \
+   && has "$d/stdout" "exit 0"; then
+  ok "  in #1098's shape: one ::error titled ci / web-audit, then failed, next and more; the Verdict itself exits 0"
+else bad "the failure block" "$(cat "$d/stdout")"; fi
+if has "$d/summary" "pass: no critical or serious violation of the WCAG 2.2 A and AA rules on /accounts/login/ (not logged in): axe-core found none (64 rules applied); 2 moderate or minor, which fail nothing: meta-viewport on 1 element (moderate: Zooming and scaling must not be disabled); aria-deprecated-role on 1 element (minor: Deprecated ARIA roles must not be used)" \
+   && has "$d/summary" "| [aria-deprecated-role](https://dequeuniversity.com/rules/axe/4.14/aria-deprecated-role) | minor | 1 |"; then
+  ok "  and a page with only moderate and minor ones passes, listing them"
+else bad "moderate and minor listed" "$(cat "$d/summary")"; fi
+
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 1; lhr "$d/web-audit/1.lhr.json" 1
+cp "$fx/minor.axe.json" "$d/web-audit/0.axe.json"; cp "$fx/minor.axe.json" "$d/web-audit/1.axe.json"; gate "$d"
+if [ "$(cat "$d/gate.rc")" = 0 ] && ! has "$d/summary" "fail:" && ! has "$d/stdout" "::error" && ! has "$d/stdout" "failed:" && has "$d/stdout" "exit 0"; then
+  ok "only moderate and minor violations: the gate passes and nothing fails"
+else bad "the gate on minor.axe.json" "$(cat "$d/gate.log" "$d/summary" "$d/stdout")"; fi
+
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 0; lhr "$d/web-audit/1.lhr.json" 0
+printf '{"finalDisplayedUrl":"http://localhost:8000/","categories":{"accessibility":{"score":0.12},"best-practices":{"score":0},"seo":{"score":0},"performance":{"score":0.01}}}' > "$d/web-audit/0.lhr.json"
+clean_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; gate "$d"
+if [ "$(cat "$d/gate.rc")" = 0 ] && ! has "$d/summary" "fail:" && has "$d/summary" "accessibility 12, best practices 0, seo 0, performance 1, out of 100; no score fails this job"; then
+  ok "no score fails the job: Performance 1 and Accessibility 12 with no axe-core violation pass"
+else bad "a low score" "$(cat "$d/summary" "$d/stdout")"; fi
+
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 1; lhr "$d/web-audit/1.lhr.json" 1
+cp "$fx/serious.axe.json" "$d/web-audit/0.axe.json"; sed 's/"status":200/"status":500/' "$fx/serious.axe.json" > "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; gate "$d"
+if [ "$(cat "$d/gate.rc")" = 0 ] && ! has "$d/summary" "fail:" && has "$d/summary" "not yet confirmed: axe-core on / (logged in). Why: the page answered HTTP 500"; then
+  ok "violations on an error page fail nothing: the page was not read"
+else bad "error page" "$(cat "$d/gate.log" "$d/summary")"; fi
+
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 1; lhr "$d/web-audit/1.lhr.json" 1
+clean_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; verdict "$d" GATE=failure
+if has "$d/summary" "fail: no critical or serious violation of the WCAG 2.2 A and AA rules: the gate step failed on results this step could not read" \
+   && has "$d/stdout" "next: read the gate step's log, fix what it names, and push"; then
+  ok "a gate that failed on results the Verdict does not read as a violation: still a fail line, never a pass alone"
+else bad "gate failed, nothing read" "$(cat "$d/summary" "$d/stdout")"; fi
+
+# The tags axe-core runs, pinned (#1149): WCAG 2.0, 2.1 and 2.2 A and AA, no best-practice.
+if grep -qF 'const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];' "$tmp/audit.sh" \
+   && grep -qF 'window.axe.run(document, { runOnly: { type: "tag", values } }), tags)' "$tmp/audit.sh" \
+   && ! grep -qF '"best-practice"' "$tmp/audit.sh"; then
+  ok "axe-core runs only the wcag2a, wcag2aa, wcag21a, wcag21aa and wcag22aa rules"
+else bad "the runOnly tags" "$(grep -n 'tags\|axe.run' "$tmp/audit.sh")"; fi
+
+# The manual checklist, each item with its success criteria (#1149).
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 1; lhr "$d/web-audit/1.lhr.json" 1
+clean_axe "$d/web-audit/0.axe.json"; clean_axe "$d/web-audit/1.axe.json"; verdict "$d"
+miss=""
+for c in "keyboard alone, and nothing traps focus (2.1.1, 2.1.2)" "not hidden under a sticky header or banner (2.4.7, 2.4.11)" \
+         "pasting and password managers (3.3.8)" "names the field and the fix (3.3.1, 3.3.3)" "320 CSS pixels wide (1.4.4, 1.4.10)" \
+         "matches the page's language (3.1.1)" "same place on every page (3.2.6)" "asked for again in one flow (3.3.7)"; do
+  grep -qF -- "- " "$d/summary" && grep -F -- "$c" "$d/summary" | grep -q '^- ' || miss="$miss | $c"
+done
+if [ -z "$miss" ]; then ok "the summary's manual checklist names each item's WCAG success criteria"
+else bad "checklist items missing:$miss" "$(cat "$d/summary")"; fi
 
 d="$(fresh)"; pages "$d"
 printf '{"runtimeError":{"code":"ERRORED_DOCUMENT_REQUEST","message":"Lighthouse was unable to reliably load the page you requested. (Status code: 500)"}}' > "$d/web-audit/0.lhr.json"
@@ -200,7 +279,8 @@ if has "$d/summary" "not yet confirmed: / as a logged-in person. Why: the audit'
    && has "$d/summary" "after a redirect to http://localhost:8000/accounts/login/?next=/" \
    && has "$d/summary" "(serious: \`<html>\` element must have a lang attribute)" \
    && has "$d/summary" "| \`<html>\` element must have a lang attribute |" \
-   && ! has "$d/summary" "/accounts/login/ (not logged in), the audit's session"; then
+   && ! has "$d/summary" "/accounts/login/ (not logged in), the audit's session" \
+   && ! grep -q "^- fail: .* on / (logged in)" "$d/summary"; then
   ok "a session that did not hold: the logged-in page's results are said to be the log-in page's; markup in a rule's help is quoted"
 else bad "session did not hold" "$(cat "$d/summary" "$d/stdout")"; fi
 
@@ -219,6 +299,21 @@ d="$(fresh)"; pages "$d"; verdict "$d" AUDIT=failure
 if has "$d/summary" "not yet confirmed: the pages' audit. Why: the audit did not finish (its log says why)" && ! has "$d/summary" "pass:"; then
   ok "an audit that crashed: not yet confirmed, never a pass"
 else bad "audit crashed" "$(cat "$d/summary" "$d/stdout")"; fi
+# An audit that failed after writing a report (review on #1256): the gate
+# still judges what was written, and the Verdict names it.
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 1
+cp "$fx/serious.axe.json" "$d/web-audit/0.axe.json"
+OUT="$d/web-audit" bash "$tmp/gate.sh" > "$d/gate.log" 2>&1; echo $? > "$d/gate.rc"
+verdict "$d" AUDIT=failure "GATE=$([ "$(cat "$d/gate.rc")" = 0 ] && echo success || echo failure)"
+if [ "$(cat "$d/gate.rc")" = 1 ] && has "$d/summary" "not yet confirmed: the pages' audit. Why: the audit did not finish" \
+   && has "$d/summary" "fail: no critical or serious violation of the WCAG 2.2 A and AA rules on / (logged in): axe-core found 2" \
+   && has "$d/summary" "not yet confirmed: axe-core on /accounts/login/ (not logged in). Why: it wrote no report" \
+   && has "$d/stdout" "::error title=ci / web-audit::"; then
+  ok "an audit that failed after a report with a serious violation: the gate fails on it, the Verdict names it, the page without one is not confirmed"
+else bad "partial audit" "$(cat "$d/gate.log" "$d/summary" "$d/stdout")"; fi
+if grep -qF "if: inputs.web && (steps.audit.outcome == 'success' || steps.audit.outcome == 'failure')" "$wf"; then
+  ok "  and the gate step runs after a failed audit, not only a finished one"
+else bad "the gate's if: still skips a failed audit"; fi
 
 d="$(fresh)"; pages "$d"; verdict "$d"
 if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in). Why: it wrote no report" \
@@ -305,16 +400,17 @@ PY
   t0=$SECONDS
   TOOLS="$tools" OUT="$d/web-audit" bash "$tmp/audit.sh" > "$d/audit.log" 2>&1; rc=$?
   audit_s=$((SECONDS - t0))
-  verdict "$d"
-  if [ "$rc" = 0 ] \
-     && grep -qE "^- not yet confirmed: no accessibility violation axe-core's automated rules find on /known/ \(not logged in\)\. Why: it found [0-9]+, .*image-alt on 1 element" "$d/summary" \
-     && grep -qE "^- not yet confirmed: no accessibility violation .* on /known/ .*label on 1 element" "$d/summary" \
-     && has "$d/stdout" "::warning::not yet confirmed: no accessibility violation axe-core's automated rules find on /known/" \
-     && grep -qE "^- pass: axe-core's automated rules found no accessibility violation on / \(not logged in\) \([0-9]+ rules applied\)" "$d/summary" \
+  gate "$d"
+  if [ "$rc" = 0 ] && [ "$(cat "$d/gate.rc")" = 1 ] \
+     && grep -qE "^- fail: no critical or serious violation of the WCAG 2.2 A and AA rules on /known/ \(not logged in\): axe-core found [0-9]+, .*image-alt on 1 element" "$d/summary" \
+     && grep -qE "^- fail: .* on /known/ .*label on 1 element" "$d/summary" \
+     && has "$d/stdout" "::error title=ci / web-audit::" \
+     && grep -qE "^- pass: no critical or serious violation of the WCAG 2.2 A and AA rules on / \(not logged in\): axe-core found none \([0-9]+ rules applied\)" "$d/summary" \
+     && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(d.get("tags") != ["wcag2a","wcag2aa","wcag21a","wcag21aa","wcag22aa"])' "$d/web-audit/1.axe.json" \
      && grep -qE "^- pass: Lighthouse scored /known/ \(not logged in\): accessibility [0-9]+, best practices [0-9]+, seo [0-9]+, performance [0-9]+, out of 100" "$d/summary" \
      && grep -qE "^- pass: Lighthouse scored / \(not logged in\): accessibility 100," "$d/summary" \
-     && has "$d/summary" "Automated checks catch only part of accessibility." && has "$d/stdout" "exit 0"; then
-    ok "the pinned Chrome, Lighthouse CI and axe-core report the known page's image-alt and label, and pass the clean page (audit ${audit_s}s)"
+     && has "$d/summary" "Automated checks catch only part of accessibility:" && has "$d/stdout" "exit 0"; then
+    ok "the pinned Chrome, Lighthouse CI and axe-core fail the known page on image-alt and label, and pass the clean page, with the WCAG tags (audit ${audit_s}s)"
   else
     bad "the live audit" "$(tail -30 "$d/audit.log"; cat "$d/summary" "$d/stdout")"
   fi
