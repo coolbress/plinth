@@ -40,7 +40,7 @@ page2 = [
     issue(7, [f"l{i}" for i in range(20)], "no ending\n", total=25),
     issue(8, ["task"], "See #2, `#9999` and x/y#3.\n\n```\n#8888 /Users/carol/in-a-fence\n```\n"
                        "Ran in /Users/alice/work and /home/runner/work and /home/ubuntu/x and /Users/<you>/x, on github.com/home/page.\n"
-                       "Also v1.2/x#3, #500, #9, #10, x/y#4, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n"
+                       "Also v1.2/x#3, #500, #9, #10, #15, x/y#4, x/y#5, x/y#6, x/y#7, x/y#8, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n"
                        "GitHub staff say so in [community discussion #121836](https://github.com/orgs/community/discussions/121836).\n"
                        # Four spaces after a blank line is an indented code block; in a list, the item's next paragraph.
                        "\nExample:\n\n    See #66666\n\n- a list item\n\n    whose second paragraph names #600\n",
@@ -79,18 +79,20 @@ nf = lambda f: {"type": "NOT_FOUND", "path": ["repository", f], "message": f"Cou
 # Data and NOT_FOUND errors in one answer: each field read on its own.
 w("graphql/refs-o-r-1.json", {"data": {"repository": {
     "i": {"nodes": [{"number": 12}]}, "p": {"nodes": [{"number": 23}]}, "dd": {"nodes": [{"number": 10}]},
-    "n9": None, "d9": None, "n10": None, "d10": {"number": 10}, "n500": None, "d500": None, "n600": None, "d600": None}},
-    "errors": [nf(f) for f in ("n9", "d9", "n10", "n500", "d500", "n600", "d600")]})
-w("graphql/refs-x-y-1.json", {"data": {"repository": {
-    "i": {"nodes": [{"number": 100}]}, "p": {"nodes": []}, "dd": {"nodes": []},
-    "n3": {"__typename": "Issue"}, "d3": None, "n4": None, "d4": None}},
-    "errors": [nf(f) for f in ("d3", "n4", "d4")]})
+    "n9": None, "d9": None, "n10": None, "d10": {"number": 10}, "n15": None, "d15": None, "n500": None, "d500": None,
+    "n600": None, "d600": None}},
+    "errors": [nf(f) for f in ("n9", "d9", "n10", "n15", "d15", "n500", "d500", "n600", "d600")]})
 # The same answer with an error, not NOT_FOUND, for one reference's field.
-err = json.loads(json.dumps(json.load(open(f"{api}/graphql/refs-x-y-1.json"))))
-err["errors"] = [nf("d3"), nf("d4"), {"type": "INTERNAL", "path": ["repository", "n4"], "message": "Something went wrong."}]
-w("refs-x-y-error.json", err)
-w("graphql/refs-gone-repo-1.json", {"data": {"repository": None},
+err = json.loads(json.dumps(json.load(open(f"{api}/graphql/refs-o-r-1.json"))))
+err["errors"] = [e for e in err["errors"] if e["path"][1] != "n15"] + [
+    {"type": "INTERNAL", "path": ["repository", "n15"], "message": "Something went wrong."}]
+w("refs-o-r-error.json", err)
+# The repository's own numbers could not be read at all.
+w("refs-o-r-gone.json", {"data": {"repository": None},
     "errors": [{"type": "NOT_FOUND", "path": ["repository"], "message": "Could not resolve to a Repository."}]})
+# Another repository's numbers are never requested: these would be served.
+w("graphql/refs-x-y-1.json", {"data": {"repository": {"i": {"nodes": [{"number": 100}]}, "p": {"nodes": []},
+                                                       "dd": {"nodes": []}, "n3": {"__typename": "Issue"}}}})
 w("repos/o/r/issues/9.json", {"__status": 410})
 PY
 
@@ -143,10 +145,12 @@ has "a number above the highest is named (404)" "ref: #500 resolves to nothing (
 hasnt "a discussion number resolves" "#10 "
 hasnt "#N in inline code is not a reference" "9999"
 hasnt "#N in a code fence is not a reference" "8888"
-hasnt "owner/repo#N that resolves is not named" "x/y#3"
+# One repository per run (#1119): another repository's numbers are not requested.
+has "another repository's references are one SKIP for it, not requested" "SKIP  x/y: 6 references not verified (#3, #4, #5, #6, #7 and 1 more): another repository, which this run does not read, referenced in $U/issues/8"
+has "a repository that may not exist is not requested either" "SKIP  gone/repo: 1 reference not verified (#1): another repository"
+hasnt "nothing is judged about another repository's numbers" "ref: x/y"
 hasnt "a path whose first part cannot be an owner is not a reference" "v1.2/x"
-has "owner/repo#N not found at or below that repository's highest number is a SKIP" "SKIP  x/y#4 not verified: status 404 at or below the highest number, 100, referenced in $U/issues/8"
-has "a repository that cannot be read is a SKIP for its references" "SKIP  gone/repo#1 not verified: gone/repo could not be read (NOT_FOUND), referenced in $U/issues/8"
+has "a number not found at or below the repository's highest number is a SKIP" "SKIP  #15 not verified: status 404 at or below the highest number, 23, referenced in $U/issues/8"
 hasnt "an HTML entity is not a reference" "#39"
 hasnt "a link's anchor is not a reference" "#77"
 hasnt "a link's text is not a reference" "121836"
@@ -165,7 +169,7 @@ has "a merged pull request with no trailer is an INFO, not a violation" "INFO  t
 hasnt "a closed unmerged pull request is not judged" "pull/23"
 has "unticked criteria are for a person to read, with the file" "INFO  for a person to read: 1 completed issues leave acceptance criteria unticked (heading from .github/ISSUE_TEMPLATE/task.yml)"
 has "the unticked criterion's line is listed; [X] is ticked" "INFO    $U/issues/3 line 8"
-has "the last line counts per rule and not verified" "-- ref 3, home-path 2, body-size 2, ending 3, trailer 1; for a person to read: criteria 1; 0 rules not checked; 3 not verified"
+has "the last line counts per rule and not verified" "-- ref 3, home-path 2, body-size 2, ending 3, trailer 1; for a person to read: criteria 1; 0 rules not checked; 4 not verified"
 hasnt "nothing says missing" "missing"
 
 # ---- Another ending heading: judged against it, not against plinth's.
@@ -180,7 +184,7 @@ has "the same issues with no convention files: not checked" "SKIP  ending: not c
 has "no criteria heading read: not checked" "SKIP  criteria: not checked: convention not read"
 hasnt "nothing says missing without conventions" "missing"
 hasnt "no convention item is judged without conventions" "closed completed with no ending"
-has "rules not checked are counted apart from records not verified" "; 3 rules not checked; 2 not verified"
+has "rules not checked are counted apart from records not verified" "; 3 rules not checked; 3 not verified"
 has "the facts are judged without conventions" "ref: #500 resolves to nothing"
 
 # ---- The owner's shared issue forms, when the repository has none of its own.
@@ -198,10 +202,13 @@ run --root "$gl"
 [ "$rc" = 0 ] && [ "$out" = "  INFO  GitLab: not read" ] && ok "a GitLab checkout prints one line, GitLab: not read" || bad "GitLab: rc $rc: $out"
 
 # ---- One reference's field answered with an error: not verified, and where it was read.
-cp "$api/graphql/refs-x-y-1.json" "$work/refs-x-y-1.json"; cp "$api/refs-x-y-error.json" "$api/graphql/refs-x-y-1.json"
+cp "$api/graphql/refs-o-r-1.json" "$work/refs-o-r-1.json"; cp "$api/refs-o-r-error.json" "$api/graphql/refs-o-r-1.json"
 run --root "$plinthlike"
-has "a reference GitHub answered an error for is a SKIP, with where it was read" "SKIP  x/y#4 not verified: GitHub answered an error for it, referenced in $U/issues/8"
-cp "$work/refs-x-y-1.json" "$api/graphql/refs-x-y-1.json"
+has "a reference GitHub answered an error for is a SKIP, with where it was read" "SKIP  o/r#15 not verified: GitHub answered an error for it, referenced in $U/issues/8"
+cp "$api/refs-o-r-gone.json" "$api/graphql/refs-o-r-1.json"
+run --root "$plinthlike"
+has "a repository whose numbers cannot be read is a SKIP for its references" "SKIP  o/r#500 not verified: o/r could not be read (NOT_FOUND), referenced in $U/issues/8"
+cp "$work/refs-o-r-1.json" "$api/graphql/refs-o-r-1.json"
 
 # ---- A record GitHub answered with null and an error: not verified, never dropped.
 mv "$api/graphql/pulls-1.json" "$work/pulls-1.json"; cp "$api/pulls-partial.json" "$api/graphql/pulls-1.json"
@@ -209,7 +216,7 @@ run --root "$plinthlike"
 [ "$rc" = 0 ] && ok "a page with one record's error still runs to the end" || bad "partial page: exit $rc: $out"
 has "the four records read are counted" "o/r: 12 issues and 4 pull requests read"
 has "the record with an error is a SKIP, named" "SKIP  pull request record 5 on page 1 not verified: GitHub answered an error for it (Something went wrong.)"
-has "and counted as not verified" "; 0 rules not checked; 4 not verified"
+has "and counted as not verified" "; 0 rules not checked; 5 not verified"
 cp "$api/pulls-whole.json" "$api/graphql/pulls-1.json"
 run --root "$plinthlike"
 [ "$rc" = 2 ] && grep -q "could not run: the pulls of o/r could not be read (page 1: Something went wrong.)" <<<"$out" \
