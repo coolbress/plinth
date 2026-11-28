@@ -2097,14 +2097,46 @@ def check_force_push_deny(deny: list) -> None:
 # Every git call (#1119): no fsmonitor program, no hook and no system config,
 # so reading a repository someone else wrote runs none of its programs.
 GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
+# The keys that make a filter driver run a program, emptied (#1278).
+FILTER_OFF = (("clean", ""), ("smudge", ""), ("process", ""), ("required", "false"))
 
 
-def git(root: Path, *args: str, system_config: bool = False, **kw) -> subprocess.CompletedProcess:
-    """`git -C <root> <args>` with GIT_SAFE and GIT_CONFIG_NOSYSTEM=1.
+def filters_off(listing: bytes, env: dict[str, str]) -> dict[str, str]:
+    """GIT_CONFIG_KEY_n/VALUE_n pairs emptying every filter driver that a config
+    other than the person's own (global) and the machine's (system) names: the
+    checkout's local and worktree config and what they include. Environment
+    pairs, not `-c`, since a name may hold a `=`. `listing` is
+    `git config --show-scope --null --get-regexp ^filter\\.`."""
+    parts = listing.split(b"\0")
+    names = {kv.split(b"\n", 1)[0].decode("utf-8", "surrogateescape")[len("filter."):].rsplit(".", 1)[0]
+             for scope, kv in zip(parts[0::2], parts[1::2]) if scope not in (b"global", b"system")}
+    try:
+        n = int(env.get("GIT_CONFIG_COUNT") or 0)
+    except ValueError:
+        n = 0
+    out: dict[str, str] = {}
+    for name in sorted(names):
+        for key, value in FILTER_OFF:
+            out[f"GIT_CONFIG_KEY_{n}"], out[f"GIT_CONFIG_VALUE_{n}"] = f"filter.{name}.{key}", value
+            n += 1
+    return {**out, "GIT_CONFIG_COUNT": str(n)} if out else {}
+
+
+def git(root: Path, *args: str, system_config: bool = False, filters: bool = True, **kw) -> subprocess.CompletedProcess:
+    """`git -C <root> <args>` with GIT_SAFE and GIT_CONFIG_NOSYSTEM=1, and every
+    filter driver the checkout configures emptied (`filters_off`). When that
+    config cannot be read, git is not run: the result is exit 128.
     `system_config` keeps the system level for a read whose subject is every
     level git reads (FC-G07's credential helpers): the system file is the
     machine's, not the repository's, and a `config` read runs no program."""
     env = {**os.environ} if system_config else {**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}
+    if filters:
+        f = git(root, "config", "--show-scope", "--null", "--get-regexp", r"^filter\.", filters=False,
+                capture_output=True, timeout=30)
+        if f.returncode not in (0, 1):   # 1: no filter key
+            text = kw.get("text") or kw.get("encoding")
+            return subprocess.CompletedProcess(list(args), 128, "" if text else b"", "filter config not read")
+        env.update(filters_off(f.stdout, env))
     return subprocess.run(["git", *GIT_SAFE, "-C", str(root), *args], env=env, check=False, **kw)
 
 
