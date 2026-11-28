@@ -49,4 +49,25 @@ elif "$bin/zizmor" --no-progress .github/workflows/; then
 else
   echo "  FAIL  zizmor $zizmor_version"; fail=1
 fi
+
+# FC-D09's shape, measured again with every zizmor (#1114): an AI agent action
+# on a trigger whose text others write, with contents: write and a secret, and
+# no author check. zizmor 1.33.1 at --min-severity medium reports nothing for
+# these four triggers (measured 2026-11-28; 1.29.0 on 2026-11-25). For
+# issue_comment, pull_request_target and workflow_run it reports
+# dangerous-triggers, gated or not: the trigger, not this shape. When zizmor
+# reports one of the four, FC-D09 may retire for it: this case fails to say so.
+if [ -n "${bin:-}" ] && [ -x "$bin/zizmor" ]; then
+  shape="$(mktemp -d)" || { echo "  FAIL  could not make a temp folder"; exit 1; }
+  reported=""
+  for t in issues pull_request_review_comment discussion discussion_comment; do
+    # shellcheck disable=SC2016  # ${{ }} is the workflow's expression, written as text
+    printf 'name: agent\non:\n  %s:\npermissions:\n  contents: write\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: anthropics/claude-code-action@%s # v1\n        with:\n          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}\n' \
+      "$t" "$(printf '%040d' 0)" > "$shape/$t.yml"
+    "$bin/zizmor" --no-progress --offline --min-severity medium --format plain "$shape/$t.yml" >/dev/null 2>&1 || reported="$reported $t"
+  done
+  rm -rf "$shape"
+  if [ -z "$reported" ]; then echo "  PASS  zizmor $zizmor_version reports nothing on FC-D09's shape (issues, pull_request_review_comment, discussion, discussion_comment): FC-D09 stays"
+  else echo "  FAIL  zizmor $zizmor_version now reports FC-D09's shape on:$reported. Record it in skills/floor-check/reference.md#experimental-reads and decide whether FC-D09 retires for those triggers (#1114)"; fail=1; fi
+fi
 exit "$fail"

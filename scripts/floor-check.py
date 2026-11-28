@@ -646,6 +646,7 @@ def _project() -> tuple[dict, ...]:
 
 
 CI_DOCS = f"{DOCS}#what-the-static-checks-read-and-what-they-do-not"
+EXPERIMENTAL_DOCS = f"{DOCS}#experimental-reads"
 
 
 def _ci() -> tuple[dict, ...]:
@@ -735,6 +736,30 @@ def _ci() -> tuple[dict, ...]:
                         "norun": "{what} not verified: the rule did not run ({error})",
                         "printed": "{what} not verified: the rule printed {line}",
                         "silent": "{what} not verified: the rule printed no verdict ({why})"}),
+        # Experimental reads (#1114): --experimental only, which ci / floor-check does not pass.
+        check("FC-D09", "no AI agent action runs on text others write with a write permission or a secret and no "
+              "author check", states=("pass", "warn", "unknown", "info"), handoff="agent", docs=EXPERIMENTAL_DOCS,
+              hosts=gh, lifecycle="experimental", ci_visible=False, baseline=("OSPS-BR-01.01",),
+              fix="gate the job on the commenter's author_association, or take its write permission and secrets away",
+              messages={"good": "no AI agent action in {count} workflow file{s} runs on text others write with a write "
+                                "permission or a secret and no author check",
+                        "none": "no workflow file under .github/workflows: no AI agent action to read",
+                        "bad": "{rel} line {line}: job {job} runs {action} on {triggers}, holding {holding}, with no "
+                               "author_association or actor condition on the job or the step: anyone who can write "
+                               "an issue or a comment writes its prompt",
+                        "hint": "  give job {job} an `if:` on the event's author_association (OWNER, MEMBER or "
+                                "COLLABORATOR), or run it with read permissions and no secrets",
+                        "unread": "{rel}: AI agent actions not verified: {why}"}),
+        check("FC-D10", "no workflow reads a registry token from the secrets", states=("pass", "warn", "unknown", "info"),
+              handoff="person", docs=EXPERIMENTAL_DOCS, hosts=gh, lifecycle="experimental", ci_visible=False,
+              fix="publish through the registry's trusted publisher (OIDC), then delete the secret and revoke the token",
+              messages={"good": "no workflow in {count} file{s} reads a registry token from the secrets",
+                        "none": "no workflow file under .github/workflows: no registry token to read",
+                        "bad": "{rel} line {line}: reads secrets.{name}, a long-lived registry token that publishes "
+                               "for as long as it is valid",
+                        "hint": "  once publishing works through the registry's trusted publisher: gh secret delete "
+                                "{name}, and revoke the token at the registry",
+                        "unread": "{rel}: registry tokens not verified: the file could not be read"}),
     )
 
 
@@ -1866,6 +1891,187 @@ def check_files(root: Path, owner: str | None, network: bool, host: str = "githu
     check_tracked_dotenv(root)
     check_action_pins(root)
     check_template_drift(root, network, host, owner)
+
+
+# ── experimental workflow reads (#1114), behind --experimental ───────────
+# An AI agent action reads the text it is given as its prompt. In a workflow
+# that text can come from anyone who opens an issue or writes a comment, and
+# with a write permission or a secret the agent can act on it. zizmor 1.29.0
+# at --min-severity medium reported nothing on this shape (measured
+# 2026-11-25); the check is re-read at each zizmor pin raise and retired when
+# zizmor reports it.
+AI_AGENT_ACTIONS = ("anthropics/claude-code-action", "google-github-actions/run-gemini-cli", "openai/codex-action",
+                    "actions/ai-inference")
+UNTRUSTED_TRIGGERS = ("issues", "issue_comment", "pull_request_target", "pull_request_review_comment", "discussion",
+                      "discussion_comment", "workflow_run")
+AUTHOR_GATE = re.compile(r"author_association|github\.(?:triggering_)?actor\b|github\.event\.sender\.login")
+REGISTRY_TOKEN_SECRET = re.compile(r"\bsecrets\.(PYPI\w*|TWINE_PASSWORD|NPM_TOKEN|NODE_AUTH_TOKEN|CARGO_REGISTRY_TOKEN)\b",
+                                   re.IGNORECASE)
+WF_KEY = re.compile(r"""^(\s*)(?:-\s+)?['"]?([\w-]+)['"]?\s*:(?:\s+(.*?))?\s*(?:#.*)?$""")
+
+
+def workflow_triggers(text: str) -> set[str] | None:
+    """The events a workflow's `on:` names, or None when it is in a form not
+    read here. Lines, as yaml_lines reads them."""
+    lines = list(yaml_lines(text))
+    for i, (_, indent, line) in enumerate(lines):
+        m = WF_KEY.match(line)
+        if indent or not m or m.group(2) not in ("on", "true"):
+            continue
+        value = (m.group(3) or "").strip()
+        if value:
+            if value.startswith(("{", "[")) or re.fullmatch(r"[\w-]+", value):
+                return {re.split(r"\s*:", x.strip(" '\""))[0] for x in value.strip("{}[]").split(",") if x.strip()}
+            return None
+        events = set()
+        child = None
+        for _, ind, ln in lines[i + 1:]:
+            if ind == 0:
+                break
+            child = ind if child is None else child
+            km = WF_KEY.match(ln)
+            if ind == child:
+                if not km or ln.lstrip().startswith("-"):
+                    return None
+                events.add(km.group(2))
+        return events
+    return None
+
+
+def key_block(raw: list[str], i: int) -> str:
+    """Line i of `raw` and the lines below it indented deeper: a key's whole value."""
+    indent = len(raw[i]) - len(raw[i].lstrip())
+    out = [raw[i]]
+    for ln in raw[i + 1:]:
+        if ln.strip() and len(ln) - len(ln.lstrip()) <= indent:
+            break
+        out.append(ln)
+    return "\n".join(out)
+
+
+def workflow_jobs(text: str) -> list[tuple[str, int, int]]:
+    """(job id, first line index, end line index) of each job under `jobs:`."""
+    raw = text.splitlines()
+    syntax = [(n - 1, ind, ln) for n, ind, ln in yaml_lines(text)]
+    start = next((k for k, (_, ind, ln) in enumerate(syntax) if ind == 0 and re.match(r"jobs\s*:\s*(?:#.*)?$", ln)), None)
+    if start is None:
+        return []
+    jobs: list[tuple[str, int, int]] = []
+    job_indent = None
+    for idx, ind, ln in syntax[start + 1:]:
+        if ind == 0:
+            if jobs:
+                jobs[-1] = (jobs[-1][0], jobs[-1][1], idx)
+            return jobs
+        job_indent = ind if job_indent is None else job_indent
+        m = WF_KEY.match(ln)
+        if ind == job_indent and m:
+            if jobs:
+                jobs[-1] = (jobs[-1][0], jobs[-1][1], idx)
+            jobs.append((m.group(2), idx, len(raw)))
+    return jobs
+
+
+def check_agent_workflows(root: Path) -> None:
+    """FC-D09: an AI agent action in a workflow that untrusted text triggers,
+    in a job holding a write permission or a secret, with no author_association
+    or actor condition on the job or the agent's step. A job with no
+    `permissions:` (and none at the top) holds the default token, which the
+    repository's setting may make writable: that counts as holding write."""
+    files = workflow_files(root)
+    if not files:
+        emit("FC-D09", "info", "none")
+        return
+    found = unread = 0
+    for p in files:
+        rel = p.relative_to(root).as_posix()
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            unread += 1
+            emit("FC-D09", "unknown", "unread", {"rel": rel, "why": "the file could not be read"}, reason="unreadable")
+            continue
+        if not any(a in text for a in AI_AGENT_ACTIONS):
+            continue
+        events = workflow_triggers(text)
+        if events is None:
+            unread += 1
+            emit("FC-D09", "unknown", "unread", {"rel": rel, "why": "its `on:` is in a form this checker does not read"},
+                 reason="on: not read")
+            continue
+        untrusted = sorted(events & set(UNTRUSTED_TRIGGERS))
+        if not untrusted:
+            continue
+        raw = text.splitlines()
+        top_perms = next((key_block(raw, n - 1) for n, ind, ln in yaml_lines(text)
+                          if ind == 0 and re.match(r"permissions\s*:", ln)), None)
+        for job, a, b in workflow_jobs(text):
+            body = raw[a:b]
+            child = next((len(ln) - len(ln.lstrip()) for ln in body[1:] if ln.strip() and not ln.lstrip().startswith("#")), 0)
+            keys = {m.group(2): k for k, ln in enumerate(body) if (m := WF_KEY.match(ln)) and len(m.group(1)) == child
+                    and not ln.lstrip().startswith("-")}
+            perms = key_block(body, keys["permissions"]) if "permissions" in keys else top_perms
+            holding = []
+            if perms is None:
+                holding.append("the default token (no permissions: set)")
+            elif re.search(r"\bwrite\b|write-all", perms):
+                holding.append("a write permission")
+            if re.search(r"\bsecrets\.", "\n".join(body)):
+                holding.append("a secret")
+            if not holding:
+                continue
+            job_gate = "if" in keys and AUTHOR_GATE.search(key_block(body, keys["if"]))
+            for k, ln in enumerate(body):
+                um = USES_LINE.match(ln)
+                if not um or not any(um.group(2).lower().startswith(x + "@") for x in AI_AGENT_ACTIONS):
+                    continue
+                step = k
+                while step > 0 and not body[step].lstrip().startswith("-"):
+                    step -= 1
+                step_text = key_block(body, step)
+                ifs = [key_block(step_text.splitlines(), j) for j, s in enumerate(step_text.splitlines())
+                       if re.match(r"\s*(?:-\s+)?if\s*:", s)]
+                if job_gate or any(AUTHOR_GATE.search(x) for x in ifs):
+                    continue
+                found += 1
+                emit("FC-D09", "warn", "bad", {"rel": rel, "line": a + k + 1, "job": job,
+                                              "action": um.group(2).split("@", 1)[0], "triggers": ", ".join(untrusted),
+                                              "holding": " and ".join(holding)})
+                emit("FC-D09", "info", "hint", {"job": job})
+    if not found and not unread:
+        emit("FC-D09", "pass", "good", {"count": len(files), "s": "s" * (len(files) != 1)})
+
+
+def check_registry_token_workflows(root: Path) -> None:
+    """FC-D10: a registry token read as `secrets.*` in any workflow, not
+    only release.yml. A long-lived token publishes as long as it is valid;
+    the registry's trusted publisher (OIDC) needs none."""
+    files = workflow_files(root)
+    if not files:
+        emit("FC-D10", "info", "none")
+        return
+    found = unread = 0
+    for p in files:
+        rel = p.relative_to(root).as_posix()
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            unread += 1
+            emit("FC-D10", "unknown", "unread", {"rel": rel}, reason="unreadable")
+            continue
+        names: dict[str, int] = {}
+        # Every line but a comment: a `run: |` block reads secrets too.
+        for n, ln in enumerate(text.splitlines(), 1):
+            if ln.lstrip().startswith("#"):
+                continue
+            for m in REGISTRY_TOKEN_SECRET.finditer(ln):
+                names.setdefault(m.group(1), n)
+        for name, n in sorted(names.items(), key=lambda x: x[1]):
+            found += 1
+            emit("FC-D10", "warn", "bad", {"rel": rel, "line": n, "name": name})
+            emit("FC-D10", "info", "hint", {"name": shlex.quote(name)})
+    if not found and not unread:
+        emit("FC-D10", "pass", "good", {"count": len(files), "s": "s" * (len(files) != 1)})
 
 
 def md_front_matter_name(text: str) -> str:
@@ -7045,6 +7251,9 @@ def main() -> int:
                     help="also report what else on this machine can push to github.com (gitlab.com with --host gitlab): "
                          "gh accounts, git helpers, ~/.netrc; and a production database URL in the environment, "
                          ".env* files or the env of .claude/settings*.json")
+    ap.add_argument("--experimental", action="store_true",
+                    help="also run the experimental reads of the workflows (#1114), which ci / floor-check does not "
+                         "run until they are shown not to be noise")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--print-adoption", action="store_true",
                     help="print .plinth-adoption.yml as JSON, in the shape of scripts/plinth-adoption.schema.json, and "
@@ -7238,6 +7447,9 @@ def main() -> int:
     if a.credentials:
         check_credentials(root, host)
         check_database_urls(root)
+    if a.experimental and host != "gitlab":
+        check_agent_workflows(root)
+        check_registry_token_workflows(root)
 
     if out_format == "json":
         # The verdicts file first: when it cannot be written, the one
