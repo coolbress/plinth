@@ -1,0 +1,15 @@
+### Changed
+
+- The README opens with plinth's mark (`docs/assets/plinth-mark.svg`, one
+  file for light and dark themes) and plinth's two halves: the groundwork a
+  project stands on, which `/plinth:new-project` lays in a new repository and
+  GitHub enforces, and the workflow experienced engineers follow, which
+  plinth guides step by step, with `/plinth:guide` naming the next command.
+  The install comes a screen earlier, a table lists what the groundwork sets
+  up in plain words, the workflow is one short path with its two key steps,
+  and a shortened real read-only check shows an existing project. The old
+  "What plinth is" paragraph is folded into these; the limits follow unchanged,
+  under "Honest limits" and "Supported, and outside", and the sections from "Install, in detail" down
+  stay as they were. The old "What you get" section is now "Skills and
+  dependencies"; markdownlint allows the `p` and `img` elements the mark
+  needs (#1268).
