@@ -415,7 +415,7 @@ as written:
 | # | Row | Default when not asked | Flag |
 | --- | --- | --- | --- |
 | 1 | Repository and host | `owner/name` on GitHub, or on GitLab.com; a bare name is shown under the login | `--host=github` or `--host=gitlab`, and the name |
-| 2 | Kind | The archetype of step 4, for `web` or `dashboard` where it runs, for `cli` on GitHub whether it runs on GitHub on a schedule, and whether it calls Claude | `--archetype=`, `--hosting=` for `web` or `dashboard`, `--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub, and `--calls-claude` or `--no-calls-claude` |
+| 2 | Kind | The archetype of step 4, for `web` or `dashboard` where it runs, for `cli` on GitHub whether it runs on GitHub on a schedule, and whether it calls Claude | `--archetype=`, `--hosting=` for `web` or `dashboard`, `--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub, and `--calls-claude` or `--no-calls-claude` for `cli`, `dashboard` or `backend` on GitHub |
 | 3 | Visibility | The answer of step 7 | `--public` or `--private` |
 | 4 | License | MIT for a public project, Proprietary for a private one | `--license=mit`, `--license=apache-2.0` or `--license=proprietary` |
 | 5 | Third-party reviewer | None | `--no-third-party-review` or `--third-party-review` |
@@ -557,8 +557,8 @@ before the run (below) asks nothing when typed again: the host
 `--private`, `--license=`, `--dir=` with the home directory written out
 as an absolute path, the description's, `--records-language=`, and on
 GitHub the reviewer's, the code of conduct's (none when the owner's
-applies), for `cli`, `--scheduled-run` or `--no-scheduled-run`, and
-`--calls-claude` or `--no-calls-claude`. For `web`, add `--custom-user-model` without asking, unless
+applies), for `cli`, `--scheduled-run` or `--no-scheduled-run`, and for
+`cli`, `dashboard` or `backend`, `--calls-claude` or `--no-calls-claude`. For `web`, add `--custom-user-model` without asking, unless
 the arguments give `--no-custom-user-model`: the new
 project starts with its own user model (`accounts.User`), which Django
 sets before the first `migrate` and which is changed later only by hand;

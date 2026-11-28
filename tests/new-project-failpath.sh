@@ -2381,7 +2381,8 @@ for phrase in 'A chatbot, an assistant or AI answers calls Claude: in a terminal
               'A check stopping with "does not ask calls_claude" means an older template: say so, offer `--no-calls-claude`.' \
               'With `--calls-claude`: an Anthropic API key later, billed per use up to its spend limits; never typed into this chat.' \
               '"I recommend `ARCHETYPE`, calling Claude: `REASON`"' \
-              ', and `--calls-claude` or `--no-calls-claude` |'; do
+              '`--calls-claude` or `--no-calls-claude` for `cli`, `dashboard` or `backend` on GitHub |' \
+              'and for `cli`, `dashboard` or `backend`, `--calls-claude` or `--no-calls-claude`.'; do
   if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-claude "the skill says \"$phrase\""
   else bad skill-claude "the skill does not say \"$phrase\""; fi
 done
