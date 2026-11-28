@@ -6,8 +6,8 @@
   GitHub enforces, and the workflow experienced engineers follow, which
   plinth guides step by step, with `/plinth:guide` naming the next command.
   The install comes a screen earlier, a table lists what the groundwork sets
-  up in plain words, a second one each step of the workflow and what holds
-  it, and a shortened real read-only check shows an existing project. The old
+  up in plain words, the workflow is one short path with its two key steps,
+  and a shortened real read-only check shows an existing project. The old
   "What plinth is" paragraph is folded into these; the limits follow unchanged,
   under "Honest limits" and "Supported, and outside", and the sections from "Install, in detail" down
   stay as they were. The old "What you get" section is now "Skills and

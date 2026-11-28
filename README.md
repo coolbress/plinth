@@ -3,27 +3,31 @@
 
 # The groundwork laid for you. The workflow, one step at a time
 
-plinth gives a project run through an AI agent the two things experienced
-engineers take for granted: the groundwork a project stands on, and the
-workflow they follow to change it. In a new repository, `/plinth:new-project`
-lays the groundwork from the start; in one you already have,
-`/plinth:floor-check` says what is missing and changes nothing. From there,
-plinth guides each step of the workflow in plain words, and `/plinth:guide`
-names the one command to type next.
+plinth sets up your new Python project with automatic tests and other
+checks, a protected main version, a scan for exposed passwords and keys, and
+templates for recording what changed and why. Then it guides you from your
+first idea to release, one task at a time. You try the result and decide what
+goes into the project.
 
 You can start without figuring out which safeguards to turn on. Your AI agent
-does the work. You decide what to build and which changes are ready to become
-part of the project.
+does the work.
 
 Claude Code is the only supported agent today. plinth aims to support more
 agents.
 
-**Gated where a check can:** the groundwork, which GitHub enforces.
+**Gated where a check can.** On GitHub, a proposed change waits until its
+required checks pass.
 
-**Guided where it can't:** the workflow, which plinth explains and you decide,
-with the checks answering at one step.
+**Guided where it can't.** plinth helps you plan the work, try the result,
+and decide whether to accept it.
 
 You decide. The checks answer. The record remembers.
+
+A new project starts with `/plinth:new-project`. Already have a project?
+`/plinth:floor-check` reports what it could verify, suggests a fix for each
+gap it finds, and changes nothing in your project; it keeps one note on this
+machine, so the next run can say what changed. `/plinth:guide` tells you which
+command to type next.
 
 ## Install plinth
 
@@ -38,21 +42,18 @@ claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-In Claude Code, type `/plinth:new-project my-app`. You'll see the proposed
-setup in one table before anything is created
-([the tutorial](docs/tutorials/getting-started.md#create-the-repository) walks
-through each choice). From there, [run a project](docs/how-to/run-a-project.md)
-is the loop, stage by stage, and `/plinth:guide` names the next command at any
-point.
+In Claude Code, type `/`, choose `plinth:new-project` from the menu, and
+enter a name such as `my-app`. You'll see the proposed setup before anything
+is created. [Before you start](docs/tutorials/getting-started.md#before-you-start)
+says what to have ready.
 
 ## What you get
 
 ### The groundwork: gated where a check can
 
-This is what `/plinth:new-project` sets up in a new project on GitHub,
-without your having to name any of it. Each row is held by a check or a rule
-GitHub enforces, while those rules stand; on a private project, some need
-GitHub Code Security:
+Here's what plinth sets up for a new GitHub project. Each row is held by a
+check or a rule GitHub enforces, while those rules stand; on a private
+project, some need GitHub Code Security:
 
 | What is set up | What it means for you |
 | --- | --- |
@@ -61,8 +62,8 @@ GitHub Code Security:
 | A scan for exposed passwords and keys | The scan looks through the project's saved history for exposed passwords and keys. When it finds one, the check fails and tells you to revoke it. By then the secret is already on GitHub |
 | A check of new packages | plinth checks newly added or upgraded packages for serious known security problems |
 | Code scanning | GitHub's code scanner holds a change with a serious security finding. On private GitHub projects, it requires GitHub Code Security |
-| A size limit on each change | A change too large to review is sent back to be split |
-| A form for each pull request's title | The title's form is checked, so the history reads as a list of what changed |
+| A size limit on each change | A change over the line limit (400 by default) turns the check red, and its fix is to split the change. Markdown, lockfiles and the licence are left out of the count |
+| A form for each pull request's title | An automatic check checks the title's format. plinth asks the agent to explain what changed and why, so someone can read the record later |
 | The documents a project keeps: a README, a changelog, contributing rules, the agent's rules, a security policy and issue forms | Another person, or a later session, can find how the project works; a check turns red when one of them goes missing |
 | A check of the groundwork itself | A check flags some changes that weaken the setup. If a change removes that check altogether, a separate inspection can spot the missing check after the change is accepted |
 
@@ -70,15 +71,32 @@ On GitLab.com Free, the pipeline must pass as a whole before a change can be
 accepted, but GitLab does not require each check by name, and a change can
 drop a check from its own pipeline.
 
+### The workflow: guided where it can't
+
+Shape the idea → write down the tasks → build one → wait for the checks → try
+the result yourself → accept the change → release when ready.
+
+Each step is explained in plain words as you reach it, and
+`/plinth:guide` names the next command. Two of them, in short:
+
+- **Build one task.** Ask the agent to build one task and open a page showing
+  what changed, why, and what passed (a pull request). plinth asks the agent
+  to have the change reviewed by a reviewer that never saw the session; ask
+  which review ran and what it found.
+- **Accept the change.** You decide when to accept it. If the agent uses your
+  administrator login, plinth asks it to wait for your go-ahead. If you give
+  the agent a separate account and reserve merging for administrators, GitHub
+  blocks that account from merging, and you accept the change in GitHub.
+
+[Run a project](docs/how-to/run-a-project.md) has every step in full. The
+path comes from how experienced engineers run projects; whether the result is
+what you wanted stays yours to judge ([why](docs/explanation/concepts.md#about-the-process)).
+
 ### Checking an existing project
 
 Shortened from a real read-only check of
-[nexusbt](https://github.com/coolbress/nexusbt), a project made with plinth,
-on 2026-11-28. `/plinth:floor-check` was typed, and the agent ran the checker
-that skill runs, from a copy of this repository. Cut where marked `[…]`,
-among them the two items it listed (a login permission to narrow, and a newer
-template release) and the count of checks passed; its closing question is
-cut too. Nothing is reworded; bold is dropped.
+[nexusbt](https://github.com/coolbress/nexusbt), a project made with plinth.
+`[…]` marks omitted output.
 
 ```text
 You:     /plinth:floor-check
@@ -98,39 +116,6 @@ Claude:  No check failed in what was read; 2 things to look at.
          Next: type `/plinth:guide`; it names in plain words the one
          command to type next.
 ```
-
-### The workflow: guided where it can't
-
-The steps experienced engineers follow for every change, each explained in
-plain words as you reach it. `/plinth:guide` reads the project and names the
-one command to type next; [run a project](docs/how-to/run-a-project.md) has
-every step in full. Guidance does not stop anything: it is what the agent is
-asked to do, and what is yours to decide. Only the step where the checks
-answer is held by them.
-
-```mermaid
-flowchart LR
-  idea([You shape the idea]) --> plan[Plan it in tickets]
-  plan --> build[The agent builds<br/>one ticket]
-  build --> checks{Automatic checks}
-  checks -- fail --> build
-  checks -- pass --> look([You check what<br/>the checks cannot])
-  look --> merge([You decide whether<br/>to accept the change])
-  merge --> record[(GitHub keeps the record;<br/>release when ready)]
-```
-
-| Step | What you type | What happens | Held by |
-| --- | --- | --- | --- |
-| Shape the idea | `/grilling` and the idea | The agent interviews you, brings you only the decisions, and opens an issue saying what "done" means | Guidance |
-| Plan a big job | Ask for a plan, then tickets | The plan goes into one issue, cut into small tickets that say which waits for which | Guidance |
-| Build one ticket | `/implement #N` | The agent writes a failing test first where it can, then the code; a reviewer that never saw the session reads the diff; the agent opens the pull request and says in it what changed, why and how it was checked | Guidance; the result still meets the checks |
-| The checks answer | Nothing: wait | The automatic checks run on the pull request | The checks: while the rules stand, nothing merges while one fails |
-| You check | Open what changed | You look at what no check can judge: is it what you wanted | Yours |
-| You merge | Say "merge" | The agent is asked to wait for your word, then merges that one pull request; on an account of its own, you press the merge button | Guidance: an agent working with an administrator's login can still merge itself. On an account of its own, GitHub refuses its merge |
-| Release and deploy | Depends on the kind of project | A merged change goes out as the project's kind needs ([the catalog's table](skills/arsenal/SKILL.md#where-you-are-and-what-to-do-next)) | Guidance |
-
-The path comes from how experienced engineers run projects; whether the
-result is what you wanted stays yours to judge ([why](docs/explanation/concepts.md#about-the-process)).
 
 ### Where it comes from
 
