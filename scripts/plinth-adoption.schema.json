@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/coolbress/plinth/blob/main/scripts/plinth-adoption.schema.json",
+  "title": ".plinth-adoption.yml",
+  "description": "A repository's adoption record (#1112): written by the adopt pull request, read by scripts/floor-check.py, which also checks what a schema cannot (a kept id is registered and keepable, an until has not passed, started is not after today, wall_due is read as at most 30 days after started). `floor-check.py --print-adoption` prints the file in this shape; tests/floor-check-cases.sh validates every record its cases write against this file, and holds the checker's verdict on each to the schema's.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "plinth", "origin", "archetype", "started", "step"],
+  "properties": {
+    "schema": {"const": 1},
+    "plinth": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "The plinth release that wrote the file."
+    },
+    "origin": {
+      "type": "string",
+      "pattern": "^(none|other-template:\\S+)$",
+      "description": "none, or other-template:<_src_path> when another template made the repository."
+    },
+    "archetype": {
+      "type": "string",
+      "pattern": "^[a-z][a-z-]*$",
+      "description": "The archetype the person confirmed."
+    },
+    "started": {"$ref": "#/$defs/date"},
+    "step": {
+      "enum": ["files", "ci", "wall", "done"],
+      "description": "Where the adoption is: the files, the ci call, the wall, or done."
+    },
+    "wall_due": {
+      "$ref": "#/$defs/date",
+      "description": "Until this date, and only while the default branch has no rules, the wall prints as later and is not counted. Read as at most 30 days after started."
+    },
+    "kept": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/kept"}
+    }
+  },
+  "$defs": {
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "kept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "reason", "why"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^FC-[A-Z][0-9][0-9]$",
+          "description": "The check's id in scripts/floor-check.py's REGISTRY; one marked not keepable is not applied."
+        },
+        "path": {"type": "string", "minLength": 1},
+        "reason": {"enum": ["not-applicable", "deliberately-different", "later"]},
+        "why": {"type": "string", "minLength": 1},
+        "until": {"$ref": "#/$defs/date"}
+      },
+      "if": {"properties": {"reason": {"const": "later"}}},
+      "then": {"required": ["until"]}
+    }
+  }
+}
