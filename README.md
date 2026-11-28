@@ -22,9 +22,9 @@ the tests" follows that rule only while it remembers it.
 
 ## What plinth does
 
-plinth moves the rules out of the agent's instructions and into the host. It
-configures GitHub to **refuse a merge while a required check is red**, so the
-rule holds when the agent forgets it. Most of the checks run established
+plinth moves the rules a check can hold out of the agent's instructions and
+into the host. It configures GitHub to **refuse a merge while a required
+check is red**, so the rule holds when the agent forgets it. Most of the checks run established
 tools (ruff, pytest, gitleaks, CodeQL and others), a few are plinth's own; the
 host, not plinth, refuses the merge. In 2026's terms, plinth is a harness
 template: guides for the agent, and checks the host requires, not the agent.
@@ -42,9 +42,11 @@ You decide. The checks answer. The record remembers.
 
 ## What it looks like
 
-Shortened from a real run: `/plinth:floor-check` on
+Shortened from a real run on
 [nexusbt](https://github.com/coolbress/nexusbt), a project made with plinth,
-on 2026-11-28. The check only reads. Lines and paragraphs are cut, never reworded;
+on 2026-11-28. `/plinth:floor-check` was typed, and the agent ran the checker
+that skill runs, from a copy of this repository. The check only reads. Lines
+and paragraphs are cut, never reworded, and bold is dropped;
 `[…]` marks a cut inside a line.
 
 ```text
@@ -60,7 +62,7 @@ Claude:  No check failed in what was read; 2 things to look at.
               token (a key that says what a program may do on GitHub)
               without it: `docs/how-to/give-the-agent-a-token.md`
          2. Do it yourself: template: `v1.50.3` is behind `v1.52.0`,
-            the tag (a named version) plinth is tested with.
+            the tag (a named version) plinth is tested with. […]
             - Changed in the template: […]
 
          The merge: guidance. This login is the repository's admin, and
