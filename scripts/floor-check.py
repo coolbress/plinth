@@ -6142,29 +6142,38 @@ def check_approvals(repo: str, branch: str, pr: dict, reserved: str | None, netw
     role = "admin" if reserved in ("stands", "never") else "push"
     who = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
                  and (c.get("permissions") or {}).get(role) is True)
-    approvers = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
-                       and (c.get("permissions") or {}).get("push") is True)
-    how = ""
+    writers = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
+                     and (c.get("permissions") or {}).get("push") is True)
+    # GitHub counts the approvals required from anyone with write, and with
+    # code owners' review on requires, besides, one from a code owner (#1235
+    # review): the two are counted apart. An author cannot approve their own
+    # pull request, so one of theirs needs `required` from the other writers,
+    # and a code owner's needs another code owner. A team in CODEOWNERS may
+    # hold code owners that are not read: then that count is not made.
+    owners_w: list[str] = []
     teams: set[str] = set()
-    if pr.get("require_code_owner_review") is True:
+    how = ""
+    co = pr.get("require_code_owner_review") is True
+    if co:
         read_owners = codeowner_logins(root)
         owners, teams = read_owners if read_owners is not None else (None, set())
-        approvers = [a for a in approvers if a.lower() in (owners or set())]
+        owners_w = [w for w in writers if w.lower() in (owners or set())]
         how = (" (code owners' review is on, and no CODEOWNERS file is here)" if owners is None else
                " (code owners' review is on, and CODEOWNERS names no one else with write)")
-    values = {"branch": branch, "who": ", ".join(who) or "nobody", "how": how,
-              "approvers": ", ".join(approvers) or "nobody",
+    count_short = required >= 1 and len(writers) <= required
+    owner_short = co and required >= 1 and len(owners_w) <= 1
+    values = {"branch": branch, "who": ", ".join(who) or "nobody", "how": "" if count_short else how,
+              "approvers": ", ".join(writers if count_short else owners_w) or "nobody",
               "people": f"{len(who)} {'person' if len(who) == 1 else 'people'}",
               "required": f"{required} approval{'' if required == 1 else 's'}", "repo": repo}
-    # An author cannot approve their own pull request, so one of theirs needs
-    # `required` approvals from the others: fewer than required + 1 who can
-    # approve leaves it unable to merge (#1235 review). A team in CODEOWNERS
-    # may hold more approvers than are read: then the count is not made.
-    if required >= 1 and len(approvers) <= required and teams:
-        emit("FC-E35", "info", "teams", dict(values, teams=", ".join(f"@{t}" for t in sorted(teams))))
-    elif required >= 1 and len(approvers) <= required:
+    if count_short:
         emit("FC-E35", "warn", "alone", values)
-        emit("FC-E35", "info", "hint", dict(values, preset="one-person" if len(approvers) <= 1 else "two-people"))
+        emit("FC-E35", "info", "hint", dict(values, preset="one-person" if len(writers) <= 1 else "two-people"))
+    elif owner_short and teams:
+        emit("FC-E35", "info", "teams", dict(values, teams=", ".join(f"@{t}" for t in sorted(teams))))
+    elif owner_short:
+        emit("FC-E35", "warn", "alone", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="one-person"))
     elif not who:
         emit("FC-E35", "info", "nobody", dict(values, role="admin" if role == "admin" else "write"))
     elif len(who) >= 2 and required == 0:

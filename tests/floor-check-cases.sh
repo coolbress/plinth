@@ -707,6 +707,11 @@ merge_wall "a bot with admin is not a person" "FC-E35 pass" "count 0; collab o:a
 merge_wall "two approvals and two people who can approve: a WARN" "FC-E35 warn" "count 2; collab o:admin b:admin; nco" "${M[@]}"
 merge_wall "  with the two-people command, not one-person" "add-ruleset-rule.sh o/r two-people" "count 2; collab o:admin b:admin; nco" "${M[@]}"
 merge_wall "two approvals and three who can approve: a PASS" "FC-E35 pass" "count 2; collab o:admin b:admin c:write; nco" "${M[@]}"
+# The second review: the approvals come from any writer, and a code owner's
+# is required besides, so the two are counted apart: three writers, two of
+# them code owners, two approvals required, is a PASS.
+merge_wall "two approvals, three writers, two of them code owners: a PASS" "FC-E35 pass" "count 2 owners; collab o:admin alice:write bob:write; co '* @o @alice'" "${M[@]}"
+merge_wall "two approvals, three writers, one code owner: a WARN, that owner's own cannot merge" "only o can give one that counts \(code owners' review is on" "count 2 owners; collab o:admin alice:write bob:write; co '* @o'" "${M[@]}"
 merge_wall "code owners' review on, CODEOWNERS names a team and only o: not counted, an INFO" "FC-E35 info" "count 1 owners; collab o:admin agent:write; co '* @o @acme/maintainers'" "${M[@]}"
 merge_wall "  naming the team" "CODEOWNERS names @acme/maintainers, whose members are not read here" "count 1 owners; collab o:admin agent:write; co '* @o @acme/maintainers'" "${M[@]}"
 fc_out="$(FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "${M[@]}" 2>&1)"
