@@ -7,7 +7,7 @@
 # that names a tool #711 left out, fails (the must-not-pass cases first).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-script="$root/scripts/guide-state.sh"
+real="$root/scripts/guide-state.sh"
 names="$root/tests/lib/guide-names.sh"
 arsenal="$root/skills/arsenal/SKILL.md"
 work="$(mktemp -d)" && work="$(cd "$work" && pwd -P)" || { echo "guide-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
@@ -28,6 +28,8 @@ cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 # MOCK_CALLS_LOG gets one line per call, to count the calls of a run (#1145).
 [ -z "${MOCK_CALLS_LOG:-}" ] || echo "$1 $2" >> "$MOCK_CALLS_LOG"
+# GUIDE_RUN_LOG: the same, for the count every run is held to (#1180).
+[ -z "${GUIDE_RUN_LOG:-}" ] || echo "$1 $2" >> "$GUIDE_RUN_LOG"
 # MOCK_DIR holds open.json, merged.json, issues.json and all.json, and comments.json
 # when a case reads a pull request's comments; MOCK_GH_FAIL makes every call
 # fail as an unauthenticated gh does. A list is cut at --limit.
@@ -77,6 +79,10 @@ fi
 # one unless it says so, whatever day the tests run.
 if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *mergedPulls* ]]; then
   [ -n "${MOCK_HISTORY_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  # A partial error, as gh 2.x answers one (measured for #1180): the data and
+  # the errors to standard output, unfiltered, a message, exit 1.
+  [ -n "${MOCK_HISTORY_PARTIAL:-}" ] && { echo '{"data":{"lookBack":{"nodes":[]},"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],"message":"Could not resolve to a Repository with the name '"'"'o/r'"'"'."}]}'
+    echo "gh: Could not resolve to a Repository with the name 'o/r'." >&2; exit 1; }
   set -o pipefail
   if [ -f "$MOCK_DIR/history.json" ]; then cat "$MOCK_DIR/history.json"
   else echo '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":0},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":0,"nodes":[]},"firstMerges":{"nodes":[]}}}}'
@@ -102,6 +108,8 @@ if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *issueOrPullRequest* ]]; t
 fi
 if [ "$1" = api ] && [ "$2" = graphql ]; then
   [ -z "${MOCK_DEPS_LOG:-}" ] || echo deps >> "$MOCK_DEPS_LOG"
+  [ -n "${MOCK_DEPS_PARTIAL:-}" ] && { echo '{"data":{"repository":{"issues":{"nodes":[{"number":3,"blockedBy":null,"blocking":null}]}}},"errors":[{"type":"FORBIDDEN","path":["repository","issues","nodes",0,"blockedBy"],"message":"Resource not accessible by integration"}]}'
+    echo "gh: Resource not accessible by integration" >&2; exit 1; }
   [ -n "${MOCK_DEPS_FAIL:-}" ] && { echo "GraphQL: Field 'blockedBy' doesn't exist on type 'Issue' (repository.issues.nodes.0.blockedBy)" >&2; exit 1; }
   set -o pipefail
   if [ -f "$MOCK_DIR/deps.json" ]; then cat "$MOCK_DIR/deps.json"; else echo '{"data":{"repository":{"issues":{"nodes":[]}}}}'; fi | jq -r "$jqf"
@@ -181,6 +189,22 @@ jq --argjson n "$limit" --arg f "$fields" --arg l "$label" 'map(select($l == "" 
   | if $f == "" then . else map(with_entries(select(.key as $k | $f | split(",") | index($k)))) end' "$MOCK_DIR/$f" | jq -r "$jqf"
 MOCK
 chmod +x "$work/bin/gh"
+# The gh calls of one run (#1180): every case runs the script through this,
+# which counts the calls its run made and writes the count, with the case's
+# fixture and arguments, to $runs; the check near the end holds each to $cap.
+runs="$work/runs"; : > "$runs"
+script="$work/bin/guide-state"
+cat > "$script" <<WRAP
+#!/usr/bin/env bash
+log="\$(mktemp)"
+out="\$(mktemp)"
+GUIDE_RUN_LOG="\$log" "$real" "\$@" > "\$out" 2> "\$out.err"; rc=\$?
+cat "\$out"; cat "\$out.err" >&2; cat "\$out.err" >> "\$out"; rm -f "\$out.err"
+n="\$(grep -c . "$runs")"; [ -z "\${GUIDE_RUNS_OUT:-}" ] || cp "\$out" "$work/out.\$n"
+printf '%s\\t%s\\t%s\\n' "\$(grep -c . "\$log")" "\${MOCK_DIR:-none}" "\$*" >> "$runs"; rm -f "\$log" "\$out"
+exit \$rc
+WRAP
+chmod +x "$script"
 export PATH="$work/bin:$PATH"
 # floor-check's reads (#904) come from fixtures here, never the network: an
 # empty folder is a 404 for each, which it says as not read.
@@ -980,6 +1004,13 @@ grep -qxF "ticket to take: #4, not blocked; the lowest number of the 2 left; Git
   grep -qxF 'command: /implement #4' <<<"$out" && grep -qxF 'skipped: 1 of 3 ready-for-agent; blocked by an open issue: #3 on #2' <<<"$out" &&
   ok "the dependencies not read: the bodies choose, the line says not read, the rest of the guide still read" ||
   { bad "the dependencies not read"; grep -E 'ticket|skipped|command|where' <<<"$out" | sed 's/^/        /'; }
+# A partial GraphQL error (#1180): the read started beside the others still
+# says it was not read, with gh's message, and nothing else moves.
+out="$(MOCK_DEPS_PARTIAL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "ticket to take: #4, not blocked; the lowest number of the 2 left; GitHub's issue dependencies: not read (gh: Resource not accessible by integration)" <<<"$out" &&
+  grep -qxF 'command: /implement #4' <<<"$out" &&
+  ok "the dependencies with a partial GraphQL error: not read, gh's message, the bodies choose" ||
+  { bad "the dependencies with a partial error"; grep -E 'ticket|command' <<<"$out" | sed 's/^/        /'; }
 log="$work/deps.log"; : > "$log"
 MOCK_DEPS_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
 [ "$(grep -c . "$log")" = 1 ] && ok "three ready tickets: the dependencies are one call" || bad "dependencies read $(grep -c . "$log") times for three ready tickets"
@@ -1156,7 +1187,7 @@ grep -qx 'where: not read' <<<"$out" && ! grep -q '^command:' <<<"$out" &&
 
 # A table that lost a row the guide looks for stops with exit 1, never guesses.
 mkdir -p "$work/plugin/skills/arsenal" "$work/plugin/skills/guide" "$work/plugin/scripts/lib"
-cp "$script" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
+cp "$real" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
 cp "$root/scripts/lib/admin-reach.sh" "$root/scripts/lib/stage-table.sh" "$work/plugin/scripts/lib/"
 cp "$root/skills/guide/steps.md" "$work/plugin/skills/guide/"
 grep -v '^| An idea in your own words' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
@@ -1669,6 +1700,12 @@ grep -qxF "so far: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "tot
 state "GitLab: so far not read" "$work/gitlab" "so far: not read (the guide reads GitHub only)"
 grep -qxF "release due: not read (HTTP 502: Bad Gateway)" <<<"$out" && ok "the history read failing: release due not read" ||
   bad "the history read failing: $(grep '^release due' <<<"$out")"
+out="$(MOCK_HISTORY_PARTIAL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+m="not read (gh: Could not resolve to a Repository with the name 'o/r'.)"
+grep -qxF "so far: $m" <<<"$out" && grep -qxF "started: $m" <<<"$out" && grep -qxF "look back: $m" <<<"$out" &&
+  [ "$(others "$out")" = "$(others "$base")" ] &&
+  ok "the history read with a partial GraphQL error: not read, gh's message, the rest unchanged" ||
+  { bad "the history read with a partial error"; diff <(others "$base") <(others "$out") | head; grep -E '^(started|so far|look back)' <<<"$out" | sed 's/^/        /'; }
 
 # ── a release due (#1077) ─────────────────────────────────────────────────
 # The last tag comes from the history read; the merges since it from the
@@ -2154,6 +2191,17 @@ grep -q 'CLAUDE_PLUGIN_ROOT' <<<"$out" && bad "the printed table still carries \
   ok "the printed table names the plugin's own path, not the variable"
 printf '%s\n' "$out" > "$work/printed"
 "$names" "$arsenal" "$work/printed" >/dev/null && ok "what the script prints names only the table's commands" || bad "the script's output names something outside the table"
+
+# Every run's gh calls, held to the cap (#1180): the most of any one run.
+# GUIDE_RUNS_OUT, when set, keeps the counts for a reading after the run.
+[ -z "${GUIDE_RUNS_OUT:-}" ] || { mkdir -p "$GUIDE_RUNS_OUT" && cp "$runs" "$GUIDE_RUNS_OUT/runs.tsv" &&
+  for f in "$work"/out.*; do [ -e "$f" ] && sed "s|$work|WORK|g" "$f" > "$GUIDE_RUNS_OUT/${f##*/}"; done; }
+cap=11
+most="$(sort -t "$(printf '\t')" -k1,1nr "$runs" | head -1)"
+over="$(awk -F '\t' -v c="$cap" '$1 > c' "$runs")"
+f="$(cut -f2 <<<"$most")"
+if [ -s "$runs" ] && [ -z "$over" ]; then ok "every run makes at most $cap gh calls: $(grep -c . "$runs") runs, the most $(cut -f1 <<<"$most") (fixture ${f##*/})"
+else bad "runs over $cap gh calls:"; awk -F '\t' '{ n = split($2, p, "/"); print "        " $1 " calls: fixture " p[n] " " $3 }' <<<"$over" | head; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
