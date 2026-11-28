@@ -1,0 +1,12 @@
+# zizmor, for plinth's own workflows (tests/workflow-lint.sh) (#1220).
+# self-repository (from zizmor 1.33) asks for GitHub's `$/...` form of a local
+# reusable workflow instead of `./.github/workflows/...`. It is off here:
+# - every call it names is to a workflow in this same repository, at the same
+#   commit, so the form does not change what runs;
+# - its severity is low;
+# - consumers' run (python-ci.yml) reports medium and above only, where a new
+#   project's workflows show nothing.
+# Moving the callers to `$/...` is a follow-up, named in #1220's pull request.
+rules:
+  self-repository:
+    disable: true
