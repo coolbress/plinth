@@ -23,19 +23,35 @@ page="${1:-$root/docs/reference/decisions-in-force.md}"
 [ -f "$page" ] || { echo "stale-decision-markers: no page at $page" >&2; exit 2; }
 command -v gh >/dev/null 2>&1 || { echo "stale-decision-markers: gh is not installed; it reads each marker's issue" >&2; exit 2; }
 
-# line<TAB>ref, one per ref a marker names; the page's own example (`#N`) has no number and is not one.
+# line<TAB>ref, one per ref a marker names. The page's own example (`#N`) is
+# no marker. Every other `decided; not built yet` must read as one: then `: `,
+# refs separated by `, `, and `)`. Anything else is printed as
+# line<TAB>?<TAB>text, and is not passed: a marker this cannot read would
+# otherwise be counted nowhere.
 refs="$(awk '{
-  s = $0
-  while (match(s, /not built yet: [^)]*\)/)) {
-    inner = substr(s, RSTART + 15, RLENGTH - 16); s = substr(s, RSTART + RLENGTH)
-    n = split(inner, parts, /, */)
-    for (i = 1; i <= n; i++) if (parts[i] ~ /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#[0-9]+$/) print NR "\t" parts[i]
+  s = $0; c = 0
+  while (match(s, /decided; not built yet/)) { c++; s = substr(s, RSTART + RLENGTH) }
+  s = $0; ok = 0
+  while (match(s, /decided; not built yet: [^)]*\)/)) {
+    ok++
+    inner = substr(s, RSTART + 24, RLENGTH - 25); s = substr(s, RSTART + RLENGTH)
+    n = split(inner, parts, /, /)
+    for (i = 1; i <= n; i++) {
+      if (parts[i] ~ /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#[0-9]+$/) print NR "\t" parts[i]
+      else if (parts[i] != "#N") print NR "\t?\t" parts[i]
+    }
   }
+  if (c > ok) print NR "\t?\t" "decided; not built yet, not followed by: <refs>)"
 }' "$page")"
 
 stale=0; unread=0; person=0; read_n=0; seen=""
-while IFS=$'\t' read -r line ref; do
+while IFS=$'\t' read -r line ref what; do
   [ -n "$ref" ] || continue
+  if [ "$ref" = "?" ]; then
+    unread=$((unread + 1))
+    echo "not read: line $line: a 'not built yet' marker that is not '(decided; not built yet: #N, owner/repo#N)': $what"
+    continue
+  fi
   case "$ref" in
     \#*) repo="coolbress/plinth"; n="${ref#\#}" ;;
     *)   repo="${ref%#*}"; n="${ref##*#}" ;;
@@ -64,7 +80,7 @@ done <<<"$refs"
 
 total="$(grep -c . <<<"$refs" || true)"
 if [ "$unread" -gt 0 ]; then
-  echo "stale-decision-markers: $unread of $total marker reference(s) not read in $(basename "$page")" >&2; exit 2
+  echo "stale-decision-markers: $unread of $total marker reference(s) not read in $(basename "$page"); the markers are not passed" >&2; exit 2
 elif [ "$stale" -gt 0 ]; then
   echo "stale-decision-markers: $stale stale marker(s) in $(basename "$page"); remove each before the release" >&2; exit 1
 fi

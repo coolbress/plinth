@@ -72,6 +72,12 @@ run "$unread"
 [ "$rc" = 2 ] && grep -q '^not read: line 4: coolbress/plinth-template#5' <<<"$out" \
   && ok "an issue gh cannot read fails (exit 2), named: not passed" || bad "unread (rc=$rc)" "$out"
 
+cp "$page" "$tmp/odd.md"
+printf -- '- Written another way. 2026-11-26, #9 (decided; not built yet: #1 and #2)\n- Wrapped. 2026-11-26, #10 (decided; not built yet\n' >> "$tmp/odd.md"
+out="$(STATES="$all_open" "$script" "$tmp/odd.md" 2>&1)"; rc=$?
+[ "$rc" = 2 ] && grep -q "^not read: line 8: .*#1 and #2" <<<"$out" && grep -q "^not read: line 9: .*not followed by" <<<"$out" \
+  && ok "a marker written another way, or wrapped, is not read and fails (exit 2), named" || bad "odd markers (rc=$rc)" "$out"
+
 out="$("$script" "$tmp/none.md" 2>&1)"; rc=$?
 [ "$rc" = 2 ] && ok "no page: exit 2, not a pass" || bad "no page (rc=$rc)" "$out"
 
