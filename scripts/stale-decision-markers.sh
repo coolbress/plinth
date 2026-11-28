@@ -35,6 +35,8 @@ refs="$(awk '{
   while (match(s, /decided; not built yet: [^)]*\)/)) {
     ok++
     inner = substr(s, RSTART + 24, RLENGTH - 25); s = substr(s, RSTART + RLENGTH)
+    # A marker naming no reference is not read either (review on #1253).
+    if (inner !~ /[^ ]/) { print NR "\t?\t" "decided; not built yet: names no reference"; continue }
     n = split(inner, parts, /, /)
     for (i = 1; i <= n; i++) {
       if (parts[i] ~ /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#[0-9]+$/) print NR "\t" parts[i]
