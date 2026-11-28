@@ -176,6 +176,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Each acceptance criterion met is ticked; one left unticked is named in the Outcome. 2026-10-03, #294
 - Whoever merges a pull request that names an issue ticks the criteria it met, closed or not. 2026-10-11, #489
 - After a merge, `merge-when-green.sh` prints the named issues' unticked criteria and a missing ending. 2026-10-11, #490
+- `merge-when-green.sh` stops on what is already visible (an unanswered inline comment, a failed check on the head, a conflict) before `--update` and the checks wait, and names a job GitHub left hanging instead of re-running it. 2026-11-28, #1264
 - An issue title is one sentence; a template-only ticket is filed in plinth-template. 2026-10-31, #746
 - A defect is a bug whoever finds it. 2026-11-18, #957
 - Re-grades go into the one living scorecard, not new issues. 2026-10-28, #643

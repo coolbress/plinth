@@ -351,6 +351,15 @@ release needs a green run on the commit it tags, or on a commit with its tree
    by the run started last; one still running holds the merge. Merging on a count that was printed but not checked
    let two unread findings through once (#306); this is the check.
 
+   It reads what is already visible first, before `--update` and before
+   waiting on the checks (#1264). An inline comment with no reply, a check
+   that finished on the head and is not green, or a merge conflict with the
+   base stops it there. A read that fails stops nothing. While it waits, a
+   check whose Actions job stays in progress after its run has completed
+   stops it with the job's `gh run rerun <run> --job <job>` line, which you
+   run; it re-runs nothing itself. A check still pending after two hours
+   (`MERGE_CHECKS_WAIT`) is not green.
+
    One check state is not green and still passes: a neutral `CodeQL` on a
    pull request whose author is `dependabot[bot]` and whose head has no
    `Analyze (...)` run (#872). Code scanning's default setup starts no
