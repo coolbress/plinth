@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web|dashboard] [--hosting=render|railway|digitalocean|fly|vps|home|local] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--scheduled-run|--no-scheduled-run] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web|dashboard] [--hosting=render|railway|digitalocean|fly|vps|home|local] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--scheduled-run|--no-scheduled-run] [--calls-claude|--no-calls-claude] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -143,6 +143,8 @@ it before the first question. In order:
 4. **The archetype recommendation**: the person always picks. For `cli`
    on GitHub, whether it also runs on GitHub on a schedule is part of it:
    a schedule word with the computer off recommends `--scheduled-run`.
+   A chatbot, an assistant or AI answers recommends the kind its interface
+   fits with `--calls-claude`.
 5. **Where a web app runs**, for `web` on GitHub with no `--hosting=`; the
    person can read `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`
    first. **Where a dashboard runs**, for `dashboard` on GitHub with no
@@ -225,6 +227,13 @@ a download under Artifacts on the run's page, never a commit. The Actions
 allowlist and the ruleset are the same as without it: the workflow calls
 GitHub's own actions only. With `--host gitlab` the script refuses it before
 it reads anything on GitLab: a pipeline schedule was not tried.
+
+`--calls-claude` (cli, dashboard or backend, GitHub only) adds the Anthropic
+SDK, `src/<package>/claude.py` (the one place that calls it), tests that use
+a fake Claude and need no key, and README steps for the key and its spend
+limits. The key is never asked and never typed into the chat: the person
+makes it later and puts it in `.env`. With `--host gitlab` the script refuses
+it before it reads anything on GitLab.
 
 With `--host gitlab` the target is a GitLab.com project. It checks `glab`
 (installed, recent enough, logged in to gitlab.com, with the api scope where

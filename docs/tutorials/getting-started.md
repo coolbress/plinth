@@ -174,6 +174,12 @@ you can type instead:
   in a public repository GitHub turns the schedule off after 60 days with
   no activity. `--no-scheduled-run`, the default, runs it on your computer
   only.
+- `--calls-claude` (`cli`, `dashboard` or `backend`, GitHub only): the
+  project calls Claude, a chatbot or an assistant among them. It gets the
+  Anthropic SDK, the one place that calls it, tests that use a fake Claude
+  and need no key, and README steps: make the API key later in a workspace
+  of its own, set its spend limit and the organization's, and never paste it
+  into a chat. `--no-calls-claude`, the default, adds none of it.
 - `--third-party-review`: the reviewer's check, for an account with a code
   reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
   `--no-third-party-review` says no without being asked.

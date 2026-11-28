@@ -58,8 +58,8 @@ git_floor="${PLINTH_DOOR_GIT_FLOOR:?run it as new-project.sh <name> --host gitla
 glab_floor="1.122.0"
 gitlab="gitlab.com"
 
-usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--hosting=local] [--no-scheduled-run] [--preflight] [--check]"
-gl_place=""; preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""; desc=""; desc_said=""; lang=""; no_sched=0
+usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--hosting=local] [--no-scheduled-run] [--no-calls-claude] [--preflight] [--check]"
+gl_place=""; preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""; desc=""; desc_said=""; lang=""; no_sched=0; no_claude=0
 for a in "$@"; do case "$a" in
   --preflight)   preflight=1 ;;
   --check)       check=1 ;;
@@ -91,6 +91,10 @@ for a in "$@"; do case "$a" in
   # too. Saying no to it is what GitLab gets.
   --no-scheduled-run) no_sched=1 ;;
   --scheduled-run) echo "--scheduled-run is for GitHub only: the scheduled run is a GitHub Actions workflow, and a GitLab pipeline schedule was not tried; nothing was read or created"$'\n'"  fix: drop --scheduled-run and start the command on your computer (cron, launchd), or drop --host gitlab to make it on GitHub" >&2; exit 2 ;;
+  # Calling Claude (#1071) is GitHub only for now: nothing was tried on
+  # GitLab, and the template refuses it there too.
+  --no-calls-claude) no_claude=1 ;;
+  --calls-claude) echo "--calls-claude is for GitHub only for now: nothing was tried on GitLab; nothing was read or created"$'\n'"  fix: drop --calls-claude and add the Anthropic SDK by hand later, or drop --host gitlab to make it on GitHub" >&2; exit 2 ;;
   --custom-user-model|--no-custom-user-model) echo "$a is for --archetype=web, which is made on GitHub only; nothing was read or created"$'\n'"  fix: drop $a, or drop --host gitlab" >&2; exit 2 ;;
   -*)            echo "unknown option for --host gitlab: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
@@ -102,6 +106,7 @@ case "$vis_said" in *+*-*|*-*+*) echo "--private and --public: choose one"$'\n'"
 case "$desc_said" in *+*-*|*-*+*) echo "--description and --no-description: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 answers_fit "$usage" "$desc" "$lang"
 [ "$no_sched" = 0 ] || [ "$arch" = cli ] || { echo "--no-scheduled-run is for --archetype=cli only"$'\n'"$usage" >&2; exit 2; }
+case "$arch" in cli|dashboard|backend) ;; *) [ "$no_claude" = 0 ] || { echo "--no-calls-claude is for --archetype=cli, dashboard or backend only"$'\n'"$usage" >&2; exit 2; } ;; esac
 # Before any tool or login is read, so nothing on GitLab is touched; the
 # template's own validator says the same, later (#615).
 [ "$arch" != web ] || stop "the web archetype is GitHub only: its deployment and checks are built for GitHub" \
