@@ -1780,9 +1780,11 @@ def write_refusals(text: str, repo: str, machine: frozenset[str] | set[str] = fr
         return " " * len(m.group(0))   # same length: offsets still name the line
 
     plain = re.sub(re.escape(repo), blank, text, flags=re.IGNORECASE)
-    plain = re.sub(rf"(?<![\w-]){re.escape(repo.split('/', 1)[0])}(?![\w-])", blank, plain, flags=re.IGNORECASE)
+    plain = re.sub(rf"(?<![A-Za-z0-9-]){re.escape(repo.split('/', 1)[0])}(?![A-Za-z0-9-])", blank, plain,
+                   flags=re.IGNORECASE)
     for x in names:
-        for m in re.finditer(rf"(?<![\w-]){re.escape(x)}(?![\w-])", plain, re.IGNORECASE):
+        # Bounded as machine values are: `_name_` emphasis does not hide it.
+        for m in re.finditer(rf"(?<![A-Za-z0-9-]){re.escape(x)}(?![A-Za-z0-9-])", plain, re.IGNORECASE):
             at(m.start(), "this machine's user or host name")
     # Every machine value, wherever it stands: Markdown markers or punctuation
     # around it (`**login**`, `login!`) do not hide it.

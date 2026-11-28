@@ -93,11 +93,16 @@ for path, who in (("/Users/alice/work", "alice"), ("/home/carol/x", "carol"), ("
     refused(f"a home path ({path.split(who)[0]}<name>)", f"Ran in {path}", "a home path", secret=who)
 refused("this machine's user name", "Checked on octo-dev's laptop", "this machine's user or host name", secret="octo-dev")
 refused("this machine's host name", "Checked on build-box", "this machine's user or host name", secret="build-box")
+for shown in ("Checked as _octo-dev_.", "Checked on **build-box**!", "Checked as `octo-dev`"):
+    refused(f"a local name inside Markdown: {shown.split()[-1][:2]}…", shown, "this machine's user or host name",
+            secret="octo-dev" if "octo" in shown else "build-box", rs=[])
 refused("another repository's slug as a reference", "Moved from x/y#3", "another repository's slug", secret="x/y")
 refused("another repository's slug as a github.com path", "From github.com/x/y", "another repository's slug")
 refused("another repository's commit", "Since x/y@1234567", "another repository's slug", secret="x/y")
 refused("a GitLab merge request in another project", "See g/p!3", "another repository's slug")
 refused("a GitLab subgroup's issue", "See a/b/c#3", "another repository's slug")
+passes("the audited repository's owner in emphasis, though it is this machine's user", "By _octo-dev_.\n",
+       names={"octo-dev"}, repo="octo-dev/r")
 passes("the audited repository whose owner is this machine's user and the gh login",
        "See https://github.com/octo-dev/r/pull/3 and octo-dev/r#4.\n", names={"octo-dev"}, repo="octo-dev/r",
        rs=[{"id": "FC-G03", "key": "good", "state": "pass", "kept": None,
