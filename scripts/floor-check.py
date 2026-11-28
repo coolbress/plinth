@@ -493,6 +493,8 @@ def _project() -> tuple[dict, ...]:
               fix="pass --archetype, or keep .copier-answers.yml",
               messages={"none": "no archetype (no .copier-answers.yml, no --archetype); conditional items skipped",
                         "plain": "archetype {archetype}: no container image, .env.example or JSON logs required",
+                        "claude": "archetype {archetype}: no container image or JSON logs required; .env.example "
+                                  "required, naming ANTHROPIC_API_KEY (calls_claude: true)",
                         "service": "archetype {archetype}: container image, .env.example and JSON logs required{render}"}),
         check("FC-C04", "read as a JavaScript or TypeScript project", states=("info",), handoff="person",
               docs=PROJECT_DOCS, hosts=("github",), fix="",
@@ -4332,8 +4334,13 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
     if archetype is None:
         emit("FC-C03", "unknown", "none", reason="no archetype")
         return
+    # A project that calls Claude (plinth-template's `calls_claude`, #1071)
+    # names its key in .env.example, whatever its archetype.
+    claude_keys = ("ANTHROPIC_API_KEY",) if answered_true(answers, "calls_claude") else ()
     if archetype not in CONDITIONAL_ARCHETYPES:
-        emit("FC-C03", "info", "plain", {"archetype": archetype})
+        emit("FC-C03", "info", "claude" if claude_keys else "plain", {"archetype": archetype})
+        if claude_keys:
+            check_env_example(project, claude_keys)
         if on_render:
             check_render_yaml(project, archetype)
         if archetype in PACKAGE_ARCHETYPES:
@@ -4344,7 +4351,7 @@ def check_project(project: Path, root: Path, archetype: str | None, host: str = 
         return
     emit("FC-C03", "info", "service", {"archetype": archetype, "render": ", and render.yaml" if on_render else ""})
     check_dockerfile(project)
-    check_env_example(project)
+    check_env_example(project, claude_keys)
     check_json_logs(project)
     if on_render:
         check_render_yaml(project, archetype)
@@ -5018,14 +5025,15 @@ def ruleset_for(data: dict, archetype: str | None, code_scanning: bool = True) -
     return data
 
 
-def check_env_example(project: Path) -> None:
+def check_env_example(project: Path, required: tuple[str, ...] = ()) -> None:
+    """`required`: names .env.example must list even where no line under src/ reads them."""
     e = project / ".env.example"
     if not verdict("FC-C27", e.is_file()):
         return
     pattern = re.compile(r"""os\.(?:environ\s*\[\s*|environ\.get\s*\(\s*|getenv\s*\(\s*)['"]([A-Z_][A-Z0-9_]*)['"]""")
     used = {m for f in (project / "src").rglob("*.py") for m in pattern.findall(read(f))} if (project / "src").is_dir() else set()
     documented = set(re.findall(r"^\s*#?\s*([A-Z_][A-Z0-9_]*)\s*=", read(e), re.MULTILINE))
-    missing = sorted(used - documented)
+    missing = sorted((used | set(required)) - documented)
     verdict("FC-C28", not missing, {"missing": missing})
 
 
