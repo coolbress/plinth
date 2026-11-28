@@ -87,6 +87,11 @@
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 checker="$here/floor-check.py"
+# copier_pinned: the line's copier runs with its dependencies at the versions
+# tools/copier/uv.lock holds, given to uv as UV_CONSTRAINT, so the line itself
+# names no path on this machine (#1220).
+# shellcheck source=scripts/lib/copier-pin.sh
+. "$here/lib/copier-pin.sh"
 state_name="plinth-template-update"
 
 # A path as a shell word, for a line the user or the skill runs as printed:
@@ -193,7 +198,7 @@ fi
 if [ "$host" = gitlab ]; then noun="merge request"; hostname=GitLab; cli=glab
 else noun="pull request"; hostname=GitHub; cli=gh; fi
 
-for tool in git "$cli" python3 uvx; do
+for tool in git "$cli" python3 uv uvx; do
   command -v "$tool" >/dev/null 2>&1 || die "$tool is not installed"
 done
 # A path segment for GitLab's API: the project's path or a branch, encoded whole.
@@ -1208,7 +1213,7 @@ rehearse_run() { # <cmd>
   r="$tmp/rehearsal"
   { git clone -q --shared --no-checkout "$top" "$r" && git -C "$r" checkout -q --detach "$base"; } \
     || die "could not make the rehearsal clone of origin/$default; nothing was written"
-  ( cd "$r" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" < /dev/null ) > "$tmp/rehearsal.log" 2>&1
+  ( cd "$r" && copier_pinned "$here/.." env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" < /dev/null ) > "$tmp/rehearsal.log" 2>&1
 }
 # copier's own render of the answers recorded at the base, at <ref>, into
 # $tmp/old-render, a folder holding nothing else: exactly what the template
@@ -1222,7 +1227,7 @@ render_old() { # <cmd> <ref>
   read -ra words <<<"$prefix"
   mkdir "$tmp/old-render" && git -C "$top" show "$base:.copier-answers.yml" > "$tmp/old-render/.copier-answers.yml" \
     || { echo "could not read .copier-answers.yml at the base" > "$tmp/old-render.log"; return 1; }
-  ( cd "$tmp/old-render" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" copier recopy --defaults --overwrite --quiet \
+  ( cd "$tmp/old-render" && copier_pinned "$here/.." env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" copier recopy --defaults --overwrite --quiet \
       --vcs-ref "$2" . < /dev/null ) > "$tmp/old-render.log" 2>&1
 }
 # Is <path> at the base exactly what the old render holds there?
@@ -1680,7 +1685,7 @@ echo "Running in $wt:"
 echo "  $cmd$ans_shown"
 # As the door runs copier: without the token in its environment. The
 # answers as words of their own, never split on a space.
-( cd "$wt" && env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" ${ans_words+"${ans_words[@]}"} < /dev/null ) \
+( cd "$wt" && copier_pinned "$here/.." env -u GH_TOKEN -u GITHUB_TOKEN "${words[@]}" ${ans_words+"${ans_words[@]}"} < /dev/null ) \
   || die "copier update failed (above); nothing committed or pushed, $wt left as copier left it. To discard it: git worktree remove --force $(q "$wt") && git branch -D $branch"
 
 # When the pins disagreed at the base (#793), every plinth uses: that copier

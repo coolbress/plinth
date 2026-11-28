@@ -135,3 +135,4 @@ FC-E33 secret scanning is on, and no alert is open
 FC-E34 no registry token among the secrets while release.yml publishes through OIDC
 FC-F09 the adoption record is read
 FC-G12 no plugin from the plinth marketplace is one it no longer lists
+FC-E35 the approvals required match who can merge

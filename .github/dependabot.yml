@@ -1,8 +1,21 @@
-# Keeps the commit-SHA pins on GitHub Actions current. The repository requires
-# SHA pinning, so these are the only version bumps a workflow file ever gets.
-# To run it now instead of waiting for the week: Insights, Dependency graph,
-# Dependabot, "Recent update jobs", "Check for updates". That page answers 404
-# to a browser that is not signed in with write access.
+# Keeps two kinds of pins current, each raised as a pull request that goes
+# through the queue like any other (no automatic merge):
+# - the commit-SHA pins on GitHub Actions. The repository requires SHA
+#   pinning, so these are the only version bumps a workflow file gets;
+# - the Python tools plinth runs, each group a pyproject.toml whose pins are
+#   exact and a uv.lock with every dependency hashed (#1220): tools/lint
+#   (zizmor, ruff, mypy, for `ci / tools`) and tools/copier (the renderer the
+#   door and /plinth:template-update run). The uv ecosystem rewrites the lock
+#   with uv itself, so it stays universal (every Python and platform marker
+#   kept); the pip ecosystem's pip-compile run was measured to drop them.
+#   Two raises need a hand on the bot's pull request: zizmor's leaves
+#   python-ci.yml's `uvx zizmor@` lines behind (tests/tool-pins.sh fails
+#   until they move with it), and copier's changes the update line the
+#   floor-check fixtures record (tests/floor-check-golden.sh --write).
+# Updates wait Dependabot's default cooldown. To run it now instead of waiting
+# for the week: Insights, Dependency graph, Dependabot, "Recent update jobs",
+# "Check for updates". That page answers 404 to a browser that is not signed
+# in with write access.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -11,3 +24,11 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci(deps)"
+  - package-ecosystem: uv
+    directories:
+      - /tools/lint
+      - /tools/copier
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build(deps)"

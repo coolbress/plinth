@@ -354,7 +354,17 @@ for a in "$@"; do
 done
 exec "$REAL_GIT" "$@"
 MOCK
-printf '#!/usr/bin/env bash\nexit 0\n' > "$work/bin/uv"
+# uv: `uv export -o <file>` (scripts/lib/copier-pin.sh, #1220) writes a hashed
+# copier line there, as the lock would; anything else passes.
+cat > "$work/bin/uv" <<'MOCK'
+#!/usr/bin/env bash
+[ "${1:-}" = export ] || exit 0
+while [ $# -gt 0 ]; do
+  [ "$1" = -o ] && { printf 'copier==0.0.0 \\\n    --hash=sha256:%064d\n' 0 > "$2"; exit 0; }
+  shift
+done
+exit 1
+MOCK
 printf '#!/usr/bin/env bash\nprintf "sleep %%s\\n" "$*" >> "${GH_LOG:-/dev/null}"\nexit 0\n' > "$work/bin/sleep"   # the pause is skipped, and logged
 printf '#!/usr/bin/env bash\n[ "${MOCK_CLAUDE_OLD:-0}" = 1 ] && { echo "2.0.0 (Claude Code)"; exit 0; }\necho "2.1.290 (Claude Code)"\n' > "$work/bin/claude"
 chmod +x "$work/bin/"*
