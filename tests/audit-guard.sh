@@ -24,6 +24,11 @@ bare="$(sed 's/[[:space:]]#.*//' "$gs" | grep -nE '(^|[;&|(]|\$\()[[:space:]]*((
   | grep -v 'git_safe() { GIT_CONFIG_NOSYSTEM=1 git -c core.fsmonitor=false -c core.hooksPath=/dev/null "\$@"; }')"
 if [ -z "$bare" ] && [ "$(grep -c 'git_safe -C' "$gs")" -ge 1 ]; then ok "guide-state.sh: git runs only through git_safe, with the flags and GIT_CONFIG_NOSYSTEM=1"
 else bad "guide-state.sh: a git call outside git_safe"; printf '%s\n' "$bare" | sed 's/^/        /'; fi
+# floor-report.py, which the skill pipes the checker into, reads the checkout too.
+rep="$root/scripts/floor-report.py"
+if [ "$(grep -cE "[[(][[:space:]]*['\"]git['\"]" "$rep")" = 1 ] && grep -qF '["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C"' "$rep" \
+   && grep -q '"GIT_CONFIG_NOSYSTEM": "1"' "$rep"; then ok "floor-report.py: git runs only through git(), with the flags and GIT_CONFIG_NOSYSTEM=1"
+else bad "floor-report.py: a git call outside git(), or its flags changed"; grep -nE "[[(][[:space:]]*['\"]git['\"]" "$rep" | sed 's/^/        /'; fi
 if ! grep -qE '\["git"|subprocess\.run\(\["git' "$root/scripts/records-check.py"; then ok "records-check.py: makes no git call"
 else bad "records-check.py: makes a git call without the flags"; fi
 
@@ -68,6 +73,13 @@ python3 "$checker" --root "$repo" --no-network --sandbox --plugins --credentials
 "$root/scripts/guide-state.sh" "$repo" >/dev/null 2>&1; rc_g=$?
 if [ "$rc" -le 1 ] && [ "$rc_g" -le 1 ] && [ ! -e "$work/marker" ]; then ok "a full floor-check run and a guide-state.sh run ran (exit $rc, $rc_g) and no fsmonitor program"
 else bad "a full run crashed (exit $rc, $rc_g) or ran the repository's fsmonitor program"; fi
+rm -f "$work/marker"
+# The skill's whole pipe: the checker's JSON into floor-report.py, with --repo so
+# the reporter decides on its note (git status). Its cache goes to the work folder.
+(cd "$repo" && python3 "$checker" --root . --repo o/r --no-network --sandbox --plugins --credentials --format json 2>/dev/null \
+  | XDG_CACHE_HOME="$work/cache" python3 "$rep" --root . >"$work/report" 2>&1); rc_r=$?
+if [ "$rc_r" -le 1 ] && [ -s "$work/report" ] && [ ! -e "$work/marker" ]; then ok "the skill's pipe, checker into floor-report.py with --repo, ran (exit $rc_r) and no fsmonitor program"
+else bad "the skill's pipe crashed (exit $rc_r) or ran the repository's fsmonitor program"; sed 's/^/        /' "$work/report" | head -5; fi
 
 echo "-- one repository per run"
 if python3 - "$checker" <<'PY'
