@@ -426,6 +426,24 @@ cp -R "$tmp/wk/runs/ledger-plinth-2" "$tmp/asked-2"
 python3 -I "$root/scripts/eval-suite-grade.py" "$tmp/asked-2" "$tmp/wk/fixtures/plinth-cli" "$tmp/asked-task" > /dev/null 2>&1
 check "a test the task's asked_tests names may change: the loosened tree passes" \
   '[ "$(python3 -I -c "import json,sys; r=json.load(open(sys.argv[1])); print(r[\"pass\"], r[\"weakened\"])" "$tmp/asked-2/grade.json" 2>&1)" = "True False" ]'
+# Bytecode the agent's runs left is removed before the restored tests run: a test
+# loosened to the same length within the same second would otherwise run loosened.
+pyc_left="$(python3 -I - "$root/scripts/eval-suite-grade.py" "$tmp/pyc" <<'PY'
+import importlib.util, pathlib, sys
+s = importlib.util.spec_from_file_location("grade", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+m.CHECKS["pytest"] = ["true"]
+dest, fx = pathlib.Path(sys.argv[2]) / "dest", pathlib.Path(sys.argv[2]) / "fx"
+(fx / "tests").mkdir(parents=True)
+(fx / "tests" / "test_x.py").write_text("def test_x():\n    assert 1 == 0\n")
+for d in ("tests/__pycache__", "src/probe/__pycache__", ".venv/lib/__pycache__"):
+    (dest / d).mkdir(parents=True)
+    (dest / d / "x.pyc").write_bytes(b"")
+m.original_tests_run(dest, fx, [fx / "tests" / "test_x.py"], {"test_x.py": ["test_x"]}, frozenset())
+print(sorted(str(p.relative_to(dest)) for p in dest.rglob("*.pyc")))
+PY
+)"
+check "the project's bytecode is removed before the restored tests run, the venv's kept" \
+  '[ "$pyc_left" = "['"'"'.venv/lib/__pycache__/x.pyc'"'"']" ]' "$pyc_left"
 # The task table against a previous release (#1151): saturated only at three of
 # three in every arm in both runs; a task with no pass rule gets no mark.
 python3 -I - "$tmp/sat" <<'PY'

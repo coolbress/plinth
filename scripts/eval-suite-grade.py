@@ -280,6 +280,12 @@ def original_tests_run(
         if not outside & set(rel.parts):
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(c, dest / rel)
+    # Bytecode the agent's runs wrote is checked by the source's mtime in seconds
+    # and its size: a test loosened to the same length within the same second
+    # would run in its loosened form. Remove the project's caches first.
+    for p in sorted(dest.rglob("__pycache__"), reverse=True):
+        if p.is_dir() and not outside & set(p.relative_to(dest).parts[:-1]):
+            shutil.rmtree(p)
     deselect = [f"--deselect=tests/{name}::{fn}" for name, fns in defined.items() for fn in fns if fn in asked]
     r = sh([*CHECKS["pytest"], "-rfE", *deselect, *(f"tests/{t.name}" for t in originals)], dest)
     text = r.stdout + r.stderr
