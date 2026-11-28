@@ -2028,6 +2028,71 @@ state "an open revert of another pull request: still undo #9" "$d" "command: $un
 out="$(MOCK_DIR="$work/undo-cli" "$script" "$work/undo-cli" 2>&1)"
 grep -qF "read its log first (gh run view 31 --log-failed)" <<<"$out" && ok "  the undo note says to read the log first" || bad "the undo note does not say to read the log first"
 
+# ── a breaking-change revert and an open revert (#1203) ───────────────────
+# Every revert form ci / pr-title accepts is never undone: revert!: and
+# revert(<scope>)!: as revert: is.
+d="$(repo undo-bang)"
+for t in 'revert!: remove unsafe API' 'revert(api)!: remove unsafe API' 'revert(api): remove the endpoint' 'revert: remove the endpoint'; do
+  put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 "$t" false SUCCESS)"
+  redrun "$t (#9)" > "$d/runs.json"
+  state "main red on a revert's merge titled $t: never undo the undo" "$d" "!undo pull request" "problems: main's latest CI run fails (run 31)"
+done
+# An open revert of the breaking merge comes first, ahead of another pull
+# request's failing check: its checks running, green, or failing.
+d="$(repo undo-open-first)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 'feat: totals' false SUCCESS)"
+redrun 'feat: totals (#9)' > "$d/runs.json"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false run)" "$(pr 14 'feat: export' false FAILURE)"
+state "an open revert and another failing pull request: the revert first" "$d" \
+  "where: A pull request with checks running (step 5)" "command: /run" \
+  "note: pull request #12 reverts #9, whose merge failed main's latest CI run (run 31); it comes before any other pull request; checks pending: merge it once they are green" \
+  "!command: diagnose this: pull request #14" "!undo pull request"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)" "$(pr 14 'feat: export' false FAILURE)"
+state "  and once its checks are green: merge the revert" "$d" "where: Green, and seen working (step 6)" "command: merge #12" "!diagnose this: pull request #14"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false FAILURE)" "$(pr 14 'feat: export' false FAILURE)"
+state "  and with its own check failing: the revert is diagnosed, not the other" "$d" "command: diagnose this: pull request #12 has a failing check"
+# Review of this change: merge next names the revert too; a draft revert is
+# not merged; a revert in the type form that names #9 counts.
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)" "$(pr 14 'feat: export' false SUCCESS)"
+state "  with another green pull request: merge next is the revert, not it" "$d" "command: merge #12" \
+  "merge next: #12, the revert of #9: main stays broken until it merges, so it comes before any other" "!merge next: #14"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS | sed 's/"isDraft":false/"isDraft":true/')"
+state "  a draft revert, green: marked ready first, not merged" "$d" "command: /run" "!command: merge #12" \
+  "note: pull request #12 reverts #9, whose merge failed main's latest CI run (run 31); it comes before any other pull request; it is a draft: mark it ready for review on its page, then merge it once its checks are green"
+put "$d/open.json" "$(pr 12 'revert: take back the totals of #9' false run)"
+state "  a revert in the type form that names #9: the route, no second undo" "$d" "command: /run" "!undo pull request"
+# The second review: the revert's own Blocked by holds it, in the route and in
+# merge next, an open #14 or a number past the reads alike.
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS | jq -c '. + {body: "## Blocked by\n\n#14"}')"
+put "$d/issues.json" "$(issue 14 'Migrate the totals first' '')"
+state "  a green revert whose Blocked by #14 is open: not merged, merge next says it waits" "$d" \
+  "command: none: pull request #12 waits on its Blocked by (#14, still open)" \
+  "merge next: none: #12, the revert of #9, comes first, and it waits on its Blocked by (#14, still open)" "!command: merge #12"
+printf '[]' > "$d/issues.json"
+state "  and a Blocked by number past the reads waits too" "$d" "command: none: pull request #12 waits on its Blocked by (#14, not read)" "!command: merge #12"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)"
+state "  with no Blocked by, the green revert is merged" "$d" "command: merge #12"
+# One list (#1203): the revert forms the guide reads are ci / pr-title's.
+# The title check's pattern is read from python-ci.yml with its types as the
+# one type revert; the guide's from guide-state.sh. Each title is read by
+# both, and they must agree.
+ci_yml="$root/.github/workflows/python-ci.yml"
+ci_pat="$(sed -nE 's/.*grep -qE "\^\(\$types\)(.*)"; then$/\1/p' "$ci_yml" | head -1)"
+guide_pat="$(sed -nE "s/^revert_type='(.*)'\$/\\1/p" "$root/scripts/guide-state.sh")"
+ci_revert() { [[ "$1" != 'Revert "'*'"' ]] || return 0; grep -qE "^(revert)$ci_pat" <<<"$1"; }
+# The guide's own is_revert, read from the script, its quoted form with it.
+eval "$(grep -E '^(revert_type=|is_revert\(\))' "$root/scripts/guide-state.sh")"
+guide_revert() { is_revert "$1"; }
+disagree=""
+if [ -n "$ci_pat" ] && [ -n "$guide_pat" ]; then
+  for t in 'revert: x' 'revert!: x' 'revert(api): x' 'revert(api)!: x' 'revert(a b,c/d.e_f-g)!: x' 'Revert "feat: x"' 'revert : x' 'reverts: x' 'revert:x' 'revert(): x' 'feat: revert x' 'revert!!: x'; do
+    a=no; b=no; ci_revert "$t" && a=yes; guide_revert "$t" && b=yes
+    [ "$a" = "$b" ] || disagree="$disagree [$t: ci $a, guide $b]"
+  done
+fi
+if [ -n "$ci_pat" ] && [ -n "$guide_pat" ] && [ -z "$disagree" ]; then ok "the guide's revert forms are ci / pr-title's, title by title"
+else bad "the revert forms disagree, or a pattern was not read (ci: ${ci_pat:-none}, guide: ${guide_pat:-none}):$disagree"; fi
+
 # The row and step 7 (#1079): the undo page named; the order undo, restore,
 # reproduce and fix, incident note; a secret revoked before any history
 # rewrite; the revoke list named and in its order.
