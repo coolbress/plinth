@@ -649,6 +649,8 @@ propose_combinations() {
     fi
     echo "  $p: $n; neither side whole keeps both, so neither is the recommendation."
     echo "    The combination, the template's side with those lines kept: $pdir/$p"
+    ! grep -q '^invalid' <<<"$report" \
+      || echo "    It does not parse ($(grep '^invalid' <<<"$report" | head -n 1 | cut -f2-)): edit it, or take a side (#1233)."
     # The line is everything after the third tab, a leading tab included.
     awk -F '\t' '$1 == "risk" { l = $0; sub(/^[^\t]*\t[^\t]*\t[^\t]*\t/, "", l); printf "      + %s    (%s)\n", l, $2 }' <<<"$report"
     awk -F '\t' -v p="$p" '$1 == "risk" { l = $0; sub(/^[^\t]*\t[^\t]*\t[^\t]*\t/, "", l)

@@ -129,3 +129,5 @@ FC-G08 git config sends no Authorization header to the host
 FC-G09 ~/.netrc holds no login for the host
 FC-G10 the SSH keys that push
 FC-G11 no production database URL is within the agent's reach
+FC-F09 the adoption record is read
+FC-G12 no plugin from the plinth marketplace is one it no longer lists

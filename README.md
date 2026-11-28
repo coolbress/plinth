@@ -122,7 +122,10 @@ earlier also takes, once and in this order, `claude plugin install plinth@plinth
 and then `claude plugin uninstall taste-skill@plinth`, before `/reload-plugins`:
 Anthropic's `frontend-design` replaced `taste-skill` as plinth's page-design
 skill (#1082). `update` does not remove taste-skill; before Claude Code
-2.1.319 it does not install frontend-design either.
+2.1.319 it does not install frontend-design either. From the release after
+v2.46.0, Claude Code uninstalls taste-skill itself at the next session start
+(#1229). If the uninstall then says `not found in installed plugins`, it is
+already gone.
 Moving from v1.11.0 or earlier also takes, once and in this order,
 `claude plugin install plinth@plinth` and then `claude plugin prune`, before
 `/reload-plugins`: `mattpocock-skills` moved to plinth's marketplace under the

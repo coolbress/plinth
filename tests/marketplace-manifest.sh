@@ -54,6 +54,38 @@ check(not ("frontend-design" in entries and "taste-skill" in entries), "frontend
 for n in ("taste-skill", "impeccable", "claude-security", "sentry", "i-have-adhd", "playbook", "review"):
     check(n not in entries, f"no marketplace entry named {n}")
 
+# Retired entries (#1229): the table in docs/reference/dependency-entries.md and
+# the manifests say the same thing. A removed entry is a `renames` key mapped to
+# null, and every such key is a removed row; Claude Code uninstalls it at the
+# next session start because forceRemoveDeletedPlugins is on (measured on 2.1.326
+# and the floor 2.1.274). A dropped dependency keeps its entry.
+sys.path.insert(0, str(root / "scripts"))
+import importlib.util
+spec = importlib.util.spec_from_file_location("retired_entries", root / "scripts/retired-entries.py")
+retired_mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(retired_mod)
+try:
+    retired = retired_mod.rows((root / "docs/reference/dependency-entries.md").read_text())
+except ValueError as e:
+    retired = None
+    check(False, f"the Retired entries table reads: {e}")
+if retired is not None:
+    removed = {r["name"] for r in retired if r["kind"] == "removed"}
+    dropped = {r["name"] for r in retired if r["kind"] == "dropped"}
+    renames = market.get("renames", {})
+    check(isinstance(renames, dict) and all(v is None for v in renames.values()),
+          "renames maps every name to null: a removed entry, never a rename to another plugin (#468)")
+    check(set(renames) == removed,
+          f"renames' keys are the table's removed entries: renames {sorted(renames)}, table {sorted(removed)}")
+    check(market.get("forceRemoveDeletedPlugins") is True,
+          "forceRemoveDeletedPlugins is on: a removed entry is uninstalled at the next session start (#1229)")
+    check(not (removed & set(entries)), f"no removed entry is in plugins: {sorted(removed & set(entries))}")
+    check(not (dropped & set(names)), f"no dropped dependency is in plugin.json's dependencies: {sorted(dropped & set(names))}")
+    for r in retired:
+        want = f"claude plugin uninstall {r['name']}@plinth" if r["kind"] == "removed" else "claude plugin prune"
+        check(r["command"] == want, f"{r['name']}: the command an installed user runs is `{want}`")
+        check(r["replaced"] == "-" or r["replaced"] in entries,
+              f"{r['name']}: what replaced it, {r['replaced']}, is an entry")
+
 pinned = {n: p["source"].get("sha") for n, p in entries.items() if isinstance(p["source"], dict)}
 for n, sha in pinned.items():
     check(bool(re.fullmatch(r"[0-9a-f]{40}", sha or "")), f"{n} is pinned to a full commit SHA")

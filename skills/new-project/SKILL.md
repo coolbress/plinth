@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web|dashboard] [--hosting=render|railway|digitalocean|fly|vps|home|local] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web|dashboard] [--hosting=render|railway|digitalocean|fly|vps|home|local] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--scheduled-run|--no-scheduled-run] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -140,7 +140,9 @@ it before the first question. In order:
 1. **The host**, when there is no `--host`; then the preflight for it.
 2. **What to make**, when there is no `--archetype=`, in text.
 3. **Follow-ups**, only when that answer leaves the archetype open.
-4. **The archetype recommendation**: the person always picks.
+4. **The archetype recommendation**: the person always picks. For `cli`
+   on GitHub, whether it also runs on GitHub on a schedule is part of it:
+   a schedule word with the computer off recommends `--scheduled-run`.
 5. **Where a web app runs**, for `web` on GitHub with no `--hosting=`; the
    person can read `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`
    first. **Where a dashboard runs**, for `dashboard` on GitHub with no
@@ -215,6 +217,14 @@ login and no database. `--hosting=local` (the default) renders nothing to
 deploy; `--hosting=render` renders a `render.yaml` for one web service, on
 GitHub only: with `--host gitlab` the script refuses Render before it reads
 anything on GitLab. It has no release workflow, so no tag ruleset.
+
+`--scheduled-run` (cli only, GitHub only) also renders
+`.github/workflows/schedule.yml`, which runs the command on GitHub every day
+and by hand, even while the person's computer is off; each run's results are
+a download under Artifacts on the run's page, never a commit. The Actions
+allowlist and the ruleset are the same as without it: the workflow calls
+GitHub's own actions only. With `--host gitlab` the script refuses it before
+it reads anything on GitLab: a pipeline schedule was not tried.
 
 With `--host gitlab` the target is a GitLab.com project. It checks `glab`
 (installed, recent enough, logged in to gitlab.com, with the api scope where
