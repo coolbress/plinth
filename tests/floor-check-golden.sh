@@ -148,7 +148,8 @@ for i, e in sorted(reg.items()):
             print(f"unreached {i} {s}: {why}")
         else:
             print(f"missing {i} {s}")
-    for s in sorted(reached.get(i, set()) - set(e["states"])):
+    # `kept`: a FAIL or WARN .plinth-adoption.yml keeps (#1112), which only a keepable entry may be.
+    for s in sorted(reached.get(i, set()) - set(e["states"]) - ({"kept"} if e["keepable"] else set())):
         print(f"undeclared {i} {s}")
 print(f"registered {len(reg)}")
 PY
@@ -202,7 +203,9 @@ for f in sorted(records.glob("*.json")):
         continue   # the validator names it
     emitted = [tuple(line.split("\t", 1)[0].split(" ", 1)) for line in r["emitted"]
                if not line.startswith("crashed ")]
-    got = [(x.get("id"), x.get("state")) for x in doc.get("results", [])]
+    # A finding .plinth-adoption.yml keeps (#1112) is an info carrying `kept`
+    # in the document, and `kept` in the trace.
+    got = [(x.get("id"), "kept" if x.get("kept") else x.get("state")) for x in doc.get("results", [])]
     for s in ("unknown", "review"):
         seen[s] += any(x.get("state") == s for x in doc.get("results", []))
     seen["not_evaluated"] += bool(doc.get("not_evaluated"))
@@ -211,7 +214,7 @@ for f in sorted(records.glob("*.json")):
               + next((f"; first difference at {i}: {a} against {b}" for i, (a, b) in enumerate(zip(emitted, got)) if a != b), ""))
     if r["json"]["exit"] != r["exit"] or doc.get("exit") != r["exit"]:
         print(f"differs: {args}: exit {r['exit']} as text, {r['json']['exit']} with --format json, {doc.get('exit')} in the document")
-    counts = {s: sum(x == s for _, x in emitted) for s in {x for _, x in emitted}}
+    counts = {s: sum(x == s or (s == "info" and x == "kept") for _, x in emitted) for s in {x for _, x in emitted} - {"kept"}}
     if any(doc.get("summary", {}).get(s) != c for s, c in counts.items()):
         print(f"differs: {args}: the summary's counts are not the results'")
 print(f"documents {n}")
