@@ -363,6 +363,16 @@ exp "FC-D09: read-only permissions but a secret: a WARN" \
   "printf 'on: {discussion_comment: {types: [created]}}\npermissions:\n  contents: read\njobs:\n  g:\n    steps:\n      - uses: $agent\n        with:\n          key: \${{ secrets.K }}\n' > .github/workflows/g.yml" "FC-D09 warn"
 exp "FC-D09: the job's own permissions override the workflow's" \
   "printf 'on: workflow_run\npermissions:\n  contents: write\njobs:\n  g:\n    permissions:\n      contents: read\n    steps:\n      - uses: $agent\n' > .github/workflows/g.yml" "FC-D09 pass"
+exp "FC-D09: an agent named with a subpath, in another case, is read" \
+  "printf 'on:\n  - issues\n  - issue_comment\npermissions:\n  contents: write\njobs:\n  a:\n    steps:\n      - uses: Anthropics/claude-code-action/base-action@$(printf '%040d' 0)\n' > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: an if: that names the author beside != is not verified, not passed" \
+  "printf 'on: issue_comment\npermissions:\n  contents: write\njobs:\n  a:\n    if: github.actor != github.repository_owner\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 unknown"
+exp "FC-D09: a job that calls a reusable workflow is not verified, not passed" \
+  "printf 'on: issue_comment\npermissions:\n  contents: write\njobs:\n  a:\n    uses: o/r/.github/workflows/agent.yml@$(printf '%040d' 0)\n    secrets: inherit\n' > .github/workflows/a.yml" "FC-D09 unknown"
+exp "FC-D09: a secret in the top-level env: is every job's" \
+  "printf 'on: issue_comment\npermissions:\n  contents: read\nenv:\n  K: \${{ secrets.K }}\njobs:\n  a:\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: an agent line inside a run: block is not a step" \
+  "printf 'on: issue_comment\npermissions:\n  contents: read\njobs:\n  a:\n    steps:\n      - run: |\n          - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 pass"
 exp "FC-D09: an on: it cannot read is not verified, not passed" \
   "printf 'on: &t\n  issues:\njobs:\n  g:\n    steps:\n      - uses: $agent\n' > .github/workflows/g.yml" "FC-D09 unknown"
 out="$(rm -rf "$work/case"; cp -R "$good" "$work/case"; (cd "$work/case" && eval "$planted"); python3 "$checker" --root "$work/case" --no-network 2>&1)"
@@ -377,6 +387,8 @@ exp "FC-D10: secrets.NPM_TOKEN in any workflow is a WARN" \
   "printf 'jobs:\n  p:\n    steps:\n      - run: npm publish\n        env:\n          NODE_AUTH_TOKEN: \${{ secrets.NPM_TOKEN }}\n' > .github/workflows/p.yml" "FC-D10 warn"
 exp "FC-D10: one read inside a run: block is a WARN too" \
   "printf 'jobs:\n  p:\n    steps:\n      - run: |\n          twine upload -p \"\${{ secrets.pypi_api_token }}\" dist/*\n' > .github/workflows/p.yml" "FC-D10 warn"
+exp "FC-D10: the bracket form secrets['NPM_TOKEN'] is a read too" \
+  "printf 'jobs:\n  p:\n    steps:\n      - run: npm publish\n        env:\n          T: \${{ secrets[%s] }}\n' \"'NPM_TOKEN'\" > .github/workflows/p.yml" "FC-D10 warn"
 exp "FC-D10: it carries the delete and revoke line" \
   "printf 'jobs:\n  p:\n    steps:\n      - run: cargo publish\n        env:\n          CARGO_REGISTRY_TOKEN: \${{ secrets.CARGO_REGISTRY_TOKEN }}\n' > .github/workflows/p.yml" "FC-D10 info"
 exp "FC-D10: a comment that names a token is not a read" \

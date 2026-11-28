@@ -1905,8 +1905,12 @@ AI_AGENT_ACTIONS = ("anthropics/claude-code-action", "google-github-actions/run-
 UNTRUSTED_TRIGGERS = ("issues", "issue_comment", "pull_request_target", "pull_request_review_comment", "discussion",
                       "discussion_comment", "workflow_run")
 AUTHOR_GATE = re.compile(r"author_association|github\.(?:triggering_)?actor\b|github\.event\.sender\.login")
-REGISTRY_TOKEN_SECRET = re.compile(r"\bsecrets\.(PYPI\w*|TWINE_PASSWORD|NPM_TOKEN|NODE_AUTH_TOKEN|CARGO_REGISTRY_TOKEN)\b",
-                                   re.IGNORECASE)
+# An `if:` that names the author but may let anyone through: a negation, an
+# `||`, or `!`. Not evaluated: such a condition is not verified, not a pass.
+LOOSE_GATE = re.compile(r"!=|\|\||!(?!=)")
+REGISTRY_TOKEN_SECRET = re.compile(r"\bsecrets(?:\.|\[\s*['\"])(PYPI\w*|TWINE_PASSWORD|NPM_TOKEN|NODE_AUTH_TOKEN|"
+                                   r"CARGO_REGISTRY_TOKEN)\b", re.IGNORECASE)
+SECRET_READ = re.compile(r"\bsecrets(?:\.|\[)")
 WF_KEY = re.compile(r"""^(\s*)(?:-\s+)?['"]?([\w-]+)['"]?\s*:(?:\s+(.*?))?\s*(?:#.*)?$""")
 
 
@@ -1931,9 +1935,13 @@ def workflow_triggers(text: str) -> set[str] | None:
             child = ind if child is None else child
             km = WF_KEY.match(ln)
             if ind == child:
-                if not km or ln.lstrip().startswith("-"):
+                item = re.fullmatch(r"\s*-\s+['\"]?([\w-]+)['\"]?\s*(?:#.*)?", ln)
+                if item:
+                    events.add(item.group(1))   # on:\n  - issues
+                elif not km or ln.lstrip().startswith("-"):
                     return None
-                events.add(km.group(2))
+                else:
+                    events.add(km.group(2))
         return events
     return None
 
@@ -1972,12 +1980,31 @@ def workflow_jobs(text: str) -> list[tuple[str, int, int]]:
     return jobs
 
 
+def agent_action(value: str) -> str | None:
+    """The AI agent action a `uses:` value names (any case, a subpath too), or None."""
+    v = value.lower()
+    return next((x for x in AI_AGENT_ACTIONS if v.startswith((x + "@", x + "/"))), None)
+
+
+def author_gate(conds: list[str]) -> str:
+    """"gate" when one of the `if:` texts names the author and reads as a
+    positive check, "loose" when one names it beside a negation or an `||`
+    (not evaluated, so not verified), "" when none names it."""
+    named = [c for c in conds if AUTHOR_GATE.search(c)]
+    if any(not LOOSE_GATE.search(c.split(":", 1)[1] if ":" in c else c) for c in named):
+        return "gate"
+    return "loose" if named else ""
+
+
 def check_agent_workflows(root: Path) -> None:
     """FC-D09: an AI agent action in a workflow that untrusted text triggers,
     in a job holding a write permission or a secret, with no author_association
     or actor condition on the job or the agent's step. A job with no
     `permissions:` (and none at the top) holds the default token, which the
-    repository's setting may make writable: that counts as holding write."""
+    repository's setting may make writable: that counts as holding write. A
+    secret in the workflow's top-level `env:` is every job's. An `if:` that
+    names the author beside a negation or an `||`, and a job that calls a
+    reusable workflow, are not verified: neither is followed here."""
     files = workflow_files(root)
     if not files:
         emit("FC-D09", "info", "none")
@@ -1991,9 +2018,15 @@ def check_agent_workflows(root: Path) -> None:
             unread += 1
             emit("FC-D09", "unknown", "unread", {"rel": rel, "why": "the file could not be read"}, reason="unreadable")
             continue
-        if not any(a in text for a in AI_AGENT_ACTIONS):
+        low = text.lower()
+        calls = re.search(r"^\s+uses:\s*['\"]?[^\s'\"#]+/\.github/workflows/", text, re.MULTILINE) \
+            or re.search(r"^\s+uses:\s*['\"]?\./", text, re.MULTILINE)
+        agent = any(a in low for a in AI_AGENT_ACTIONS)
+        if not agent and not calls:
             continue
         events = workflow_triggers(text)
+        if events is None and not agent:
+            continue   # a reusable-workflow call with no `on:` read: no agent of its own to name
         if events is None:
             unread += 1
             emit("FC-D09", "unknown", "unread", {"rel": rel, "why": "its `on:` is in a form this checker does not read"},
@@ -2003,8 +2036,10 @@ def check_agent_workflows(root: Path) -> None:
         if not untrusted:
             continue
         raw = text.splitlines()
-        top_perms = next((key_block(raw, n - 1) for n, ind, ln in yaml_lines(text)
-                          if ind == 0 and re.match(r"permissions\s*:", ln)), None)
+        syntax = {n - 1 for n, _, _ in yaml_lines(text)}
+        top = {m.group(2): n - 1 for n, ind, ln in yaml_lines(text) if ind == 0 and (m := WF_KEY.match(ln))}
+        top_perms = key_block(raw, top["permissions"]) if "permissions" in top else None
+        top_secret = "env" in top and SECRET_READ.search(key_block(raw, top["env"]))
         for job, a, b in workflow_jobs(text):
             body = raw[a:b]
             child = next((len(ln) - len(ln.lstrip()) for ln in body[1:] if ln.strip() and not ln.lstrip().startswith("#")), 0)
@@ -2016,22 +2051,36 @@ def check_agent_workflows(root: Path) -> None:
                 holding.append("the default token (no permissions: set)")
             elif re.search(r"\bwrite\b|write-all", perms):
                 holding.append("a write permission")
-            if re.search(r"\bsecrets\.", "\n".join(body)):
+            joined = "\n".join(body)
+            if top_secret or SECRET_READ.search(joined) or re.search(r"^\s+secrets:\s*inherit", joined, re.MULTILINE):
                 holding.append("a secret")
             if not holding:
                 continue
-            job_gate = "if" in keys and AUTHOR_GATE.search(key_block(body, keys["if"]))
+            job_if = [key_block(body, keys["if"])] if "if" in keys else []
+            if "uses" in keys:
+                if author_gate(job_if) != "gate":
+                    unread += 1
+                    emit("FC-D09", "unknown", "unread", {"rel": rel, "why": f"job {job} calls a reusable workflow, "
+                                                         "which this checker does not follow for an AI agent"},
+                         reason="reusable workflow not followed")
+                continue
             for k, ln in enumerate(body):
                 um = USES_LINE.match(ln)
-                if not um or not any(um.group(2).lower().startswith(x + "@") for x in AI_AGENT_ACTIONS):
+                if not um or a + k not in syntax or not agent_action(um.group(2)):
                     continue
                 step = k
                 while step > 0 and not body[step].lstrip().startswith("-"):
                     step -= 1
-                step_text = key_block(body, step)
-                ifs = [key_block(step_text.splitlines(), j) for j, s in enumerate(step_text.splitlines())
-                       if re.match(r"\s*(?:-\s+)?if\s*:", s)]
-                if job_gate or any(AUTHOR_GATE.search(x) for x in ifs):
+                step_lines = key_block(body, step).splitlines()
+                ifs = [key_block(step_lines, j) for j, s in enumerate(step_lines) if re.match(r"\s*(?:-\s+)?if\s*:", s)]
+                gate = author_gate(job_if + ifs)
+                if gate == "gate":
+                    continue
+                if gate == "loose":
+                    unread += 1
+                    emit("FC-D09", "unknown", "unread", {"rel": rel, "why": f"job {job}'s `if:` names the author beside a "
+                                                         "negation or an `||`, which this checker does not evaluate"},
+                         reason="author condition not evaluated")
                     continue
                 found += 1
                 emit("FC-D09", "warn", "bad", {"rel": rel, "line": a + k + 1, "job": job,

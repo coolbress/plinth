@@ -453,15 +453,22 @@ it is not noise: under 10% effective false alarms over at least 10 showings.
   `openai/codex-action`, `actions/ai-inference`) in a workflow that
   `issues`, `issue_comment`, `pull_request_target`,
   `pull_request_review_comment`, `discussion`, `discussion_comment` or
-  `workflow_run` triggers. It is named when its job holds a write
-  permission or a secret and neither the job nor the agent's step has an
+  `workflow_run` triggers. The action is matched in any case, a subpath
+  such as `/base-action` too. It is named when its job holds a write
+  permission or a secret, and neither the job nor the agent's step has an
   `if:` on `author_association`, `github.actor`,
   `github.triggering_actor` or `github.event.sender.login`. Whoever writes
-  the issue or the comment writes the agent's prompt. A job with no
-  `permissions:` (and none at the top) holds the default token, which the
-  repository's setting may make writable, so it counts as holding write.
-  The `if:` is searched for those names, not evaluated. An `on:` in a form
-  the line reader does not read is not verified. zizmor at
+  the issue or the comment writes the agent's prompt.
+  - **No `permissions:`.** A job with none, and none at the top, holds the
+    default token. The repository's setting may make that token writable,
+    so it counts as holding write.
+  - **Secrets.** A secret counts in the job (`secrets.X`, `secrets['X']`,
+    `secrets: inherit`) or in the workflow's top-level `env:`.
+  - **The `if:`.** It is searched for those names, not evaluated. One that
+    names the author beside `!=`, `!` or `||` may let anyone through, so it
+    is not verified rather than passed.
+  - **Not verified either:** a job that calls a reusable workflow, which is
+    not followed, and an `on:` in a form the line reader does not read. zizmor at
   `--min-severity medium` reported nothing on this shape with 1.29.0
   (2026-11-25), nor with 1.33.1 for `issues`,
   `pull_request_review_comment`, `discussion` and `discussion_comment`
@@ -472,7 +479,9 @@ it is not noise: under 10% effective false alarms over at least 10 showings.
   the shape there.
 - **A registry token in any workflow (FC-D10).** `secrets.PYPI*`,
   `TWINE_PASSWORD`, `NPM_TOKEN`, `NODE_AUTH_TOKEN` or `CARGO_REGISTRY_TOKEN`
-  read on any line of any workflow but a comment, `run:` blocks included.
+  (or `secrets['…']`, any case) read on any line of any workflow but a
+  comment, `run:` blocks included. A name is the evidence, so
+  `TEST_PYPI_API_TOKEN` and `secrets: inherit` are not named.
   A long-lived token publishes for as long as it is valid. The registry's
   trusted publisher (OIDC) needs none: once it works, delete the secret
   and revoke the token at the registry. zizmor's `use-trusted-publishing`

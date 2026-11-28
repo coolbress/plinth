@@ -57,7 +57,9 @@ fi
 # issue_comment, pull_request_target and workflow_run it reports
 # dangerous-triggers, gated or not: the trigger, not this shape. When zizmor
 # reports one of the four, FC-D09 may retire for it: this case fails to say so.
-if [ -n "${bin:-}" ] && [ -x "$bin/zizmor" ]; then
+# Not with PLINTH_LINT_TOOLS_BIN: a stand-in zizmor measures nothing (and is
+# itself a FAIL in CI above).
+if [ -z "${PLINTH_LINT_TOOLS_BIN:-}" ] && [ -n "${bin:-}" ] && [ -x "$bin/zizmor" ]; then
   shape="$(mktemp -d)" || { echo "  FAIL  could not make a temp folder"; exit 1; }
   reported=""
   for t in issues pull_request_review_comment discussion discussion_comment; do
