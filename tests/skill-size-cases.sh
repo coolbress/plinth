@@ -120,6 +120,10 @@ expect pass "a list item under a lead-in that says only when is not counted" "$d
 d="$(fixture 50 2000 desc-block)"
 printf -- '---\nname: one\ndescription: >-\n  %s\n  %s\n---\nbody\n' "$(printf 'w%.0s' $(seq 1 60))" "$(printf 'w%.0s' $(seq 1 60))" > "$d/skills/one/SKILL.md"
 expect fail "a description as a block scalar is its text (121 bytes over 100)" "$d" "one: description 121 bytes; the cap is 100"
+# The review of this change: a blank line between the block's paragraphs.
+d="$(fixture 50 2000 desc-block-blank)"
+printf -- '---\nname: one\ndescription: >-\n  Short paragraph.\n\n  %s\n---\nbody\n' "$(printf 'w%.0s' $(seq 1 200))" > "$d/skills/one/SKILL.md"
+expect fail "a block description with a blank line between paragraphs counts both (217 bytes over 100)" "$d" "one: description 217 bytes; the cap is 100"
 d="$(fixture 50 2000 desc-none)"
 printf -- '---\nname: one\n---\nbody\n' > "$d/skills/one/SKILL.md"
 expect fail "no description: not passed as 0 bytes" "$d" "one: no description in its frontmatter"

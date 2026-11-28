@@ -54,10 +54,14 @@ def split(text):
                 # A block scalar (>-, |): its indented lines are the text.
                 if description in ("", ">", ">-", ">+", "|", "|-", "|+"):
                     more = []
+                    # A blank line inside the block is part of it: the
+                    # block ends at the next line that is neither blank nor
+                    # indented, or at the frontmatter's end.
                     for line in lines[i + 1 :]:
-                        if not line.startswith((" ", "\t")):
+                        if line.strip() and not line.startswith((" ", "\t")):
                             break
-                        more.append(line.strip())
+                        if line.strip():
+                            more.append(line.strip())
                     description = " ".join(more) or None
     chunks, cur, fenced, item = [], [], False, False
     for line in lines[start:]:
