@@ -387,7 +387,8 @@ check could not see (a judgement no file or command output shows, say).
 `tests/skill-size.sh` holds the sizes, `AGENTS.md` at most 110 lines and
 7,500 bytes and each `skills/*/SKILL.md` at most 500 lines and 20,000 bytes.
 It also holds what one invocation of each skill reads: its `SKILL.md` and
-every file its body says to "read it before" acting, against that skill's
+every file its body says to read before acting ("read it before", "read it
+first"; `tests/lib/skill_reads.py` says how), against that skill's
 `READS_<NAME>_MAX_BYTES`, and its description against
 `DESCRIPTION_<NAME>_MAX_BYTES`, so moving text into a file beside the skill
 lowers nothing. Text that needs more raises its cap in `tests/size_caps.py` in the same pull

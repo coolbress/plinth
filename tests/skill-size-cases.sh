@@ -79,7 +79,7 @@ expect fail "the arsenal one byte over (12,001)" "$d" "the limits are 250 lines 
 d="$(fixture 50 2000 arsenal-lines)"; arsenal_of "$d" 251 9000
 expect fail "the arsenal one line over (251)" "$d" "the limits are 250 lines and 12000 bytes"
 d="$(fixture 50 2000 other-size)"
-python3 -c 'import sys; open(sys.argv[1], "w").write("---\nname: one\n---\n" + "x\n" * 300 + "y" * 15000 + "\n")' "$d/skills/one/SKILL.md"
+python3 -c 'import sys; open(sys.argv[1], "w").write("---\nname: one\ndescription: x\n---\n" + "x\n" * 299 + "y" * 15000 + "\n")' "$d/skills/one/SKILL.md"
 expect pass "another skill of 300 lines and 15,000 bytes: the arsenal's caps are its own" "$d" "skills/one/SKILL.md: 304 lines"
 
 # What one invocation reads (#1181): SKILL.md and the files its body says to
@@ -104,6 +104,25 @@ expect pass "  and a link to a heading that starts with a digit is not one" "$d"
 d="$(fixture 50 2000 desc-over)"
 printf -- '---\nname: one\ndescription: %s\n---\nbody\n' "$(printf 'w%.0s' $(seq 1 101))" > "$d/skills/one/SKILL.md"
 expect fail "a description over its cap (101 bytes, the cap 100)" "$d" "one: description 101 bytes; the cap is 100"
+# The review of #1181: other words for reading first, a list under "only
+# when", a description as a block scalar, and none.
+d="$(fixture 50 2000 reads-words)"
+printf -- '---\nname: one\ndescription: x\n---\nRead `${CLAUDE_PLUGIN_ROOT}/skills/one/steps.md` before the first step.\n\nThe rules are in [rules.md](rules.md). Read it first.\n' > "$d/skills/one/SKILL.md"
+pad "$d/skills/one/steps.md" 100; pad "$d/skills/one/rules.md" 100
+expect pass "\"Read <file> before\" and \"Read it first\" count too" "$d" "(SKILL.md + steps.md + rules.md)"
+d="$(fixture 50 2000 reads-lead-in)"
+printf -- '---\nname: one\ndescription: x\n---\nEach file below answers one question; read it only when asked.\n\n- [extra.md](extra.md): read it before suggesting a command.\n' > "$d/skills/one/SKILL.md"
+pad "$d/skills/one/extra.md" 40000
+printf -- '---\nname: one\ndescription: x\n---\nThe person can read [extra.md](extra.md) first.\n' > "$d/skills/one/SKILL.md"
+expect pass "\"the person can read <file> first\" is the person's, not counted" "$d" "named, not read before acting: skills/one/extra.md"
+printf -- '---\nname: one\ndescription: x\n---\nEach file below answers one question; read it only when asked.\n\n- [extra.md](extra.md): read it before suggesting a command.\n' > "$d/skills/one/SKILL.md"
+expect pass "a list item under a lead-in that says only when is not counted" "$d" "named, not read before acting: skills/one/extra.md"
+d="$(fixture 50 2000 desc-block)"
+printf -- '---\nname: one\ndescription: >-\n  %s\n  %s\n---\nbody\n' "$(printf 'w%.0s' $(seq 1 60))" "$(printf 'w%.0s' $(seq 1 60))" > "$d/skills/one/SKILL.md"
+expect fail "a description as a block scalar is its text (121 bytes over 100)" "$d" "one: description 121 bytes; the cap is 100"
+d="$(fixture 50 2000 desc-none)"
+printf -- '---\nname: one\n---\nbody\n' > "$d/skills/one/SKILL.md"
+expect fail "no description: not passed as 0 bytes" "$d" "one: no description in its frontmatter"
 d="$(fixture 50 2000 reads-cap-missing)"
 grep -v '^READS_ONE_MAX_BYTES' "$d/tests/size_caps.py" > "$d/caps" && mv "$d/caps" "$d/tests/size_caps.py"
 expect fail "a skill with no reads cap: not read as no limit" "$d" "READS_ONE_MAX_BYTES"

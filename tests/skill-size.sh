@@ -11,8 +11,8 @@
 #   - it has no issue number (`#` and digits not after a letter or a slash;
 #     a link's own anchor, `](#1-the-host)`, is not one);
 #   - what one invocation reads, SKILL.md and every file its body says to
-#     read before acting (tests/lib/skill_reads.py finds them by the words
-#     "read it before", not "only when"), is at most that skill's
+#     read before acting (tests/lib/skill_reads.py finds them: a "read" and
+#     then "before" or "first" in one sentence, not "only when"), is at most that skill's
 #     READS_<NAME>_MAX_BYTES, and those files carry no issue number either;
 #   - its description is at most DESCRIPTION_<NAME>_MAX_BYTES;
 #   - a reference file beside it (skills/*/*.md other than SKILL.md) over 100
@@ -86,7 +86,8 @@ reads_skill() {
   ok "$1: named, not read before acting: ${not_read:-none}"
   desc="$(awk -F '\t' '$1 == "description" { print $2 }' <<<"$got")"
   if [ -n "$desc" ] && [ "$desc" -le "$desc_cap" ]; then ok "$1: description $desc bytes, the cap $desc_cap"
-  else bad "$1: description ${desc:-not found} bytes; the cap is $desc_cap: it is read on every turn"; fi
+  elif [ -z "$desc" ]; then bad "$1: no description in its frontmatter: the cap $desc_cap holds nothing"
+  else bad "$1: description $desc bytes; the cap is $desc_cap: it is read on every turn"; fi
 }
 
 # skill<TAB>ticket that trims it and removes this line
