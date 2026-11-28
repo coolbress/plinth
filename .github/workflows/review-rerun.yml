@@ -32,7 +32,7 @@
 name: review-rerun
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] -- the default branch's file runs; no pull request code is checked out and no comment body is read (above)
     types: [created]
   schedule:
     - cron: "7,22,37,52 * * * *"

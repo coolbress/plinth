@@ -44,13 +44,15 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # sq: a value as one shell word, for every command printed to be pasted.
 # shellcheck source=scripts/lib/shell-word.sh
 . "$here/lib/shell-word.sh"
+# copier_pinned: copier's dependencies at their locked versions (#1220).
+# shellcheck source=scripts/lib/copier-pin.sh
+. "$here/lib/copier-pin.sh"
 
 # The pins come from new-project.sh, their one source: run through it.
 template_repo="${PLINTH_DOOR_TEMPLATE_REPO:?run it as new-project.sh <name> --host gitlab}"
 template_ref="${PLINTH_DOOR_TEMPLATE_REF:?run it as new-project.sh <name> --host gitlab}"
 template_sha="${PLINTH_DOOR_TEMPLATE_SHA:?run it as new-project.sh <name> --host gitlab}"
 copier_version="${PLINTH_DOOR_COPIER_VERSION:?run it as new-project.sh <name> --host gitlab}"
-copier_newer="${PLINTH_DOOR_COPIER_NEWER:?run it as new-project.sh <name> --host gitlab}"
 claude_floor="${PLINTH_DOOR_CLAUDE_FLOOR:?run it as new-project.sh <name> --host gitlab}"
 git_floor="${PLINTH_DOOR_GIT_FLOOR:?run it as new-project.sh <name> --host gitlab}"
 # The glab this door was run with on GitLab.com (#353): `glab api` with -X and
@@ -338,11 +340,11 @@ if [ "$check" = 1 ]; then
   exit 0
 fi
 
-# Render, as the GitHub door does: copier at its pinned version and date,
+# Render, as the GitHub door does: copier and its dependencies at their pinned versions,
 # into a plain directory whose .git is removed, then initialised (#118).
 # Without a token in its environment: gh's two names, and the three glab reads
 # (GITLAB_TOKEN, GITLAB_ACCESS_TOKEN, OAUTH_TOKEN; its configuration reference).
-env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+copier_pinned "$here/.." env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_TOKEN uvx --quiet --from "copier==$copier_version" \
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$ns" --data "license=$spdx" --data "archetype=$arch" \
   --data "host=gitlab" ${desc:+--data "description=$desc"} ${lang:+--data "records_language=$lang"} \

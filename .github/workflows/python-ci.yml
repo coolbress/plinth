@@ -228,7 +228,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           rc=0
-          uvx zizmor@1.29.0 --no-progress --min-severity medium --format json .github/workflows/ > "$RUNNER_TEMP/zizmor.json" || rc=$?
+          uvx zizmor@1.33.1 --no-progress --min-severity medium --format json .github/workflows/ > "$RUNNER_TEMP/zizmor.json" || rc=$?
           case "$rc" in 0|1[1-4]) ;; *) echo "zizmor exited $rc: an error, not a finding"; exit 1 ;; esac
           jq -e 'type == "array"' "$RUNNER_TEMP/zizmor.json" > /dev/null || { echo "zizmor's output is not a JSON list of findings"; exit 1; }
           # Each finding's primary location as file:line; newlines are
@@ -354,7 +354,7 @@ jobs:
           tool "$CHECK" ruff-check.rc "ruff check" "uv run ruff check ." "run uv run ruff check . here, fix what it names, and push" ruff ruff-check.json "the ruff check step's log"
           tool "$FORMAT" ruff-format.rc "ruff format --check" "uv run ruff format --check ." "run uv run ruff format here, commit what it changes, and push" format ruff-format.log "the ruff format --check step's log"
           v "$ZIZMOR" "zizmor's audits at medium and above, offline and online, except known-vulnerable-actions"
-          [ "$ZIZMOR" != failure ] || nx "run uvx zizmor@1.29.0 --min-severity medium .github/workflows/ here, fix what it names, and push"
+          [ "$ZIZMOR" != failure ] || nx "run uvx zizmor@1.33.1 --min-severity medium .github/workflows/ here, fix what it names, and push"
           kva="$RUNNER_TEMP/zizmor.kva"
           if [ ! -f "$kva" ]; then say "not yet confirmed: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions). Why: zizmor did not finish. What confirms it: a run where it does."
           elif [ ! -s "$kva" ]; then say "pass: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions)"
@@ -2758,6 +2758,11 @@ jobs:
           # beside the checker as in the plugin: scripts/lib/.
           curl -fsSL --retry 3 -o "$d/lib/shared-github.sh" \
             "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/scripts/lib/shared-github.sh"
+          # copier's version, for the update line: tools/ one level above the
+          # checker, as in the plugin (#1220).
+          mkdir -p "$d/../tools/copier"
+          curl -fsSL --retry 3 -o "$d/../tools/copier/pyproject.toml" \
+            "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/tools/copier/pyproject.toml"
           echo "plinth ${PLINTH_SHA}"
 
       - name: Floor check
