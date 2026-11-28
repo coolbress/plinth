@@ -32,7 +32,10 @@ case "$1 $2" in
       *)
         # checks_late: how many more reads see no checks yet on the new head.
         n="$(cat "$fx/checks_late" 2>/dev/null || echo 0)"
+        # pending_reads: how many more reads see pending.json before checks.json.
+        k="$(cat "$fx/pending_reads" 2>/dev/null || echo 0)"
         if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$fx/checks_late"; echo '[]' >"$fx/none.json"; out "$fx/none.json"
+        elif [ "$k" -gt 0 ]; then echo $((k - 1)) >"$fx/pending_reads"; out "$fx/pending.json"
         else out "$fx/checks.json"; fi ;;
     esac ;;
   "pr merge")
@@ -686,7 +689,14 @@ for r in comments checks mergeable; do
   behind_pr "pre-unread-$r" 3 0
   case "$r" in comments) touch "$FX/comments_fail_once" ;; checks) touch "$FX/checks_fail_once" ;; mergeable) touch "$FX/mergeable_fail" ;; esac
   run merge "the pre-check cannot read the $r: no stop, it goes on as before" --update
-  grep -q 'update-branch' "$FX/calls"; pre "  and the branch is still updated" $?
+  case "$r" in
+    comments) read_pat='^api --paginate repos/o/r/pulls/7/comments'; used="$FX/comments_fail_once" ;;
+    checks) read_pat='^pr checks 7 -R o/r --json name,state,startedAt,completedAt'; used="$FX/checks_fail_once" ;;
+    mergeable) read_pat='^pr view 7 -R o/r --json mergeable'; used="" ;;
+  esac
+  first="$(grep -n -m1 "$read_pat" "$FX/calls" | cut -d: -f1)"; upd_at="$(grep -n -m1 'update-branch' "$FX/calls" | cut -d: -f1)"
+  [ -n "$first" ] && [ -n "$upd_at" ] && [ "$first" -lt "$upd_at" ] && { [ -z "$used" ] || [ ! -f "$used" ]; }
+  pre "  the failed read was the pre-check's, before the update, and the branch is still updated" $?
 done
 
 setup pre-round
@@ -708,6 +718,17 @@ setup stall-young; printf '%s' "$hung" >"$FX/checks.json"; printf '{"status":"co
 PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_CHECKS_WAIT=0 MERGE_STALL_WAIT=600 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
 [ "$rc" = 1 ] && [ ! -f "$FX/merged" ] && ! grep -q 'run rerun' "$FX/out" && grep -qF 'still pending after 0 minute(s)' "$FX/out"
 pre "a completed run seen for less than MERGE_STALL_WAIT: not a stall yet; the overall bound stops it as not green" $?
+
+setup stall-carry; printf '%s' "$hung" >"$FX/checks.json"; printf '{"status":"completed"}' >"$FX/run-55.json"
+PATH="$work/bin:$PATH" MERGE_POLL=1 MERGE_CHECKS_WAIT=30 MERGE_STALL_WAIT=2 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
+[ "$rc" = 1 ] && grep -qxF 'STOP:   gh run rerun 55 --job 66 --repo o/r' "$FX/out" && ! grep -q 'still pending after' "$FX/out" \
+  && [ "$(grep -c '^api repos/o/r/actions/runs/55 --jq .status' "$FX/calls")" -ge 2 ]
+pre "a stall seen over several polls: its first sighting is kept, and it stops once MERGE_STALL_WAIT has passed" $?
+
+setup wait-green; printf '[{"name":"ci / install","state":"IN_PROGRESS"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/pending.json"; echo 4 >"$FX/pending_reads"
+PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_ANALYZE_WAIT=0 MERGE_CHECKS_WAIT=30 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
+[ "$rc" = 0 ] && [ -f "$FX/merged" ] && [ "$(grep -c '^pr checks 7 -R o/r --json name,state,link --jq' "$FX/calls")" -ge 3 ]
+pre "a check pending for a few polls, then green: waited for, read again, merged" $?
 
 setup stall-running; printf '%s' "$hung" >"$FX/checks.json"; printf '{"status":"in_progress"}' >"$FX/run-55.json"
 run stop "a pending job whose run is still in progress: not a stall, the bound stops it"
