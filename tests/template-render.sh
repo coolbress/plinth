@@ -32,8 +32,10 @@ door="$root/scripts/new-project.sh"
 dir="canary-template"
 # shellcheck source=tests/lib/template-checkout.sh
 . "$root/tests/lib/template-checkout.sh"
-copier_version="$(sed -n 's/^copier_version="\(.*\)"$/\1/p' "$door")"
-copier_newer="$(sed -n 's/^copier_newer="\(.*\)"$/\1/p' "$door")"
+# copier and its dependencies from tools/copier, as the door runs them (#1220).
+# shellcheck source=scripts/lib/copier-pin.sh
+. "$root/scripts/lib/copier-pin.sh"
+copier_version="$(copier_pin_version "$root")"
 work="$(mktemp -d)" || { echo "template-render: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); echo "  PASS  $1"; }
@@ -45,7 +47,7 @@ bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
 # a checkout it would name the checkout's path. Arguments after the two are
 # more of the door's answers, for the web render below.
 render() {
-  env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+  copier_pinned "$root" env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" \
     copier copy --defaults --quiet \
     --data project_name=probe --data owner=coolbress --data license=MIT --data archetype=cli \
     --data owner_has_pr_template=false --data owner_has_issue_forms=false --data visibility=public \

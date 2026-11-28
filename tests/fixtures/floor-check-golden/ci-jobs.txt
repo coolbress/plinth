@@ -30,6 +30,11 @@
           # beside the checker as in the plugin: scripts/lib/.
           curl -fsSL --retry 3 -o "$d/lib/shared-github.sh" \
             "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/scripts/lib/shared-github.sh"
+          # copier's version, for the update line: tools/ one level above the
+          # checker, as in the plugin (#1220).
+          mkdir -p "$d/../tools/copier"
+          curl -fsSL --retry 3 -o "$d/../tools/copier/pyproject.toml" \
+            "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/tools/copier/pyproject.toml"
           echo "plinth ${PLINTH_SHA}"
 
       - name: Floor check

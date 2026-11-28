@@ -278,6 +278,13 @@ if [ -n "$exception_line" ]; then
   exc_body="$(gh api "repos/$exc_repo/issues/comments/$exc_id" --jq .body 2>/dev/null)" && [ -n "$exc_body" ] \
     || stop "cannot read the comment the 'train exception:' line names ($exc_repo comment $exc_id); nothing changed"
 fi
+# The decisions page says what is true at the release (#1221): a
+# `not built yet` marker whose issue is closed as completed stops here, as
+# does a marker whose issue cannot be read. One closed another way is printed
+# for the person and does not stop.
+markers="$("$root/scripts/stale-decision-markers.sh" 2>&1)" \
+  || stop "docs/reference/decisions-in-force.md is not what is true; nothing changed:" "$markers"
+grep '^for a person:' <<<"$markers" >&2 || true
 rc=0; tags="$(git ls-remote --exit-code --tags --refs origin 'refs/tags/v*' 2>&1)" || rc=$?
 case "$rc" in 0|2) ;; *) stop "cannot list origin's tags (git ls-remote exit $rc); nothing changed" ;; esac
 prev_tag="$(sed -nE 's|^[0-9a-f]+[[:space:]]+refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)$|\1|p' <<<"$tags" | sort -V | tail -1)"

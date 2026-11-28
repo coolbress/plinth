@@ -3,7 +3,7 @@
 # at most three times, each warning naming the next step, and below them its
 # summary opens with a pass line. It never fails. The steps are not copied
 # here; they are extracted from python-ci.yml and run as the runner runs them,
-# so the rule tested is the rule shipped. ruff is the one tests/lint-tools.txt
+# so the rule tested is the rule shipped. ruff is the one tools/lint/uv.lock
 # pins by hash; `uv run --no-sync` is a stub that runs its command, as it does
 # once `uv sync --locked` has put the project's ruff in its environment.
 set -uo pipefail

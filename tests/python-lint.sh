@@ -12,8 +12,8 @@
 # changing the set, and mypy reads no configuration file for the same reason.
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# The versions are pinned in tests/lint-tools.in; both tools install
-# hash-checked from tests/lint-tools.txt (tests/lib/lint-tools.sh).
+# The versions are pinned in tools/lint/pyproject.toml; both tools install
+# hash-checked from its uv.lock (tests/lib/lint-tools.sh).
 # shellcheck source=tests/lib/lint-tools.sh
 . "$root/tests/lib/lint-tools.sh"
 ruff_version="$(lint_tool_version ruff)"
