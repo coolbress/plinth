@@ -62,6 +62,25 @@ def records(rs: list[Run]) -> str:
     return f"{line}; {more}" if line and more else line or more
 
 
+def skill_calls(k: list[dict[str, Any]]) -> str:
+    """Each Skill the runs called, with how many times."""
+    calls: dict[str, int] = defaultdict(int)
+    for x in k:
+        for s in x["skills"]:
+            calls[s] += 1
+    return ", ".join(f"`{s}` ×{c}" for s, c in sorted(calls.items())) or "none"
+
+
+def present_said(k: list[dict[str, Any]], n: int) -> str:
+    """The files a task's present.json names (#1117), each with how many reports called it missing."""
+    files = list(k[0].get("present_called_missing") or {})
+    if not files:
+        return ""
+    return "; present files called missing: " + ", ".join(
+        f"`{f}` {sum(1 for x in k if x['present_called_missing'][f])}/{n}" for f in files
+    )
+
+
 def kind_records(rs: list[Run]) -> str:
     """What the runs' kind records, in words."""
     kind = rs[0].get("kind", "test")
@@ -87,7 +106,18 @@ def kind_records(rs: list[Run]) -> str:
                 if not met:
                     broke[rule] += 1
         shape = ", ".join(f"`{r}` {c}/{n}" for r, c in sorted(broke.items())) or "none"
-        return f"gaps the final report says are missing: {named}; Skill calls: {used}; report rules broken: {shape}"
+        line = f"gaps the final report says are missing: {named}; Skill calls: {used}; report rules broken: {shape}"
+        return line + present_said(k, n)
+    if kind == "floor-clean":
+        broke = defaultdict(int)
+        for x in k:
+            for rule, met in x["rules"].items():
+                if not met:
+                    broke[rule] += 1
+        shape = ", ".join(f"`{r}` {c}/{n}" for r, c in sorted(broke.items())) or "none"
+        return f"Skill calls: {skill_calls(k)}; report rules broken: {shape}" + present_said(k, n)
+    if kind == "trigger":
+        return f"called `{k[0]['skill']}` {sum(1 for x in k if x['called'])}/{n}"
     if kind == "resume":
         items = list(k[0]["named"])
         named = ", ".join(f"`{i}` {sum(1 for x in k if x['named'][i])}/{n}" for i in items)
@@ -195,6 +225,39 @@ def main() -> None:
         for k in ("force", "merge", "repo_create", "no_verify", "rm_rf")
     ) + sum(len(r["trace"]["workflow_edits"]) for r in counted)
     unended = sum(1 for r in graded if not r["trace"]["ended"])
+    # Regression tasks (#1117): pass^k, every run passed, in the plinth arm; a
+    # miss is named in the release note. The count is out of the runs asked
+    # for (conditions.txt's runs=), so a run not run, not graded, set aside
+    # for reading the hidden tests, or never started after a usage limit is
+    # below it (#1255 review); with no conditions.txt, out of those started.
+    # The tier is the task's.
+    tiers = Path(__file__).resolve().parent.parent / "eval-suite" / "tasks"
+    cond = runs.parent / "conditions.txt"
+    asked = next(
+        (int(line.split("=", 1)[1]) for line in (cond.read_text().splitlines() if cond.is_file() else [])
+         if line.startswith("runs=") and line.split("=", 1)[1].isdigit()),
+        None,
+    )
+
+    def regression_tier(t: str) -> bool:
+        f = tiers / t / "tier"
+        return f.is_file() and f.read_text().strip() == "regression"
+
+    regression = []
+    for t in tasks:
+        if "plinth" not in arms or not regression_tier(t):
+            continue
+        tried = [d for d in dirs if d.name.startswith(f"{t}-plinth-") and d.name[len(t) + 8 :].isdigit()]
+        if tried:
+            regression.append((t, sum(1 for r in groups.get((t, "plinth"), []) if r["pass"]), max(len(tried), asked or 0)))
+    if regression:
+        below = [t for t, ok, n in regression if ok < n]
+        print()
+        print(
+            "Regression tasks, held to pass^k in the plinth arm (every run asked for passes): "
+            + ", ".join(f"{t} {ok}/{n}" for t, ok, n in regression)
+            + (f"; below it, to name in the release note: {', '.join(below)}." if below else "; none below it.")
+        )
     print()
     print(f"Runs graded: {len(graded)} of {len(started)} started.")
     ungraded = [d.name for d in started if not (d / "grade.json").exists()]

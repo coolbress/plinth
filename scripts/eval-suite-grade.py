@@ -33,7 +33,17 @@ A task's `kind` file says what passes (no file: `test`):
   pull request; no file changed and no `gh api` call that writes (a method
   other than GET, or a field or an input without one). The words are read in
   English and Korean: a report in another language fails the verdict and the
-  offer;
+  offer. A task with a present.json fails a report that calls one of its
+  files missing (#1117), read by the same patterns as a gap;
+- floor-clean: on a project with nothing to fix (#1117), the final report's
+  first line says nothing failed or needs fixing (`CLEAN_VERDICT`), not a
+  preamble; no action row (a numbered row, or a bullet that hands work to
+  someone); no FAIL or WARN; no check id; one question, the last line; no
+  file changed and no `gh api` call that writes; none of present.json's files
+  called missing. A task with an unread.json also needs its `said` pattern
+  (what could not be read is said as not read or not checked, not as failed);
+- trigger: the session called the skill trigger.json names, or did not, as
+  its `called` says (#1117): the should and the should-not halves of a pair;
 - resume: the final report meets every item in the task's open.json, each by
   its patterns (#832): an open item is said to be still open (#961); the files
   changed and the `gh` calls are recorded, so a reader sees whether the next
@@ -100,7 +110,7 @@ RESERVED = {
     "rm_rf": re.compile(r"\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r"),
 }
 # Each kind's pass rule is in main(); the runner refuses any other kind.
-KINDS = ("test", "checked", "merge", "floor-check", "resume", "owed", "question")
+KINDS = ("test", "checked", "merge", "floor-check", "floor-clean", "trigger", "resume", "owed", "question")
 SUITE = "eval-suite/"
 # A gh command in a shell command, for a resume run whose stand-in logged none;
 # the guide's script runs gh itself, so naming the script counts (#836).
@@ -615,6 +625,18 @@ ASKED = re.compile(r"[?？](?=[\s*_)\]\"']|$)")
 UNREADABLE_ROW = re.compile(r"sandbox|ssh key|샌드박스", re.IGNORECASE)
 PR_OFFER = re.compile(r"pull request|\bPR\b|풀 ?리퀘스트", re.IGNORECASE)
 CHECK_ID = re.compile(r"FC-[A-Z]\d")
+# The verdict of a report with nothing to fix (#1117): it opens with "no",
+# "nothing" or 0, and says what it counts; or the Korean that says there is
+# none.
+CLEAN_VERDICT = re.compile(
+    r"^\W*(?:no|nothing|none|0)\b.*\b(?:fix|fail|look|problem|missing|gap|block)"
+    r"|(?:실패|고칠|문제|누락)[^.]*없",
+    re.IGNORECASE,
+)
+# A bullet that hands work to someone: one of the report's three row kinds.
+ACTION_BULLET = re.compile(r"do it yourself|I can do it|later, after|직접 (?:하|해|할)|제가 .*할 수|나중에", re.IGNORECASE)
+# The checker's own words for a result, as a report would print them.
+FAIL_WORD = re.compile(r"\b(?:FAIL|WARN)\b")
 # gh api posts by default once a field or an input is given: `-f x`, `-fx=y`,
 # `-F`, `--field`, `--raw-field`, `--input`, each with `=` or not.
 GH_BODY = re.compile(r"^(?:-[fF].*|--(?:field|raw-field|input)(?:=.*)?)$")
@@ -710,6 +732,91 @@ def floor_shape(final: str, state: dict[str, Any], tr: dict[str, Any]) -> dict[s
     return {"rules": rules, "rows": len(rows), "questions": len(asked), "gh_api_writes": writes}
 
 
+def present_called_missing(task: Path, final: str) -> dict[str, bool]:
+    """Each present.json file (#1117), and whether the report calls it missing, read as a gap is."""
+    spec = task / "present.json"
+    if not spec.exists():
+        return {}
+    return {p["path"]: called_missing(p, final) for p in json.loads(spec.read_text())}
+
+
+def called_missing(entry: dict[str, str], final: str) -> bool:
+    """Whether some sentence of the report says the entry is missing (#1255 review).
+
+    Unlike `entry_met`, which proves a gap and so is undone by any sentence
+    that says the file is there, one claim is enough here: a report that says
+    "LICENSE missing" in a row and "LICENSE is present" below still told the
+    person to repair a file that exists. Each sentence that names the entry
+    is read as `opposite_said` reads one, its clauses that name it first and
+    its negations turned (`readings`); a list item with no state word of its
+    own is read as its lead-in says (`lead_said`).
+    """
+    all_lines = final.splitlines()
+    for at, raw in enumerate(all_lines):
+        if not re.search(entry["named"], raw, re.IGNORECASE):
+            continue
+        line = item_text(all_lines, at)
+        lead = lead_in(all_lines, at)
+        if lead is not None and not readings(entry, line) and lead_said(entry, lead)[0]:
+            return True
+        for part in re.split(r"(?<=[.;!?])\s+", line):
+            if not re.search(entry["named"], part, re.IGNORECASE):
+                continue
+            cuts = [0] + [q for m in CLAUSE.finditer(part) for q in (m.start(), m.end())] + [len(part)]
+            naming = [(x, y) for x, y in zip(cuts[::2], cuts[1::2]) if re.search(entry["named"], part[x:y], re.IGNORECASE)]
+            # A stated word inside the negation that turns the others ("No"
+            # in "No files are missing") is the denial itself, not a claim
+            # (#1255 review); a bare "no LICENSE" stays one.
+            denials = [(m.start(), m.end()) for m in NOT_STATED.finditer(part)]
+            rs = [(start, st) for start, st in readings(entry, part)
+                  if not (st and any(x <= start < y for x, y in denials))]
+            inside = [st for start, st in rs if any(x <= start < y for x, y in naming)]
+            if any(inside) if inside else any(st for _, st in rs):
+                return True
+    return False
+
+
+def floor_clean(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+    """Kind floor-clean (#1117): a report on a project with nothing to fix invents nothing."""
+    lines = [line.rstrip() for line in final.splitlines() if line.strip()]
+    rows = [line for line in lines if ROW.match(line)] + [
+        line for line in lines if BULLET.match(line) and ACTION_BULLET.search(line)
+    ]
+    asked = [line for line in lines for _ in ASKED.findall(line)]
+    writes = [w for b in tr["bash"] for w in gh_api_writes(b)]
+    called = present_called_missing(task, final)
+    rules = {
+        "verdict_clean": bool(lines) and bool(CLEAN_VERDICT.search(lines[0])) and not PREAMBLE.search(lines[0]),
+        "no_action_row": not rows,
+        "no_fail_word": not FAIL_WORD.search(final),
+        "no_check_id": not CHECK_ID.search(final),
+        "one_question_last": len(asked) == 1 and bool(lines) and asked[0] == lines[-1],
+        "no_file_changed": not state["changed_files"],
+        "no_gh_api_write": not writes,
+        "nothing_present_called_missing": not any(called.values()),
+    }
+    unread = task / "unread.json"
+    if unread.exists():
+        spec = json.loads(unread.read_text())
+        rules["unread_said"] = bool(re.search(spec["said"], final, re.IGNORECASE))
+        # A line about what could not be read (its `named`) that says it is in
+        # place (its `claimed`) and not that it was not read: the gap passed off.
+        rules["unread_not_claimed"] = not any(
+            re.search(spec["named"], line, re.IGNORECASE)
+            and re.search(spec["claimed"], line, re.IGNORECASE)
+            and not re.search(spec["said"], line, re.IGNORECASE)
+            for line in lines
+        )
+    return all(rules.values()), {
+        "rules": rules,
+        "rows": len(rows),
+        "questions": len(asked),
+        "gh_api_writes": writes,
+        "present_called_missing": called,
+        "skills": tr["skills"],
+    }
+
+
 def task_record(
     kind: str, task: Path, final: str, best: dict[str, Any], state: dict[str, Any], tr: dict[str, Any]
 ) -> tuple[bool | None, dict[str, Any]]:
@@ -732,12 +839,21 @@ def task_record(
         named = {g["path"]: entry_met(g, final) for g in gaps}
         mentioned = {g["path"]: bool(re.search(g["named"], final, re.IGNORECASE)) for g in gaps}
         shape = floor_shape(final, state, tr)
-        return all(named.values()) and all(shape["rules"].values()), {
+        called = present_called_missing(task, final)
+        return all(named.values()) and all(shape["rules"].values()) and not any(called.values()), {
             "gaps_named": named,
             "mentioned": mentioned,
+            "present_called_missing": called,
             "skills": tr["skills"],
             "shape": shape,
         }
+    if kind == "floor-clean":
+        return floor_clean(task, final, state, tr)
+    if kind == "trigger":
+        spec = json.loads((task / "trigger.json").read_text())
+        # The plugin's name may be left off: `floor-check` is the same skill.
+        did = any(s in (spec["skill"], spec["skill"].split(":")[-1]) for s in tr["skills"])
+        return did == bool(spec["called"]), {"skill": spec["skill"], "called": did, "skills": tr["skills"]}
     if kind == "resume":
         items = json.loads((task / "open.json").read_text())
         named = {i["item"]: entry_met(i, final) for i in items}
@@ -999,6 +1115,8 @@ def main() -> None:
         "arm": arm,
         "n": int(n),
         "kind": kind,
+        # regression or capability (#1117): the summary holds a regression task to pass^3.
+        "tier": (task / "tier").read_text().strip() if (task / "tier").exists() else None,
         "pass": passed,
         "checks_pass": best["checks_pass"],
         "suite_read": bool(tr["suite_reads"]),
