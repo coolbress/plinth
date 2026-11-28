@@ -1129,6 +1129,25 @@ def _wall() -> tuple[dict, ...]:
                         "unlisted": "the tag ruleset not verified: this repository's rulesets could not be listed",
                         "members": "the tag ruleset for members released on their own tags not verified: "
                                    "[tool.plinth.release] own-tags in pyproject.toml could not be read here"}),
+        check("FC-E35", "the approvals required match who can merge", states=("pass", "warn", "review", "info"),
+              handoff="admin", docs=WALL_DOCS, hosts=gh, needs=net, lifecycle="experimental",
+              fix="the two-person rules, or back to one: scripts/add-ruleset-rule.sh <repo> two-people or one-person",
+              messages={"good": "{branch}: {required} required, and {people} can merge ({who})",
+                        "none": "{branch}: {people} can merge ({who}) and no approval is required: nothing makes one "
+                                "of them look at the other's change",
+                        "alone": "{branch}: {required} required, and only {approvers} can give one that counts{how}: "
+                                 "a pull request of theirs cannot merge, as an author cannot approve their own",
+                        "teams": "{branch}: {required} required, with code owners' review on, and CODEOWNERS names "
+                                 "{teams}, whose members are not read here: who can give an approval that counts is "
+                                 "not counted",
+                        "hint": "  scripts/with-admin-token.sh scripts/add-ruleset-rule.sh {repo} {preset}   (from a "
+                                "plinth checkout; its docs/how-to/add-a-second-person.md says when)",
+                        "review": "who can merge is not read here: /plinth:floor-check reads the collaborators with a "
+                                  "login that administers the repository",
+                        "unread": "{branch}: the approvals required are not compared with who can merge: the "
+                                  "collaborators could not be read (that needs push access)",
+                        "nobody": "{branch}: the approvals required are not compared with who can merge: no person "
+                                  "with {role} access is among the collaborators read"}),
         check("FC-E30", "the repository has a description", states=("pass", "info"), handoff="admin",
               docs=BESIDE_DOCS, hosts=gh, needs=net, fix="set one with gh repo edit <repo> --description '<one line>'",
               messages={"good": "the repository has a description",
@@ -1612,6 +1631,42 @@ def read(path: Path) -> str:
 # ── network ──────────────────────────────────────────────────────────────
 
 
+# One repository per run (#1119): every API call names the audited
+# repository, its owner's `.github` (what GitHub inherits), plinth or the
+# template plinth pins, and nothing else. The checker reads text other people
+# can write; a call to any other repository is a defect or an injection, and
+# it stops the run before it is made.
+audited: str | None = None
+
+
+class ForeignRepository(Exception):
+    """An API call naming a repository this run does not audit."""
+
+
+def allowed_repositories() -> set[str]:
+    allowed = {PLINTH_REPO.lower()}
+    pin = new_project_pin()
+    if pin:
+        allowed.add(pin[0].lower())
+    if audited:
+        allowed |= {audited.lower(), f"{audited.split('/')[0]}/.github".lower()}
+    return allowed
+
+
+def guard_repository(path: str, prefix: str = "repos/") -> None:
+    """Stop the run when `path` names a repository other than the allowed
+    ones: `repos/<owner>/<name>` on GitHub, `projects/<owner%2Fname>` on GitLab."""
+    if prefix == "repos/":
+        m = re.match(r"repos/([^/?#]+)/([^/?#]+)", path)
+        slug = f"{m.group(1)}/{m.group(2)}" if m else None
+    else:
+        m = re.match(r"projects/([^/?#]+)", path)
+        slug = urllib.parse.unquote(m.group(1)) if m else None
+    if slug is not None and slug.lower() not in allowed_repositories():
+        raise ForeignRepository(f"a request for {slug} ({path.split('?')[0]}), which this run does not audit "
+                                f"(--repo {audited or 'not given'})")
+
+
 ABSENT = object()   # 404: the resource does not exist
 ERROR = object()    # anything else went wrong: do not conclude
 
@@ -1647,7 +1702,9 @@ def api(path: str, network: bool, paginate: bool = False):
     Through `gh api` when gh is installed: the skill runs on the owner's
     machine, where the token lives in gh's keychain and never in the
     environment, and bypass actors are visible only to that token. Anything
-    but a 404 from gh (not logged in, offline) falls back to a plain request."""
+    but a 404 from gh (not logged in, offline) falls back to a plain request.
+    A path naming a repository the run does not audit stops it first."""
+    guard_repository(path)
     fixture_dir = os.environ.get("FLOOR_CHECK_API_DIR")
     if fixture_dir:
         f = Path(fixture_dir) / (path + ".json")
@@ -2037,6 +2094,58 @@ def check_force_push_deny(deny: list) -> None:
 # a WARN, and promoting one to FAIL is a compatibility decision taken later.
 
 # Placeholder dotenv names: committed on purpose, values not real.
+# Every git call (#1119): no fsmonitor program, no hook, no system config, and
+# no lazy fetch from a promisor remote the checkout names (GIT_NO_LAZY_FETCH,
+# git 2.45 and later; #1278). With `git()`'s filter pairs, reading a
+# repository someone else wrote runs none of the programs it configures for
+# these reads.
+GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
+# The keys that make a filter driver run a program, emptied (#1278).
+FILTER_OFF = (("clean", ""), ("smudge", ""), ("process", ""), ("required", "false"))
+
+
+def filters_off(listing: bytes, env: dict[str, str]) -> dict[str, str]:
+    """GIT_CONFIG_KEY_n/VALUE_n pairs emptying every filter driver that a config
+    other than the person's own (global) and the machine's (system) names: the
+    checkout's local and worktree config and what they include. Environment
+    pairs, not `-c`, since a name may hold a `=`. `listing` is
+    `git config --show-scope --null --get-regexp ^filter\\.`."""
+    parts = listing.split(b"\0")
+    names = {kv.split(b"\n", 1)[0].decode("utf-8", "surrogateescape")[len("filter."):].rsplit(".", 1)[0]
+             for scope, kv in zip(parts[0::2], parts[1::2]) if scope not in (b"global", b"system")}
+    try:
+        n = int(env.get("GIT_CONFIG_COUNT") or 0)
+    except ValueError:
+        n = 0
+    out: dict[str, str] = {}
+    for name in sorted(names):
+        for key, value in FILTER_OFF:
+            out[f"GIT_CONFIG_KEY_{n}"], out[f"GIT_CONFIG_VALUE_{n}"] = f"filter.{name}.{key}", value
+            n += 1
+    return {**out, "GIT_CONFIG_COUNT": str(n)} if out else {}
+
+
+def git(root: Path, *args: str, system_config: bool = False, filters: bool = True, **kw) -> subprocess.CompletedProcess:
+    """`git -C <root> <args>` with GIT_SAFE, GIT_CONFIG_NOSYSTEM=1 and
+    GIT_NO_LAZY_FETCH=1, and every
+    filter driver the checkout configures emptied (`filters_off`). When that
+    config cannot be read, git is not run: the result is exit 128.
+    `system_config` keeps the system level for a read whose subject is every
+    level git reads (FC-G07's credential helpers): the system file is the
+    machine's, not the repository's, and a `config` read runs no program."""
+    env = {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
+    if not system_config:
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
+    if filters:
+        f = git(root, "config", "--show-scope", "--null", "--get-regexp", r"^filter\.", filters=False,
+                capture_output=True, timeout=30)
+        if f.returncode not in (0, 1):   # 1: no filter key
+            text = kw.get("text") or kw.get("encoding")
+            return subprocess.CompletedProcess(list(args), 128, "" if text else b"", "filter config not read")
+        env.update(filters_off(f.stdout, env))
+    return subprocess.run(["git", *GIT_SAFE, "-C", str(root), *args], env=env, check=False, **kw)
+
+
 DOTENV_PLACEHOLDERS = {".env.example", ".env.sample", ".env.template"}
 
 
@@ -2046,8 +2155,8 @@ def check_tracked_dotenv(root: Path) -> None:
     only; the contents are not read, and this is not a secret scanner (history,
     other file names and `.envrc` are outside it)."""
     try:
-        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, timeout=30, check=False,
-                           encoding="utf-8", errors="replace")  # a file name is any bytes; never a traceback
+        r = git(root, "ls-files", "-z", capture_output=True, timeout=30,
+                encoding="utf-8", errors="replace")  # a file name is any bytes; never a traceback
     except (OSError, subprocess.TimeoutExpired):
         r = None
     if r is None or r.returncode != 0:
@@ -4737,7 +4846,9 @@ def gl_api(path: str, network: bool, raw: bool = False, paginate: bool = False):
     login (#544). JSON, or the text with raw; ABSENT on a 404; ERROR when
     offline, not logged in, or on any other failure. FLOOR_CHECK_GITLAB_API_DIR
     serves fixtures: <path>.json, or <path> as is with raw; a missing file is
-    a 404 and `<path>.error` an error."""
+    a 404 and `<path>.error` an error. A project the run does not audit
+    stops it first."""
+    guard_repository(path, "projects/")
     fixture_dir = os.environ.get("FLOOR_CHECK_GITLAB_API_DIR")
     if fixture_dir:
         f = Path(fixture_dir) / (path if raw else path + ".json")
@@ -6112,6 +6223,92 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             emit("FC-E24", "unknown", "unread", {"rid": rid}, reason="bypass actors not read")
         else:
             verdict("FC-E24", actors == [], {"rid": rid, "actors": actors})
+    if "pull_request" in by_type:
+        check_approvals(repo, branch, pr, reserved, network, actions_token, root)
+
+
+def codeowner_logins(root: Path | None) -> tuple[set[str], set[str]] | None:
+    """The user logins and the teams (org/team) the CODEOWNERS file GitHub
+    reads names (.github/, the root, docs/, the first found), lowercased;
+    emails left out. None when there is no such file. A team's members are
+    not read here (#1235 review)."""
+    for rel in (".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"):
+        f = (root or Path(".")) / rel
+        if f.is_file():
+            names: set[str] = set()
+            teams: set[str] = set()
+            for line in read(f).splitlines():
+                for tok in line.split("#", 1)[0].split()[1:]:
+                    if tok.startswith("@"):
+                        (teams if "/" in tok else names).add(tok[1:].lower())
+            return names, teams
+    return None
+
+
+def check_approvals(repo: str, branch: str, pr: dict, reserved: str | None, network: bool,
+                    actions_token: bool, root: Path | None = None) -> None:
+    """The approvals the pull-request rule requires against the people
+    (#1150), a WARN either way it does not fit. Two or more people can merge
+    and no approval is required, so neither has to look at the other's
+    change: who can merge is the admins where the merge ruleset stands (an
+    agent's own account is a collaborator with write, never the admin), and
+    everyone with write where it does not. Or an approval is required and
+    one person at most can give one that counts, so their own pull requests
+    cannot merge: GitHub counts an approval from anyone with write, and with
+    code owners' review on, only from a code owner, so there it is those
+    with write whom this checkout's CODEOWNERS names. Bots are not people."""
+    required = pr.get("required_approving_review_count")
+    if not isinstance(required, int):
+        return
+    got = api(f"repos/{repo}/collaborators?per_page=100", network, paginate=True)
+    if not isinstance(got, list) and actions_token:
+        emit("FC-E35", "review", "review", reader=ADMIN_READER)
+        return
+    if not isinstance(got, list):
+        emit("FC-E35", "info", "unread", {"branch": branch})
+        return
+    role = "admin" if reserved in ("stands", "never") else "push"
+    who = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
+                 and (c.get("permissions") or {}).get(role) is True)
+    writers = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
+                     and (c.get("permissions") or {}).get("push") is True)
+    # GitHub counts the approvals required from anyone with write, and with
+    # code owners' review on requires, besides, one from a code owner (#1235
+    # review): the two are counted apart. An author cannot approve their own
+    # pull request, so one of theirs needs `required` from the other writers,
+    # and a code owner's needs another code owner. A team in CODEOWNERS may
+    # hold code owners that are not read: then that count is not made.
+    owners_w: list[str] = []
+    teams: set[str] = set()
+    how = ""
+    co = pr.get("require_code_owner_review") is True
+    if co:
+        read_owners = codeowner_logins(root)
+        owners, teams = read_owners if read_owners is not None else (None, set())
+        owners_w = [w for w in writers if w.lower() in (owners or set())]
+        how = (" (code owners' review is on, and no CODEOWNERS file is here)" if owners is None else
+               " (code owners' review is on, and CODEOWNERS names no one else with write)")
+    count_short = required >= 1 and len(writers) <= required
+    owner_short = co and required >= 1 and len(owners_w) <= 1
+    values = {"branch": branch, "who": ", ".join(who) or "nobody", "how": "" if count_short else how,
+              "approvers": ", ".join(writers if count_short else owners_w) or "nobody",
+              "people": f"{len(who)} {'person' if len(who) == 1 else 'people'}",
+              "required": f"{required} approval{'' if required == 1 else 's'}", "repo": repo}
+    if count_short:
+        emit("FC-E35", "warn", "alone", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="one-person" if len(writers) <= 1 else "two-people"))
+    elif owner_short and teams:
+        emit("FC-E35", "info", "teams", dict(values, teams=", ".join(f"@{t}" for t in sorted(teams))))
+    elif owner_short:
+        emit("FC-E35", "warn", "alone", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="one-person"))
+    elif not who:
+        emit("FC-E35", "info", "nobody", dict(values, role="admin" if role == "admin" else "write"))
+    elif len(who) >= 2 and required == 0:
+        emit("FC-E35", "warn", "none", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="two-people"))
+    else:
+        emit("FC-E35", "pass", "good", values)
 
 
 def bypass_key(actor: dict) -> tuple[str, str, str]:
@@ -6597,9 +6794,8 @@ def check_credentials(root: Path, host: str = "github") -> None:
 
     g: subprocess.CompletedProcess[str] | None
     try:
-        g = subprocess.run(["git", "-C", str(root), "config", "--null", "--get-regexp",
-                            r"^(credential\..*helper|http\..*extraheader)$"],
-                           capture_output=True, text=True, timeout=30, check=False)
+        g = git(root, "config", "--null", "--get-regexp", r"^(credential\..*helper|http\..*extraheader)$",
+                system_config=True, capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         g = None
     if g is None or g.returncode not in (0, 1):   # 1: no such key
@@ -6889,6 +7085,8 @@ def main() -> int:
                     help="with --print-ruleset: leave the code_scanning rule out, as the door does for a private "
                          "repository without GitHub Code Security")
     a = ap.parse_args()
+    global audited
+    audited = a.repo
     if a.format == "json" and any(v for k, v in vars(a).items() if k.startswith("print_")):
         ap.error("--format json reports a run; a --print-* flag prints something else")
     global out_format
@@ -7057,6 +7255,11 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except ForeignRepository as exc:
+        if out_format == "json":
+            print_json(results, {"after": results[-1]["id"] if results else None, "error": type(exc).__name__})
+        print(f"floor-check: stopped: {exc}. Nothing after it was read.", file=sys.stderr)
+        sys.exit(2)
     except Exception as exc:
         if out_format == "json":
             # The skill reads a document either way: one that says where the run stopped.

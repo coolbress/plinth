@@ -14,8 +14,9 @@ not verified.
 Two layers:
 
 - Facts, judged whatever the repository's conventions say: a `#N` or
-  `owner/repo#N` in a body (outside code) that resolves to nothing (410, or a
-  404 above the highest number the repository has used); a home path in a
+  `owner/repo#N` naming this repository, in a body (outside code), that
+  resolves to nothing (410, or a 404 above the highest number the repository
+  has used); another repository's `owner/repo#N` is a SKIP, never requested; a home path in a
   body, reported by line and form, never repeating what matched; a body at
   90% or more of GitHub's 65,536 limit, counted in characters and in UTF-8
   bytes, since the unit is not documented.
@@ -34,6 +35,10 @@ with URLs and line numbers, never judged.
 
 A GitLab checkout (--host gitlab, or `host: gitlab` in .copier-answers.yml)
 prints `GitLab: not read` and judges nothing.
+
+One repository per run (#1119): every request, through `gh` or the urllib
+fallback, is guarded first by `guard()`, which allows the audited repository and its owner's `.github` and stops the
+run (exit 2) on any other.
 
 Standard library only. RECORDS_CHECK_API_DIR serves fixtures: a REST path
 `<path>.json` (a body of {"__status": N} answers that status; no file is a
@@ -76,6 +81,36 @@ class CannotRun(Exception):
     pass
 
 
+class ForeignRepository(Exception):
+    """A request for a repository this run does not audit (#1119)."""
+
+
+# The audited repository (--repo). A request may name it or its owner's
+# `.github`, where the conventions are inherited from; any other stops the run.
+audited: str | None = None
+
+
+def guard(repo: str) -> None:
+    """Stop the run when `repo` is not one this run reads. A reference to
+    another repository's issue is never requested (`resolve`), so only a
+    defect or an injected value reaches this."""
+    owner = (audited or "").split("/", 1)[0]
+    if not audited or repo.lower() not in {audited.lower(), f"{owner}/.github".lower()}:
+        raise ForeignRepository(f"a request for {repo}, which this run does not audit")
+
+
+def gh(args: list[str], repo: str, timeout: int) -> subprocess.CompletedProcess[str]:
+    """Every `gh` call this checker makes, for `repo` (#1119): guarded first."""
+    guard(repo)
+    return subprocess.run(["gh", *args], capture_output=True, text=True, timeout=timeout, check=False)
+
+
+def repo_of(path: str) -> str:
+    """The owner/name a REST path `repos/<owner>/<name>/...` names."""
+    parts = path.split("?", 1)[0].split("/")
+    return "/".join(parts[1:3]) if parts[0] == "repos" and len(parts) >= 3 else path
+
+
 def line(kind: str, msg: str, rule: str | None = None) -> None:
     global skips, unchecked
     print(f"  {kind:4}  {msg}")
@@ -98,6 +133,7 @@ def fixture_dir() -> Path | None:
 
 def rest(path: str) -> tuple[int, Any]:
     """GET api.github.com/<path>: (status, JSON). Status 0 means no answer."""
+    guard(repo_of(path))
     d = fixture_dir()
     if d:
         f = d / (path + ".json")
@@ -111,7 +147,7 @@ def rest(path: str) -> tuple[int, Any]:
             return int(data["__status"]), None
         return 200, data
     try:
-        r = subprocess.run(["gh", "api", "-i", path], capture_output=True, text=True, timeout=60, check=False)
+        r = gh(["api", "-i", path], repo_of(path), 60)
     except (OSError, subprocess.TimeoutExpired):
         return rest_plain(path)
     m = re.match(r"HTTP/\S+ (\d{3})", r.stdout)
@@ -143,6 +179,8 @@ def rest_plain(path: str) -> tuple[int, Any]:
 def graphql(name: str, query: str, variables: dict[str, Any]) -> dict | None:
     """The whole answer ({data, errors}), or None when there was none. An
     answer may carry both data and errors; the caller reads each part."""
+    repo = f"{variables.get('owner')}/{variables.get('name')}"
+    guard(repo)
     d = fixture_dir()
     if d:
         f = d / "graphql" / (name + ".json")
@@ -151,7 +189,7 @@ def graphql(name: str, query: str, variables: dict[str, Any]) -> dict | None:
         except (OSError, ValueError):
             return None
         return out if isinstance(out, dict) else None
-    cmd = ["gh", "api", "graphql", "-f", f"query={query}"]
+    cmd = ["api", "graphql", "-f", f"query={query}"]
     for k, v in variables.items():
         if v is not None:
             cmd += ["-F" if isinstance(v, int) else "-f", f"{k}={v}"]
@@ -159,7 +197,7 @@ def graphql(name: str, query: str, variables: dict[str, Any]) -> dict | None:
     # on this repository's issues): three tries before it counts as no answer.
     for _ in range(3):
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+            r = gh(cmd, repo, 120)
         except (OSError, subprocess.TimeoutExpired):
             continue
         # gh exits 1 on an answer with errors and still prints it: read the body.
@@ -534,6 +572,15 @@ def resolve(own: str, refs_by_repo: dict[str, dict[int, list[str]]], known: set[
         nums = sorted(n for n in refs_by_repo[repo] if not (repo == own and n in known))
         if not nums:
             continue
+        if repo.lower() != own.lower():
+            # One repository per run (#1119): another repository's numbers are
+            # not requested, so no reference planted in a record aims a read.
+            # One line for the repository, not one per number.
+            urls = list(dict.fromkeys(u for x in nums for u in refs_by_repo[repo][x]))
+            shown = ", ".join(f"#{x}" for x in nums[:5]) + (f" and {len(nums) - 5} more" if len(nums) > 5 else "")
+            line("SKIP", f"{repo}: {len(nums)} reference{'s' if len(nums) != 1 else ''} not verified ({shown}): "
+                         f"another repository, which this run does not read, referenced in {where_read(urls)}")
+            continue
         o, n = repo.split("/", 1)
         seen = refs_by_repo[repo]
         for c in range(0, len(nums), REF_CHUNK):
@@ -689,8 +736,13 @@ def main(argv: list[str] | None = None) -> int:
     if not a.repo or not re.fullmatch(r"[\w.-]+/[\w.-]+", a.repo):
         print("records-check: could not run: no --repo owner/name", file=sys.stderr)
         return 2
+    global audited
+    audited = a.repo
     try:
         check(root, a.repo)
+    except ForeignRepository as e:
+        print(f"records-check: stopped: {e}", file=sys.stderr)
+        return 2
     except CannotRun as e:
         print(f"records-check: could not run: {e}", file=sys.stderr)
         return 2

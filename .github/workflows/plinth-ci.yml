@@ -187,6 +187,11 @@ jobs:
       - name: Floor checker's registry holds its areas, ids, keepable, baseline and view
         run: ./tests/floor-check-registry.sh
 
+      # The audit reads text other people write (#1119): one repository per
+      # run, and no git call runs a program of the audited repository.
+      - name: Floor checker reads one repository per run, and its git calls run no repository program
+        run: ./tests/audit-guard.sh
+
       - name: Every uv pin is one release and its checksum, the template's too
         run: ./tests/uv-pin.sh
 
@@ -265,6 +270,9 @@ jobs:
 
       - name: The guide's next step per state, and only the arsenal's tools
         run: ./tests/guide-cases.sh
+
+      - name: The template's AGENTS.md, the arsenal, run-a-project and the guide name the same next step
+        run: ./tests/guidance-agree.sh
 
       - name: The template update runs the checker's command in a worktree and opens nothing over a conflict
         run: ./tests/template-update-cases.sh

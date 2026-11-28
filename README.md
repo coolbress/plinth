@@ -1,31 +1,39 @@
-# plinth
+<!-- markdownlint-disable-next-line MD041 -->
+<p align="center"><img src="docs/assets/plinth-mark.svg" alt="plinth" width="420"></p>
 
-For a beginner engineer or a non-engineer who runs a software project
-through an AI agent: in a repository plinth makes, the agent explains each
-change in plain words and recommends one option at each decision it asks of
-you, and the checks tell you what was confirmed. The guidance is designed for
-that reader, and not yet tried by anyone but its author.
+# The groundwork laid for you. The workflow, one step at a time
 
-Gated where a check can. Guided where it can't.
-The path comes from how experienced engineers run projects; whether the
-result is what you wanted stays yours to judge ([why](docs/explanation/concepts.md#about-the-process)).
+plinth sets up your new Python project with automatic tests and other
+checks, a protected main version, a scan for exposed passwords and keys, and
+templates for recording what changed and why. Then it guides you from your
+first idea to release, one task at a time. You try the result and decide what
+goes into the project.
 
-**What makes a project professional when you are new to code?**
-Not the code alone: the setup around it, the checks the code has to pass and
-a record another person can read.
+You can start without figuring out which safeguards to turn on. Your AI agent
+does the work.
 
-**How do I get better code out of an agent?**
-Small steps the checks can answer, each with something you can see that
-proves it done.
+Claude Code is the only supported agent today. plinth aims to support more
+agents.
 
-**Why not just tell the agent the rules?**
-A rule the agent is told holds only while the agent follows it. plinth
-configures the host (today GitHub) to require checks before a merge, most of
-them established tools and a few plinth's own, and the host refuses the merge
-while one is red. In 2026's terms, plinth is a harness template: guides for
-the agent, and checks the host requires, not the agent.
+**Gated where a check can.** On GitHub, a proposed change waits until its
+required checks pass.
+
+**Guided where it can't.** plinth helps you plan the work, try the result,
+and decide whether to accept it.
 
 You decide. The checks answer. The record remembers.
+
+A new project starts with `/plinth:new-project`. Already have a project?
+`/plinth:floor-check` reports what it could verify, suggests fixes for the
+gaps it finds, and changes nothing in your project; it can keep one note on
+this machine, so the next run can say what changed. `/plinth:guide` tells you which
+command to type next.
+
+## Install plinth
+
+No one but the author has used plinth yet.
+
+plinth installs as a Claude Code plugin:
 
 <!-- install-block:start -->
 ```bash
@@ -34,14 +42,92 @@ claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it asks
-where it lives, what kind of project it is, its name and who may see it,
-shows every answer (licence, third-party reviewer, code of conduct,
-description and directory included) in one table where you change only the
-rows you pick, then creates a repository with the checks already required,
-or says why it could not. Each answer is also a flag, and a flag given is not asked
-([the tutorial](docs/tutorials/getting-started.md#create-the-repository)). From there,
-[run a project](docs/how-to/run-a-project.md) is the loop, stage by stage.
+In Claude Code, type `/`, choose `plinth:new-project` from the menu, and
+enter a name such as `my-app`. You'll see the proposed setup before anything
+is created. [Before you start](docs/tutorials/getting-started.md#before-you-start)
+says what to have ready.
+
+## What you get
+
+### The groundwork: gated where a check can
+
+Here's what plinth sets up for a new GitHub project. Each row is held by a
+check or a rule GitHub enforces, while those rules stand; on a private
+project, some need GitHub Code Security:
+
+| What is set up | What it means for you |
+| --- | --- |
+| Automatic checks on every proposed change: tests, type checks, a linter and a build | A change waits until the tests pass and the code builds |
+| Rules for accepting changes into the main version | Every change arrives as a pull request, and the main version cannot be overwritten or deleted |
+| A scan for exposed passwords and keys | The scan looks through the project's saved history for exposed passwords and keys. When it finds one, the check fails and tells you to revoke it. By then the secret is already on GitHub |
+| A check of new packages | plinth checks newly added or upgraded packages for serious known security problems |
+| Code scanning | GitHub's code scanner holds a change with a serious security finding. On private GitHub projects, it requires GitHub Code Security |
+| A size limit on each change | A change over the line limit (400 by default) turns the check red, and its fix is to split the change. By default, Markdown, lockfiles and the licence are left out of the count |
+| A form for each pull request's title | An automatic check checks the title's format. plinth also asks the agent to explain what changed and why, so someone can read the record later: that part is guidance, not a check |
+| The documents a project keeps: a README, a changelog, contributing rules, the agent's rules, a security policy and issue forms | Another person, or a later session, can find how the project works; a check turns red when one of them goes missing |
+| A check of the groundwork itself | A check flags some changes that weaken the setup. If a change removes that check altogether, a separate inspection can spot the missing check after the change is accepted |
+
+On GitLab.com Free, the pipeline must pass as a whole before a change can be
+accepted, but GitLab does not require each check by name, and a change can
+drop a check from its own pipeline.
+
+### The workflow: guided where it can't
+
+Shape the idea → write down the tasks → build one → wait for the checks → try
+the result yourself → accept the change → release when ready.
+
+Each step is explained in plain words as you reach it, and
+`/plinth:guide` names the next command. Two of them, in short:
+
+- **Build one task.** Ask the agent to build one task and open a page showing
+  what changed, why, and what passed (a pull request). plinth asks the agent
+  to have the change reviewed by a reviewer that never saw the session; ask
+  which review ran and what it found.
+- **Accept the change.** You decide when to accept it. If the agent uses your
+  administrator login, plinth asks it to wait for your go-ahead. If you give
+  the agent a separate account and reserve merging for administrators, GitHub
+  blocks that account from merging, and you accept the change in GitHub.
+
+[Run a project](docs/how-to/run-a-project.md) has every step in full. The
+path comes from how experienced engineers run projects; whether the result is
+what you wanted stays yours to judge ([why](docs/explanation/concepts.md#about-the-process)).
+
+### Checking an existing project
+
+Shortened from a real read-only check of
+[nexusbt](https://github.com/coolbress/nexusbt), a project made with plinth,
+by the checker `/plinth:floor-check` runs. `[…]` marks omitted output.
+
+```text
+You:     /plinth:floor-check
+
+Claude:  No check failed in what was read; 2 things to look at.
+         Nothing was changed.
+
+         […]
+
+         The merge: guidance. This login is the repository's admin, and
+         GitHub lets the admin merge (put a change into the main line),
+         so an agent working under it can merge too; it is asked to wait
+         for your word, not stopped.
+
+         […]
+
+         Next: type `/plinth:guide`; it names in plain words the one
+         command to type next.
+
+         […]
+```
+
+### Where it comes from
+
+Three parts: a plugin for the agent (six skills, listed
+[below](#skills-and-dependencies)), a project template (a Python project
+managed with uv), and reusable CI that every project runs from one pinned
+commit of this repository. Each check's name, what it asserts and its fix
+are in [Required checks](docs/reference/required-checks.md).
+
+## Honest limits
 
 **The limits.** A green check means the properties it asserts hold, not that
 the code is right, and a pull request can rewrite its own CI file so that
@@ -63,16 +149,7 @@ offered template updates as a draft pull request. A private repository needs a p
 GitHub plan, and some protections need more ([about private repositories](docs/explanation/concepts.md#about-private-repositories));
 GitLab.com Free protects a private project.
 
-## What plinth is
-
-The base a project run through an AI agent stands on: required checks that
-no change merges past while they are red, a curated set of agent skills, and a
-generator that starts a new repository with both already in place. Most of
-the checks run established tools (ruff, pytest, gitleaks, CodeQL and others),
-a few are plinth's own, and plinth configures the host (GitHub, or GitLab.com)
-to require them before a merge, so the host, not plinth, refuses a merge while
-they are red. On GitLab Free the host requires the pipeline as a whole, not
-each check by name.
+## Supported, and outside
 
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing
@@ -162,7 +239,7 @@ What was measured: [coolbress/plinth-template#208](https://github.com/coolbress/
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
-## What you get
+## Skills and dependencies
 
 Six skills, prefixed `/plinth:`:
 
@@ -229,7 +306,7 @@ and otherwise prints the repository to delete; a step it can go on without,
 such as a label, is named and left. If the create's own answer is lost, it
 does neither, so check whether the repository exists (its failure paths run in CI against a mocked
 `gh`). It renders
-[plinth-template v1.52.0](https://github.com/coolbress/plinth-template/releases/tag/v1.52.0),
+[plinth-template v1.53.0](https://github.com/coolbress/plinth-template/releases/tag/v1.53.0),
 whose CI reports every check the wall requires. Since the release gate (#62),
 each release is tagged only after `e2e`, run on its files, has
 created a repository on real GitHub, merged its first pull request and deleted

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="294" height="84" viewBox="0 0 294 84" role="img" aria-label="plinth">
+  <title>plinth</title>
+  <!-- bold block letters on one slab; the dot of the i, the one thing standing on top, is the accent: a passing check -->
+  <style>.ink{fill:#1f2328}.acc{fill:#1a7f37}@media (prefers-color-scheme: dark){.ink{fill:#e6edf3}.acc{fill:#3fb950}}</style>
+  <rect class="ink" x="6" y="24" width="36" height="6"/>
+  <rect class="ink" x="6" y="30" width="12" height="6"/>
+  <rect class="ink" x="36" y="30" width="12" height="6"/>
+  <rect class="ink" x="6" y="36" width="12" height="6"/>
+  <rect class="ink" x="36" y="36" width="12" height="6"/>
+  <rect class="ink" x="6" y="42" width="12" height="6"/>
+  <rect class="ink" x="36" y="42" width="12" height="6"/>
+  <rect class="ink" x="6" y="48" width="36" height="6"/>
+  <rect class="ink" x="6" y="54" width="12" height="6"/>
+  <rect class="ink" x="6" y="60" width="12" height="6"/>
+  <rect class="ink" x="54" y="6" width="24" height="6"/>
+  <rect class="ink" x="66" y="12" width="12" height="6"/>
+  <rect class="ink" x="66" y="18" width="12" height="6"/>
+  <rect class="ink" x="66" y="24" width="12" height="6"/>
+  <rect class="ink" x="66" y="30" width="12" height="6"/>
+  <rect class="ink" x="66" y="36" width="12" height="6"/>
+  <rect class="ink" x="66" y="42" width="12" height="6"/>
+  <rect class="ink" x="66" y="48" width="30" height="6"/>
+  <rect class="ink" x="102" y="24" width="24" height="6"/>
+  <rect class="ink" x="114" y="30" width="12" height="6"/>
+  <rect class="ink" x="114" y="36" width="12" height="6"/>
+  <rect class="ink" x="114" y="42" width="12" height="6"/>
+  <rect class="ink" x="114" y="48" width="30" height="6"/>
+  <rect class="ink" x="150" y="24" width="36" height="6"/>
+  <rect class="ink" x="150" y="30" width="12" height="6"/>
+  <rect class="ink" x="180" y="30" width="12" height="6"/>
+  <rect class="ink" x="150" y="36" width="12" height="6"/>
+  <rect class="ink" x="180" y="36" width="12" height="6"/>
+  <rect class="ink" x="150" y="42" width="12" height="6"/>
+  <rect class="ink" x="180" y="42" width="12" height="6"/>
+  <rect class="ink" x="150" y="48" width="12" height="6"/>
+  <rect class="ink" x="180" y="48" width="12" height="6"/>
+  <rect class="ink" x="210" y="6" width="12" height="6"/>
+  <rect class="ink" x="210" y="12" width="12" height="6"/>
+  <rect class="ink" x="210" y="18" width="12" height="6"/>
+  <rect class="ink" x="198" y="24" width="42" height="6"/>
+  <rect class="ink" x="210" y="30" width="12" height="6"/>
+  <rect class="ink" x="210" y="36" width="12" height="6"/>
+  <rect class="ink" x="210" y="42" width="12" height="6"/>
+  <rect class="ink" x="216" y="48" width="24" height="6"/>
+  <rect class="ink" x="246" y="6" width="12" height="6"/>
+  <rect class="ink" x="246" y="12" width="12" height="6"/>
+  <rect class="ink" x="246" y="18" width="12" height="6"/>
+  <rect class="ink" x="246" y="24" width="36" height="6"/>
+  <rect class="ink" x="246" y="30" width="12" height="6"/>
+  <rect class="ink" x="276" y="30" width="12" height="6"/>
+  <rect class="ink" x="246" y="36" width="12" height="6"/>
+  <rect class="ink" x="276" y="36" width="12" height="6"/>
+  <rect class="ink" x="246" y="42" width="12" height="6"/>
+  <rect class="ink" x="276" y="42" width="12" height="6"/>
+  <rect class="ink" x="246" y="48" width="12" height="6"/>
+  <rect class="ink" x="276" y="48" width="12" height="6"/>
+  <rect class="acc" x="114" y="6" width="12" height="6"/>
+  <rect class="acc" x="114" y="12" width="12" height="6"/>
+  <rect class="ink" x="3" y="72" width="288" height="8" rx="1"/>
+</svg>

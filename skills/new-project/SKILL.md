@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Create a new GitHub repository with required checks already enforced (with --host gitlab, a GitLab.com project with its wall). User-invoked only; creates a remote repository, and if a step that raises the wall fails, deletes it when the token can or names it when it cannot.
-argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web|dashboard] [--hosting=render|railway|digitalocean|fly|vps|home|local] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--scheduled-run|--no-scheduled-run] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
+argument-hint: "[<owner>/]<name> [--archetype=cli|library|backend|data-ml|web|dashboard] [--hosting=render|railway|digitalocean|fly|vps|home|local] [--private|--public] [--host=github|gitlab] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language in English>] [--no-custom-user-model] [--scheduled-run|--no-scheduled-run] [--calls-claude|--no-calls-claude] [--license=mit|apache-2.0|proprietary] [--dir=<path>]; what is not given is asked"
 disable-model-invocation: true
 ---
 
@@ -225,6 +225,10 @@ a download under Artifacts on the run's page, never a commit. The Actions
 allowlist and the ruleset are the same as without it: the workflow calls
 GitHub's own actions only. With `--host gitlab` the script refuses it before
 it reads anything on GitLab: a pipeline schedule was not tried.
+
+`--calls-claude` (cli, dashboard or backend, GitHub only) adds the Anthropic
+SDK and the one module that calls it; the key is never asked. With
+`--host gitlab` the script refuses it before it reads anything on GitLab.
 
 With `--host gitlab` the target is a GitLab.com project. It checks `glab`
 (installed, recent enough, logged in to gitlab.com, with the api scope where

@@ -4,6 +4,29 @@ This tutorial walks from an empty machine to a merged first pull request:
 install plinth, create a repository with the required checks already enforced,
 and merge the pull request the generator opens for you.
 
+## When plinth is not the right tool
+
+plinth makes a Python project in a GitHub or GitLab.com repository of your
+own, run from a terminal. Some projects fit another kind of tool better
+(each page read 2026-11-28):
+
+- A JavaScript web app where the screen is the point, or a shop or a
+  landing site: an AI app builder that makes an app from a chat, such as
+  [Lovable](https://docs.lovable.dev/introduction/welcome),
+  [v0](https://v0.app) or [Bolt](https://bolt.new).
+- A Python job that runs on a schedule, or a bot, with no terminal and no
+  GitHub: [Replit](https://replit.com), whose
+  [deployment types](https://docs.replit.com/features/publishing/deployment-types)
+  include a scheduled one.
+- One public Streamlit page:
+  [Streamlit Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud),
+  free, deployed from a GitHub repository.
+- A mobile or desktop app: outside plinth's scope.
+
+What plinth gives that those do not: checks on a repository you own,
+template updates through copier, a project you can leave with everything in
+it, and a record of what was decided.
+
 ## Before you start
 
 - Tools: `claude` (2.1.274 or newer), `gh`, `git`, `uv`, `python3`. The
@@ -41,6 +64,84 @@ and merge the pull request the generator opens for you.
   generator's `uvx --from copier copier` step, so this tutorial does not
   complete with it on there. Linux and WSL2 were not measured.
 
+## What plinth does not cover
+
+plinth's checks hold the repository. They do not reach the six things
+below, and plinth checks none of them; each links the page that covers it.
+The Claude Code and price facts were read 2026-11-28.
+
+- **Your own accounts.** Turn on two-factor authentication for your GitHub
+  account with a passkey, a security key or an authenticator app, not SMS
+  ([GitHub Docs](https://docs.github.com/en/authentication/securing-your-account-with-two-factor-authentication-2fa/configuring-two-factor-authentication)),
+  and keep its recovery codes somewhere other than this computer
+  ([recovery methods](https://docs.github.com/en/authentication/securing-your-account-with-two-factor-authentication-2fa/configuring-two-factor-authentication-recovery-methods)).
+  Give the email account behind it a password of its own and two-factor
+  authentication too: whoever reads that email can reset the GitHub
+  password. Learn to recognise a phishing page, a copy of a login page made
+  to take your password or code ([NCSC](https://www.ncsc.gov.uk/guidance/phishing)),
+  and now and then review the
+  [OAuth apps](https://docs.github.com/en/apps/oauth-apps/using-oauth-apps/reviewing-your-authorized-oauth-apps)
+  and [GitHub Apps](https://docs.github.com/en/apps/using-github-apps/reviewing-and-revoking-authorization-of-github-apps)
+  you authorised and read your account's
+  [security log](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/reviewing-your-security-log).
+  After the 2025 npm worm, CISA put phishing-resistant multifactor
+  authentication on developer accounts first
+  ([CISA, 2025-09-23](https://www.cisa.gov/news-events/alerts/2025/09/23/widespread-supply-chain-compromise-impacting-npm-ecosystem)).
+- **The agent's permission mode.** Auto mode is Claude Code's default and
+  not a boundary: from Claude Code 2.1.283 it is the mode an interactive
+  session starts in, it "does not guarantee safety", and by default it
+  pushes to any branch of the repository you are working in, the default
+  branch included
+  ([permission modes](https://code.claude.com/docs/en/permission-modes)).
+  Never use bypass mode (`--dangerously-skip-permissions`) on your own
+  computer: it "offers no protection against prompt injection", and the
+  same page keeps it to a container or virtual machine without internet
+  access.
+- **What else runs on the computer.** Each MCP server or plugin you add runs
+  with your access, and Anthropic does not security-audit MCP servers
+  ([security](https://code.claude.com/docs/en/security)). A folder someone
+  else made shows a trust dialog when you open it, and its `.mcp.json`
+  servers have their own approval prompt; a `claude -p` run there shows
+  neither, and the folder's hooks still run
+  ([what runs before you trust a folder](https://code.claude.com/docs/en/permissions#what-runs-before-you-trust-a-folder)).
+  Accept the trust dialog only for a repository whose owner you trust.
+- **Before adding a package.** Before `uv add`, look the name up on
+  [PyPI](https://pypi.org): the project exists, its owner and links are the
+  ones you meant, and it has a history of releases. Package names a model
+  suggests often do not exist (on average at least 5.2% for commercial
+  models and 21.7% for open-source ones, across 16 models;
+  [USENIX Security 2025](https://www.usenix.org/conference/usenixsecurity25/presentation/spracklen)),
+  and a name someone registers later installs and runs their code.
+  Optionally, `exclude-newer = "7 days"` under `[tool.uv]` in
+  `pyproject.toml` makes uv leave out releases younger than a week
+  ([uv settings](https://docs.astral.sh/uv/reference/settings/#exclude-newer);
+  measured on uv 0.9.27): 2025's npm incidents were live for hours to days
+  ([Nx postmortem](https://nx.dev/blog/s1ngularity-postmortem)).
+- **Accessibility.** For a screen reader, start `claude --ax-screen-reader`,
+  or add `"axScreenReader": true` to your user settings for every session
+  (a project's settings cannot turn it on). `/theme` offers
+  `dark-daltonized` and `light-daltonized` for colour blindness,
+  `"prefersReducedMotion": true` cuts the animations, and
+  `CLAUDE_CODE_ACCESSIBILITY=1` keeps the cursor visible for a screen
+  magnifier ([accessibility](https://code.claude.com/docs/en/accessibility)).
+- **Cost.** Claude Code needs a paid plan: the Free plan has none, and Pro
+  is US$20 a month billed monthly ([Claude pricing](https://claude.com/pricing)).
+  Its 5-hour and weekly limits are shared with Claude chat
+  ([Claude Code on Pro or Max](https://support.claude.com/en/articles/11145838-using-claude-code-with-your-pro-or-max-plan)),
+  and `/usage` shows where you stand
+  ([costs](https://code.claude.com/docs/en/costs)). The default model is
+  Opus 5.5; `/model sonnet` switches to Sonnet 5.5, half the price per
+  token ([model configuration](https://code.claude.com/docs/en/model-config),
+  [API pricing](https://platform.claude.com/docs/en/about-claude/pricing)).
+  Usage credits are billed at API rates, so set a monthly spending cap
+  before you turn them on
+  ([usage credits](https://support.claude.com/en/articles/12429409-extra-usage-for-paid-claude-plans)).
+  One run of a small task from plinth's eval suite cost US$0.10 to 0.26
+  (medians, at API list price on Sonnet 5.5)
+  ([plinth#647](https://github.com/coolbress/plinth/issues/647#issuecomment-7155016545)).
+  On a public repository, GitHub's standard runners cost nothing
+  ([Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)).
+
 ## Install plinth
 
 <!-- install-block:start -->
@@ -73,7 +174,7 @@ is fine as long as it is empty. Before creating anything the generator prints
 one line with what it is about to do, for example:
 
 ```text
-create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.52.0 in /home/you/my-app; wall: ruleset + CodeQL + v* tags kept; then the first pull request. rollback: on
+create you/my-app (public, MIT, cli, as owner) from coolbress/plinth-template@v1.53.0 in /home/you/my-app; wall: ruleset + CodeQL + v* tags kept; then the first pull request. rollback: on
 ```
 
 Before any question, the generator reads whether `gh` and `glab` are
@@ -99,7 +200,10 @@ type an answer instead):
    model card (`data-ml`; on GitHub a `v*` tag publishes the model, its
    metrics and the card as release files); a website people log in to
    (`web`, then where it runs); or a page of tables and charts with no login
-   (`dashboard`, then whether it runs on your computer or on Render). Data processing, collection or a pipeline
+   (`dashboard`, then whether it runs on your computer or on Render). A
+   chatbot, an assistant or AI answers is the kind its interface fits,
+   calling Claude (`--calls-claude`): a terminal is `cli`, a page
+   `dashboard`, a service or a bot `backend`. Data processing, collection or a pipeline
    with no model trained is `cli`. Accept it, pick another kind, or say you
    are not sure (`cli`).
 4. **The name**, when the command gave none: two or three suggestions in
@@ -174,6 +278,12 @@ you can type instead:
   in a public repository GitHub turns the schedule off after 60 days with
   no activity. `--no-scheduled-run`, the default, runs it on your computer
   only.
+- `--calls-claude` (`cli`, `dashboard` or `backend`, GitHub only): the
+  project calls Claude, a chatbot or an assistant among them. It gets the
+  Anthropic SDK, the one place that calls it, tests that use a fake Claude
+  and need no key, and README steps: make the API key later in a workspace
+  of its own, set its spend limit and the organization's, and never paste it
+  into a chat. `--no-calls-claude`, the default, adds none of it.
 - `--third-party-review`: the reviewer's check, for an account with a code
   reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
   `--no-third-party-review` says no without being asked.
