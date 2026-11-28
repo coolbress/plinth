@@ -1,0 +1,5 @@
+# The fixture tests the greeting change is asked to change (#1151): they assert "Hello".
+test_greet
+test_the_installed_wheel_puts_the_command_on_path_and_it_runs
+test_the_public_name_works_from_the_built_wheel
+test_the_result_goes_to_stdout_and_the_logs_to_stderr

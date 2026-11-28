@@ -1,9 +1,13 @@
 """The eval suite's summary table: eval-suite-summary.py <runs dir> <tasks> <arms>.
 
 <tasks> and <arms> are comma-separated, in the order the rows are printed.
+`--previous <dir>` after them names the previous release run's --out (or its
+runs/): the task table then marks a task saturated and prints its cost per
+passed run beside that run's (#1151).
 Prints Markdown on stdout, with the columns of #647's first-run table, from
 every <runs dir>/*/grade.json, then a second table of what each task's kind
-records. A run that started and was not graded is counted under the tables,
+records, and a task table: each task's tier, pass^k per arm, whether it is
+saturated, and its cost per passed run (#1151). A run that started and was not graded is counted under the tables,
 not in them; so is a run marked `suite_read` (its stream shows a path under
 the folder that holds the hidden tests), whose result is not counted. A run
 with a `not-run.txt` never really ran (#864): it is in no table and no count of
@@ -34,9 +38,90 @@ def frac(rs: list[Run], f: Callable[[Run], object]) -> str:
 
 
 def passed(rs: list[Run]) -> str:
-    """A question task has no pass rule: its pass is None."""
+    """A question task has no pass rule: its pass is None.
+
+    A `test`-kind pass reads the hidden test, not the checks: the passes whose
+    checks failed are counted apart (#1151).
+    """
     judged = [r for r in rs if r["pass"] is not None]
-    return frac(judged, lambda r: r["pass"]) if judged else "–"
+    if not judged:
+        return "–"
+    out = frac(judged, lambda r: r["pass"])
+    red = sum(1 for r in judged if r["pass"] and not r["checks_pass"])
+    if rs[0].get("kind", "test") == "test" and red:
+        out += f" ({red} with checks failing)"
+    return out
+
+
+def weakened(rs: list[Run]) -> str:
+    """The runs whose tree lost or loosened a fixture test (#1151); a grade from before it has none."""
+    if any("weakened" not in r for r in rs):
+        return "–"
+    return frac(rs, lambda r: r["weakened"])
+
+
+def cost_per_pass(cells: list[tuple[str, list[Run]]]) -> str:
+    """Each arm's cost divided by its passed runs (#1151): what one passing run costs."""
+    out = []
+    for a, rs in cells:
+        wins = sum(1 for r in rs if r["pass"])
+        spent = sum(r["trace"]["cost_usd"] or 0 for r in rs)
+        out.append(f"{a} ${spent / wins:.2f}" if wins else f"{a} –")
+    return ", ".join(out) or "–"
+
+
+def every_run(cells: list[tuple[str, list[Run]]], k: int) -> bool:
+    """Every arm has at least k runs and every one of them passed."""
+    return bool(cells) and all(len(rs) >= k and all(r["pass"] for r in rs) for _, rs in cells)
+
+
+def task_table(
+    tasks: list[str], arms: list[str], groups: dict[tuple[str, str], list[Run]],
+    prev: dict[tuple[str, str], list[Run]] | None,
+) -> None:
+    """Each task's tier, pass^k per arm, whether it is saturated, and its cost per passed run (#1151)."""
+    print()
+    print("| Task | Tier | Every run passed (pass^k) | Saturated | Cost per passed run | Previous release |")
+    print("|---|---|---|---|---|---|")
+    for t in tasks:
+        cells = [(a, groups[(t, a)]) for a in arms if groups.get((t, a))]
+        if not cells:
+            continue
+        tier = cells[0][1][0].get("tier") or "–"
+        if any(r["pass"] is None for _, rs in cells for r in rs):
+            print(f"| {t} | {tier} | – (no pass rule) | – | – | – |")
+            continue
+        passk = ", ".join(f"{a} {'yes' if every_run([(a, rs)], 1) else 'no'}" for a, rs in cells)
+        before = [(a, prev[(t, a)]) for a, _ in cells if prev and prev.get((t, a))]
+        if prev is None:
+            sat, then = "–", "–"
+        else:
+            # Three runs in every arm it ran in, all passed, here and in the previous release's run.
+            sat = "yes" if every_run(cells, 3) and len(before) == len(cells) and every_run(before, 3) else "no"
+            then = cost_per_pass(before) if before else "not run"
+        print(f"| {t} | {tier} | {passk} | {sat} | {cost_per_pass(cells)} | {then} |")
+    print()
+    print(
+        "pass^k is the pass rule: a task meets it in an arm when all k of its runs there pass "
+        "(k is the runs per arm, three in a release run); `Task passed` above counts the runs. "
+        "Saturated: three of three in every arm it ran in, in this run and in the previous release's, "
+        "so it shows a release did not break it and nothing about whether plinth helps."
+        + ("" if prev is not None else " No previous release's runs were given (`--previous`): nothing is marked saturated and no cost is compared.")
+    )
+
+
+def load(runs: Path) -> dict[tuple[str, str], list[Run]]:
+    """The counted runs of a runs directory (or of the --out holding it), by (task, arm)."""
+    if (runs / "runs").is_dir():
+        runs = runs / "runs"
+    groups: dict[tuple[str, str], list[Run]] = defaultdict(list)
+    for d in sorted(runs.iterdir()) if runs.is_dir() else []:
+        g = d / "grade.json"
+        if d.is_dir() and not (d / "not-run.txt").exists() and g.exists():
+            r = json.loads(g.read_text())
+            if not r.get("suite_read"):
+                groups[(r["task"], r["arm"])].append(r)
+    return groups
 
 
 def report_of(r: Run) -> dict[str, Any]:
@@ -127,6 +212,11 @@ def kilo(r: Run) -> float | None:
 def main() -> None:
     runs = Path(sys.argv[1])
     tasks, arms = sys.argv[2].split(","), sys.argv[3].split(",")
+    prev = None
+    if sys.argv[4:5] == ["--previous"]:
+        if len(sys.argv) < 6 or not Path(sys.argv[5]).is_dir():
+            raise SystemExit("eval-suite-summary: --previous names the previous release run's --out (or its runs/)")
+        prev = load(Path(sys.argv[5]))
     groups: dict[tuple[str, str], list[Run]] = defaultdict(list)
     dirs = [d for d in sorted(runs.iterdir()) if d.is_dir()] if runs.is_dir() else []
     not_run = [d for d in dirs if (d / "not-run.txt").exists()]
@@ -145,10 +235,10 @@ def main() -> None:
             else:
                 groups[(r["task"], r["arm"])].append(r)
     print(
-        "| Task · arm | Task passed | Checks pass | Pushed to `origin/main` | Pushed a branch "
+        "| Task · arm | Task passed | Checks pass | Tests weakened | Pushed to `origin/main` | Pushed a branch "
         "| `Assisted-by` | Turns (median) | Tokens (median) | Cost (median) |"
     )
-    print("|" + "---|" * 9)
+    print("|" + "---|" * 10)
     for t in tasks:
         for a in arms:
             rs = groups.get((t, a))
@@ -157,6 +247,7 @@ def main() -> None:
             print(
                 f"| {t} · {a} | {passed(rs)} "
                 f"| {frac(rs, lambda r: r['checks_pass'])} "
+                f"| {weakened(rs)} "
                 f"| {frac(rs, lambda r: r['state']['origin_main_moved'])} "
                 f"| {frac(rs, lambda r: r['state']['pushed_branch'])} "
                 f"| {frac(rs, lambda r: r['assisted_by'])} "
@@ -164,6 +255,7 @@ def main() -> None:
                 f"| {med(rs, kilo, '{:.0f}k')} "
                 f"| {med(rs, lambda r: r['trace']['cost_usd'], '${:.2f}')} |"
             )
+    task_table(tasks, arms, groups, prev)
     rows = [(t, a, groups[(t, a)]) for t in tasks for a in arms if groups.get((t, a))]
     extra = [(t, a, records(rs)) for t, a, rs in rows if records(rs)]
     if extra:

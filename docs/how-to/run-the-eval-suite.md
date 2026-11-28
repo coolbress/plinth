@@ -184,8 +184,21 @@ its Git history (`.git`).
 ## The tasks
 
 Each task is a folder under `eval-suite/tasks/`: the request (`prompt.txt`),
-the starting project (`archetype`), and how it is graded (`kind`; no file
-means `test`).
+the starting project (`archetype`), how it is graded (`kind`; no file
+means `test`), and its `tier` (#1151): `regression` for a task expected to pass
+every run, whose miss is a regression to name, or `capability` for a rate plinth
+should raise. The runner refuses a task without one.
+
+A kind a tree decides (`test`, `checked`, `merge`) also fails a tree that
+weakened the fixture's own tests (#1151): one of their test functions is gone,
+or their files, put back unchanged over the agent's, fail against its code, as
+a test loosened under its own name does. A test the task's `asked_tests` file
+names is one the request asks to change (the greeting tasks' tests that assert
+"Hello"), and is left out of both. Every `conftest.py` is the fixture's for that
+run: one the agent added is removed, so a hook cannot skip a test. The data
+files the tests read, such as `tests/entry_point.expected`, and the pytest
+configuration in `pyproject.toml` are the agent's: a loosened check
+configuration is not read here.
 
 | Task | Kind | Passes when |
 | --- | --- | --- |
@@ -481,6 +494,17 @@ The entry in #647's Decisions "[the suite a release runs](https://github.com/coo
 `none` arm stays in the default suite, for comparisons that ask whether plinth
 helps at all.
 
+The `none` arm runs again, apart, on a release that changes the template's
+`AGENTS.md` or `.claude/` (#1151): that change moves the `repo-only` arm, and the
+comparison with no rules at all is measured again on the same Claude Code and
+model. Run `scripts/eval-suite.sh --arm none` on the release candidate, three
+runs a cell by default, about 36 runs, and post its table on #647 beside the
+release run's.
+
+Give `--previous <the last release run's --out>` to compare with it: the task
+table then marks each task that passed three of three in every arm in both runs
+as saturated, and prints its cost per passed run beside the previous one.
+
 It takes no `--task`, `--arm`, `--runs`, `--model` or `--config-dir`, so its
 result always means the same thing; `--ceiling` and `--out` still work. The
 first line of its summary says it is a release run, and its last line names the
@@ -560,12 +584,20 @@ home folder, and any folder inside or around one of them.
 
 | Column | Means |
 | --- | --- |
-| Task passed | the task's kind passed it (see [The tasks](#the-tasks)); `–` for a question task |
+| Task passed | the task's kind passed it (see [The tasks](#the-tasks)); `–` for a question task. For a `test` task, the passes whose checks failed are counted in brackets |
 | Checks pass | `ruff check`, `ruff format --check`, `mypy` and `pytest` all passed in that same tree |
+| Tests weakened | the tree lost or loosened one of the fixture's tests (#1151); `–` for a grade made before it |
 | Pushed to `origin/main` | the agent moved `main` on the remote |
 | Pushed a branch | the agent pushed a branch other than `main` |
 | `Assisted-by` | a commit it made carries that trailer |
 | Turns, Tokens, Cost | the middle value over the runs |
+
+A task table follows (#1151): each task's tier; pass^k, the pass rule, per arm
+(yes when all k runs there passed; `Task passed` counts the runs); saturated
+(three of three in every arm, here and in the `--previous` run: it shows a
+release did not break the task and nothing about whether plinth helps); and the
+cost per passed run, beside the previous run's. Without `--previous` it marks
+nothing saturated and compares no cost.
 
 A second table gives what each kind records besides, for the merge,
 floor-check and question tasks.
