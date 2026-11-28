@@ -6107,7 +6107,8 @@ def codeowner_logins(root: Path | None) -> tuple[set[str], set[str]] | None:
     for rel in (".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"):
         f = (root or Path(".")) / rel
         if f.is_file():
-            names, teams = set(), set()
+            names: set[str] = set()
+            teams: set[str] = set()
             for line in read(f).splitlines():
                 for tok in line.split("#", 1)[0].split()[1:]:
                     if tok.startswith("@"):
