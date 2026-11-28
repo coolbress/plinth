@@ -1836,6 +1836,51 @@ printf 'services: []\n' > "$dash/render.yaml"; git -C "$dash" add -A
 out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
 if is "$out" FC-C12 pass && grep -q -- '-- 0 failed' <<<"$out"; then ok "a dashboard on Render with render.yaml passes, and no image is asked"
 else bad "a dashboard on Render with render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
+# A cli that runs on GitHub on a schedule (#1070, coolbress/plinth-template#363)
+# is a cli: its answer, its workflow and its data/ folder change nothing in
+# the report, which is the same, line for line, as the cli's without them,
+# but for the counts of files read; the new workflow's actions are read as
+# pinned.
+sched="$work/sched"; rm -rf "$sched"; cp -R "$web.empty" "$sched"
+printf 'scheduled_run: true\n' >> "$sched/.copier-answers.yml"
+mkdir -p "$sched/data"; printf '*\n!.gitignore\n!README.md\n' > "$sched/data/.gitignore"; printf '# Data\n' > "$sched/data/README.md"
+cat > "$sched/.github/workflows/schedule.yml" <<'YAML'
+name: Scheduled run
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: scheduled-run
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: uv sync --locked --no-dev
+      - run: |
+          mkdir -p data/processed
+          uv run --no-sync python -m app > data/processed/result.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: results
+          path: data/processed/
+          if-no-files-found: error
+YAML
+git -C "$sched" add -A
+plain_out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"; sched_out="$(python3 "$checker" --root "$sched" --no-network 2>&1)"
+uncount() { sed -E 's/[0-9]+/N/g'; }
+if [ "$(printf '%s\n' "${sched_out//$sched/<root>}" | uncount)" = "$(printf '%s\n' "${plain_out//$web.empty/<root>}" | uncount)" ] \
+   && grep -q -- '-- 0 failed' <<<"$sched_out" && grep -qF 'PASS  every action in 3 workflow files is pinned to a commit (3 uses)' <<<"$sched_out"
+then ok "a cli with the scheduled run gets the same report as one without, its workflow's actions read as pinned"
+else bad "a cli with the scheduled run is reported differently"; diff <(printf '%s\n' "${plain_out//$web.empty/<root>}") <(printf '%s\n' "${sched_out//$sched/<root>}") | sed 's/^/        /'; fi
 # What render.yaml says (#811), read when the file is there: each web
 # service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
 # other than free, and secret-named envVars set without a literal value. Each
