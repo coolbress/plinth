@@ -144,19 +144,22 @@ dupes="$(for ((i = 0; i < ${#answers[@]}; i += 2)); do echo "${answers[i]}"; don
 # a pull request on GitHub, `glab api` and a merge request on GitLab, asked
 # of the host and project origin's URL names. --finish reads the host from
 # the record --apply wrote.
-# A port an http(s) origin names is the API's too, a self-hosted GitLab on
-# its own HTTPS port (#1152). glab takes no port in --hostname (glab 1.122.0
+# A port an https origin names is the API's too, a self-hosted GitLab on its
+# own HTTPS port (#1152). glab takes no port in --hostname (glab 1.122.0
 # refuses `--hostname host:port`: "invalid hostname"), so it goes to glab as
 # GITLAB_API_HOST=<host>:<port> beside --hostname <host>, which glab then
 # asks (measured: https://<host>:<port>/api/v4/...). An ssh:// origin's port
-# is the SSH server's, not the API's, and is dropped.
+# is the SSH server's, not the API's, and is dropped; so is an http:// one,
+# which glab would ask over https anyway (its api_protocol is the person's
+# glab configuration). The token is glab's for <host>: a login made as
+# `glab auth login --hostname <host>:<port>` is not found under <host>.
 origin_parts() { # <top>: "<host> <path> [<host>:<port>]" from origin's URL as configured, or exit 1
   local url h p port=""
   url="$(git -C "$1" config --get remote.origin.url 2>/dev/null)" || return 1
   case "$url" in
     *://*) h="${url#*://}"; p="${h#*/}"; h="${h%%/*}"; h="${h##*@}"
            case "$h" in *:*) port="${h##*:}"; h="${h%%:*}" ;; esac
-           case "$url" in [Hh][Tt][Tt][Pp]://* | [Hh][Tt][Tt][Pp][Ss]://*) ;; *) port="" ;; esac
+           case "$url" in [Hh][Tt][Tt][Pp][Ss]://*) ;; *) port="" ;; esac
            case "$port" in *[!0-9]*) port="" ;; esac
            [ "$p" != "${url#*://}" ] || p="" ;;
     [!/]*:*) h="${url%%:*}"; case "$h" in */*) return 1 ;; esac; h="${h##*@}"; p="${url#*:}" ;;
