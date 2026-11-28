@@ -2791,7 +2791,8 @@ def yaml_scalar(text: str, n: int) -> str:
         if m:
             return json.loads(m.group(1))
     else:
-        return re.sub(r"\s+#.*$", "", t)
+        # A comment is a `#` at the start or after a space: `key: # note` is empty.
+        return re.sub(r"(?:^|\s+)#.*$", "", t)
     raise ValueError(f"line {n}: a quoted value with more than a comment after it, or not closed: {t}")
 
 
@@ -2811,9 +2812,12 @@ def read_adoption(text: str) -> dict:
             key, value = top.group(1), (top.group(2) or "").strip()
             if key in out:
                 raise ValueError(f"line {n}: {key} given twice")
-            in_kept = key == "kept" and value in ("", "[]")
+            # The list's header is read with its comment off: `kept: # why`
+            # opens the list, `kept: [] # none` is the empty one.
+            head = yaml_scalar(value, n) if key == "kept" and not value.startswith(("'", '"')) else value
+            in_kept = key == "kept" and head in ("", "[]")
             out[key] = [] if in_kept else yaml_scalar(value, n)
-            if in_kept and value == "[]":
+            if in_kept and head == "[]":
                 in_kept = False
             item = None
             continue
@@ -2847,7 +2851,7 @@ def adoption_errors(d: dict) -> list[str]:
         errs.append(f"step {d['step']} is not one of {', '.join(ADOPTION_STEPS)}")
     for k in ("started", "wall_due"):
         if k in d and not valid_date(d[k]):
-            errs.append(f"{k} {d[k]} is not a date (YYYY-MM-DD)")
+            errs.append(f"{k} {d[k] or '(empty)'} is not a date (YYYY-MM-DD)")
     if not isinstance(d.get("kept", []), list):
         errs.append("kept is not a list")
         return errs
@@ -2861,7 +2865,7 @@ def adoption_errors(d: dict) -> list[str]:
         if e.get("reason") == "later" and "until" not in e:
             errs.append(f"kept entry {i}: reason later with no until")
         if "until" in e and not valid_date(e["until"]):
-            errs.append(f"kept entry {i}: until {e['until']} is not a date (YYYY-MM-DD)")
+            errs.append(f"kept entry {i}: until {e['until'] or '(empty)'} is not a date (YYYY-MM-DD)")
     return errs
 
 

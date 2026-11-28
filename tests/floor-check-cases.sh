@@ -4197,6 +4197,27 @@ expect "quoted values with a comment after them are read, and a # inside the quo
 out="$(FLOOR_CHECK_TODAY=2026-11-10 python3 "$checker" --root "$adopt" --no-network --format json 2>&1)"
 expect "the # inside the quotes is in the kept reason given, not taken for a comment" \
   'jq -e '"'"'[.results[] | select(.id == "FC-C20")][0].kept.why == "pinned by the mirror, see #12"'"'"' <<<"$out" >/dev/null'
+# The kept list's header with a comment after it (#1236 review, round 2):
+# `kept: # …` opens the list, `kept: [] # …` is the empty one.
+adoption "$record_head
+kept: # what the adopt pull request left as it was
+  - id: FC-C20 # the base image
+    path: Dockerfile
+    reason: deliberately-different
+    why: pinned by the mirror"
+eval "$unpin"
+a_run 2026-11-10
+expect "kept: with a comment after it opens the list, and its entry applies" \
+  'is "$out" FC-F09 info && is "$out" FC-C20 kept && [ "$rc" = 0 ]'
+adoption "$record_head
+kept: [] # nothing kept"
+a_run 2026-11-10
+expect "kept: [] with a comment after it is the empty list" \
+  'is "$out" FC-F09 info && grep -qF "0 kept by choice" <<<"$out"'
+adoption "$(sed 's/^wall_due: .*$/wall_due: # later/' <<<"$record_head")"
+a_run 2026-11-10
+expect "a value that is only a comment is empty, not the comment's text" \
+  'is "$out" FC-F09 fail && grep -qF "wall_due (empty) is not a date" <<<"$out" && ! grep -qF "# later" <<<"$out"'
 adoption "$(sed 's/^step: ci$/step: "ci" then more/' <<<"$record_head")"
 a_run 2026-11-10
 expect "a quoted value followed by more than a comment is a FAIL naming the line, not a value with its quotes" \
