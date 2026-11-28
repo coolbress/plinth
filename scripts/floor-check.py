@@ -1665,6 +1665,118 @@ def guard_repository(path: str, prefix: str = "repos/") -> None:
     if slug is not None and slug.lower() not in allowed_repositories():
         raise ForeignRepository(f"a request for {slug} ({path.split('?')[0]}), which this run does not audit "
                                 f"(--repo {audited or 'not given'})")
+    if slug is not None:
+        repositories_read.add(slug.lower())
+
+
+# ── the public write gate (#1119) ───────────────────────────────────────
+# Every public write (a pull-request body, an issue append) goes through
+# public_write(). The text is the checker's own values in fixed templates; the
+# gate refuses it when it holds what a record, an injected instruction or this
+# machine could have put there, and says which rule, by line, never the match.
+repositories_read: set[str] = set()   # every slug a request named, lowercased (guard_repository)
+
+
+class WriteRefused(Exception):
+    def __init__(self, kind: str, reasons: list[str]):
+        super().__init__(f"{kind} not written: " + "; ".join(reasons))
+        self.kind, self.reasons = kind, reasons
+
+
+WRITE_RULES = (
+    ("an image", re.compile(r"!\[[^\]]*\]\(|<img\b", re.IGNORECASE)),
+    ("an HTML comment", re.compile(r"<!--")),
+    ("HTML", re.compile(r"</?[A-Za-z][\w-]*(?:\s[^>]*)?/?>")),
+    ("a token prefix", re.compile(r"(?<![A-Za-z0-9])(?:ghp_|github_pat_|gho_|ghu_|ghs_|ghr_|sk-ant-|glpat-)")),
+)
+WRITE_HOME = re.compile(r"(?<![\w.\-])(?:/Users/|/home/|[A-Za-z]:\\Users\\)[^\s/\\`'\"<>()\[\]]")
+WRITE_URL = re.compile(r"(?:https?://|www\.)[^\s<>()\[\]`'\"]+", re.IGNORECASE)
+WRITE_LINK = re.compile(r"\]\(([^)\s]*)")
+WRITE_SLUG = re.compile(r"(?<![\w.\-/])(?:github\.com/)?([A-Za-z0-9][\w-]*)/([\w.-]+?)(?=#\d)|github\.com/([A-Za-z0-9][\w-]*)/([\w.-]+)", re.IGNORECASE)
+LOCAL_NAMES_SKIPPED = {"root", "runner"}
+
+
+def local_names() -> set[str]:
+    """This machine's user and host names, which no public write holds."""
+    import getpass
+    import socket
+    names = set()
+    for get in (getpass.getuser, socket.gethostname):
+        try:
+            n = get()
+        except (OSError, KeyError):
+            continue
+        names |= {n, n.split(".", 1)[0]}
+    return {n for n in names if len(n) >= 3 and n.lower() not in LOCAL_NAMES_SKIPPED}
+
+
+def machine_values(rs: list[dict]) -> set[str]:
+    """What each machine-area result filled into its message: the values
+    between the fixed words of its entry's template, else the whole message."""
+    out: set[str] = set()
+    for r in rs:
+        e = REGISTRY.get(r["id"])
+        if e is None or e["area"] != "G":
+            continue
+        msg = r["msg"].split("): ", 1)[1] if r.get("kept") and "): " in r["msg"] else r["msg"]
+        tpl = e["messages"].get(r.get("key") or "", "")
+        pattern = "(.*?)".join(re.escape(p) for p in re.split(r"\{[^{}]*\}", tpl))
+        m = re.fullmatch(pattern, msg, re.DOTALL) if tpl else None
+        out |= {v.strip() for v in (m.groups() if m and m.groups() else (msg,)) if len(v.strip()) >= 3}
+    return out
+
+
+def write_refusals(text: str, repo: str, machine: frozenset[str] | set[str] = frozenset(),
+                    names: set[str] | None = None) -> list[str]:
+    """Why `text` may not be written in `repo`'s records: one reason per rule
+    and line, naming neither the match nor the value."""
+    repo_l = repo.lower()
+    own = f"https://github.com/{repo_l}"
+    names = local_names() if names is None else names
+    out: list[str] = []
+    for n, ln in enumerate(text.splitlines(), 1):
+        low = ln.lower()
+        why = [what for what, rx in WRITE_RULES if rx.search(ln)]
+        if WRITE_HOME.search(ln):
+            why.append("a home path")
+        if any(u.lower() != own and not u.lower().startswith(own + "/") for u in WRITE_URL.findall(ln)):
+            why.append("a link outside the audited repository")
+        if any(t and not t.startswith("#") and not t.lower().startswith(own) for t in WRITE_LINK.findall(ln)):
+            why.append("a link outside the audited repository")
+        if any(f"{a or c}/{b or d}".lower() != repo_l for a, b, c, d in WRITE_SLUG.findall(ln)):
+            why.append("another repository's slug")
+        if any(re.search(rf"(?<![\w-]){re.escape(x.lower())}(?![\w-])", low) for x in names):
+            why.append("this machine's user or host name")
+        if any(v.lower() in low for v in machine):
+            why.append("a value from the machine area")
+        out += [f"line {n}: {w}" for w in dict.fromkeys(why)]
+    return out
+
+
+def public_write(kind: str, text: str, *, plan: bytes, repo: str, public: bool, send,
+                 visibility=None, rs: list[dict] | None = None, names: set[str] | None = None):
+    """Send `text` (`send(text)`) as `kind` in `repo`, or raise WriteRefused.
+    Refused: bytes other than the approved `plan`'s; a public `repo` in a run
+    that read a repository not known to be public (`visibility(slug)` is
+    True for private, None for unknown); and what write_refusals names."""
+    reasons = []
+    if text.encode("utf-8") != plan:
+        reasons.append("its bytes differ from the approved plan")
+    if public:
+        look = visibility or repository_is_private
+        if any(look(s) is not False for s in sorted(repositories_read - {repo.lower()})):
+            reasons.append("this run read a repository that is private or not known to be public, and "
+                           f"{repo} is public")
+    reasons += write_refusals(text, repo, machine_values(results if rs is None else rs), names)
+    if reasons:
+        raise WriteRefused(kind, reasons)
+    return send(text)
+
+
+def repository_is_private(slug: str) -> bool | None:
+    """True or False from GitHub's `private`, None when not read."""
+    got = api(f"repos/{slug}", True)
+    return got["private"] if isinstance(got, dict) and isinstance(got.get("private"), bool) else None
 
 
 ABSENT = object()   # 404: the resource does not exist
