@@ -151,6 +151,10 @@ refused("an account name from a machine result", "Checked as octocat-private.", 
 refused("a path from a machine result", "Found DATABASE_URL in ~/projects/secret-app/.env", "a value from the machine area",
         secret="secret-app", rs=machine, names=set())
 refused("a part of a machine value", "Found secret-app", "a value from the machine area", rs=machine, names=set())
+for shown in ("Checked as **octocat-private**.", "Checked as octocat-private!", "Checked as _octocat-private_",
+              "Checked as `octocat-private`", "(octocat-private)"):
+    refused(f"a machine value inside Markdown or punctuation: {shown.split('octocat-private')[0]}…", shown,
+            "a value from the machine area", secret="octocat-private", rs=machine, names=set())
 refused("a machine value with other spacing", "DATABASE_URL  in  the env", "a value from the machine area",
         rs=machine, names=set())
 composite = [{"id": "FC-G06", "key": "none", "state": "info", "kept": None,

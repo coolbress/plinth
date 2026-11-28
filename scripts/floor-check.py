@@ -1784,9 +1784,10 @@ def write_refusals(text: str, repo: str, machine: frozenset[str] | set[str] = fr
     for x in names:
         for m in re.finditer(rf"(?<![\w-]){re.escape(x)}(?![\w-])", plain, re.IGNORECASE):
             at(m.start(), "this machine's user or host name")
-    words = {w.lower().strip(".") for w in WRITE_WORD.findall(plain)}
-    for v in sorted(machine & words):
-        for m in re.finditer(rf"(?<![\w-]){re.escape(v)}(?![\w-])", plain, re.IGNORECASE):
+    # Every machine value, wherever it stands: Markdown markers or punctuation
+    # around it (`**login**`, `login!`) do not hide it.
+    for v in sorted(machine):
+        for m in re.finditer(rf"(?<![A-Za-z0-9-]){re.escape(v)}(?![A-Za-z0-9-])", plain, re.IGNORECASE):
             at(m.start(), "a value from the machine area")
     return [f"line {n}: {w}" for n, w in dict.fromkeys(sorted(found))]
 
