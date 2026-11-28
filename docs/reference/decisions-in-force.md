@@ -57,7 +57,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - A term from the fixed term table is explained once, at first use in a session, with the English term kept in brackets. 2026-11-04, #809
 - The start-of-project lines on the agent's reach are guidance, not gates. 2026-10-06, #412
 - Paid services are never in the default set; error tracking, uptime and previews are listed with their free tiers. 2026-10-28, #702
-- The arsenal says not to use `/ship` in a plinth project until a trial shows it keeps the pull-request rules. 2026-11-24, #1085 (decided; not built yet: #1085)
+- The arsenal says not to use `/ship` or `/steward` in a plinth project: a trial found that `/ship`'s pull request skips the template and its review is same-session, and that their watch pushed an unreviewed fix that weakened a test. 2026-11-24, #1085; trial 2026-11-28, #1085
 - The arsenal's "Not used with plinth" line lists only a tool an agent reaches without installing anything (a built-in, or a skill plinth installs) whose use breaks a plinth rule, with its class and the rule; tools that need installing are not listed. 2026-11-26, #1086
 
 ## floor-check and records
