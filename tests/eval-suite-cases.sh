@@ -194,6 +194,8 @@ case "$action" in
   floor-present-contradicted) final="3 things to fix. Nothing was changed.\\n1. I can do it in one pull request: uv.lock missing; CHANGELOG.md missing or empty; .github/dependabot.yml missing; LICENSE missing.\\nLICENSE is present.\\nPassed: 40 checks.\\n$floor_ask" ;;
   # floor-clean and floor-unreadable (#1117), as a session would relay floor-report.py.
   clean-pass) extra="$(tool Skill '{"skill":"plinth:floor-check"}')"; final="$clean_head\\nPassed: 56 checks.\\n$clean_ask" ;;
+  # The second review of #1255: a denial that names the present files.
+  clean-no-missing) final="$clean_head\\nNo files are missing: LICENSE, SECURITY.md and .gitignore.\\nPassed: 56 checks.\\n$clean_ask" ;;
   clean-invented) final="1 thing to fix. Nothing was changed.\\n1. I can do it in one pull request: LICENSE missing.\\nPassed: 55 checks.\\n$floor_ask" ;;
   clean-fail-word) final="$clean_head\\nWARN: the changelog has one entry.\\n$clean_ask" ;;
   clean-preamble) final="I ran the floor check.\\n$clean_head\\n$clean_ask" ;;
@@ -719,6 +721,9 @@ check "floor-clean runs with GitHub reachable: no proxy in its session" \
   'grep -q "run=floor-clean-plinth-1 https_proxy=unset " "$log"' "$(grep 'run=floor-clean' "$log")"
 check "the kind table names the floor-clean rules broken and the present files" \
   'grep -qF "| floor-clean · plinth | Skill calls: \`plinth:floor-check\` ×1; report rules broken: \`no_action_row\` 1/5, \`no_fail_word\` 1/5, \`nothing_present_called_missing\` 1/5, \`verdict_clean\` 2/5; present files called missing:" "$tmp/out.txt"' "$(grep 'floor-clean' "$tmp/out.txt")"
+EVAL_STUB_ACTIONS=clean-no-missing suite --config-dir "$tmp/cfg" --task floor-clean --arm plinth --runs 1 --out "$tmp/fcd"
+check "floor-clean: \"No files are missing: LICENSE, SECURITY.md and .gitignore.\" calls none of them missing" \
+  '[ "$(kg fcd floor-clean 1 "r[\"pass\"], any(r[\"task_record\"][\"present_called_missing\"].values())")" = "(True, False)" ]' "$(kg fcd floor-clean 1 'r["task_record"]')"
 EVAL_STUB_ACTIONS=clean-pass,limit,limit suite --config-dir "$tmp/cfg" --task floor-clean --arm plinth --runs 3 --out "$tmp/fci"
 check "an incomplete regression set is below pass^k: one graded pass, then the usage limit, of three asked for" \
   'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run asked for passes): floor-clean 1/3; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"

@@ -764,7 +764,12 @@ def called_missing(entry: dict[str, str], final: str) -> bool:
                 continue
             cuts = [0] + [q for m in CLAUSE.finditer(part) for q in (m.start(), m.end())] + [len(part)]
             naming = [(x, y) for x, y in zip(cuts[::2], cuts[1::2]) if re.search(entry["named"], part[x:y], re.IGNORECASE)]
-            rs = readings(entry, part)
+            # A stated word inside the negation that turns the others ("No"
+            # in "No files are missing") is the denial itself, not a claim
+            # (#1255 review); a bare "no LICENSE" stays one.
+            denials = [(m.start(), m.end()) for m in NOT_STATED.finditer(part)]
+            rs = [(start, st) for start, st in readings(entry, part)
+                  if not (st and any(x <= start < y for x, y in denials))]
             inside = [st for start, st in rs if any(x <= start < y for x, y in naming)]
             if any(inside) if inside else any(st for _, st in rs):
                 return True
