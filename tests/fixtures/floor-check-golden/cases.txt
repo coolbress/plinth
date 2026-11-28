@@ -73477,6 +73477,1787 @@ floor check: root=$WORK/adopt project=.
 fail: .plinth-adoption.yml keeps FC-Z99, which names no check: that entry is not applied; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
 === --root $WORK/adopt --no-network
+--- exit 0
+--- stdout
+floor check: root=$WORK/adopt project=.
+  INFO  .plinth-adoption.yml read: step ci, 1 kept by choice; the wall due by 2026-11-20
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.52.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  INFO  kept by choice (deliberately-different): base images not pinned by digest: ['python:3.12-slim']
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 0 failed, 1 not verified
+--- again with --verdicts: exit 0
+pass: the floor, no FAIL in what this run read
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/adopt --no-network --format json
+--- exit 0
+--- stdout
+{
+  "schema": "floor-check/1",
+  "root": "$WORK/adopt",
+  "project": ".",
+  "host": "github",
+  "repo": null,
+  "results": [
+    {
+      "id": "FC-F09",
+      "state": "info",
+      "shown": "INFO",
+      "message": ".plinth-adoption.yml read: step ci, 1 kept by choice; the wall due by 2026-11-20",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "read",
+      "area": "plinth",
+      "name": "the adoption record is read",
+      "handoff": "person",
+      "fix": "write .plinth-adoption.yml in the form the reference describes, or take the entry out",
+      "keepable": false,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A01",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "LICENSE present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "LICENSE present",
+      "handoff": "agent",
+      "fix": "add a LICENSE that says what it is for; /plinth:new-project renders one",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A02",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "README.md present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "README.md present",
+      "handoff": "agent",
+      "fix": "add a README.md that says what it is for; /plinth:new-project renders one",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A03",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "CHANGELOG.md present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "CHANGELOG.md present",
+      "handoff": "agent",
+      "fix": "add a CHANGELOG.md that says what it is for; /plinth:new-project renders one",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A04",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "AGENTS.md present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "AGENTS.md present",
+      "handoff": "agent",
+      "fix": "add a AGENTS.md that says what it is for; /plinth:new-project renders one",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A05",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "CONTRIBUTING.md present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "CONTRIBUTING.md present",
+      "handoff": "agent",
+      "fix": "add a CONTRIBUTING.md with the build and test commands and how a change lands",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A06",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "CONTRIBUTING.md says how to build and test",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "CONTRIBUTING.md says how to build and test",
+      "handoff": "agent",
+      "fix": "write the commands that build and test the project in CONTRIBUTING.md",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A07",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "CONTRIBUTING.md says how to land a change",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "CONTRIBUTING.md says how to land a change",
+      "handoff": "agent",
+      "fix": "say in CONTRIBUTING.md how a change lands: a pull request, its review and its merge",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A08",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "CONTRIBUTING.md is not a stub (10 lines)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "CONTRIBUTING.md is not a stub",
+      "handoff": "agent",
+      "fix": "write CONTRIBUTING.md out: at least ten lines a contributor can follow",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A09",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "SECURITY.md present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "local",
+      "area": "files",
+      "name": "SECURITY.md present or inherited",
+      "handoff": "agent",
+      "fix": "add a SECURITY.md that says how to report a vulnerability, or one in the owner's .github repository",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A10",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "issue templates found (local): bug.yml, feature.yml, task.yml",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "issue templates present or inherited",
+      "handoff": "agent",
+      "fix": "add issue forms under .github/ISSUE_TEMPLATE/ (bug, feature, task), or in the owner's .github repository",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A13",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "bug.yml has name, description, body",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form has name, description and body",
+      "handoff": "agent",
+      "fix": "add the missing top-level keys to the form",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A14",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "bug.yml has no unquoted YAML alias",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form has no unquoted YAML alias",
+      "handoff": "agent",
+      "fix": "quote the value that starts with * or &",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A15",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "bug.yml labels its issues",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form labels its issues",
+      "handoff": "agent",
+      "fix": "add `labels:` with the label the issue sorts under",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A16",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "bug.yml body is a list",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form's body is a list",
+      "handoff": "agent",
+      "fix": "make `body:` a list of form elements",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A13",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "feature.yml has name, description, body",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form has name, description and body",
+      "handoff": "agent",
+      "fix": "add the missing top-level keys to the form",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A14",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "feature.yml has no unquoted YAML alias",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form has no unquoted YAML alias",
+      "handoff": "agent",
+      "fix": "quote the value that starts with * or &",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A15",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "feature.yml labels its issues",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form labels its issues",
+      "handoff": "agent",
+      "fix": "add `labels:` with the label the issue sorts under",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A16",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "feature.yml body is a list",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form's body is a list",
+      "handoff": "agent",
+      "fix": "make `body:` a list of form elements",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A13",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "task.yml has name, description, body",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form has name, description and body",
+      "handoff": "agent",
+      "fix": "add the missing top-level keys to the form",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A14",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "task.yml has no unquoted YAML alias",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form has no unquoted YAML alias",
+      "handoff": "agent",
+      "fix": "quote the value that starts with * or &",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A15",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "task.yml labels its issues",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form labels its issues",
+      "handoff": "agent",
+      "fix": "add `labels:` with the label the issue sorts under",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A16",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "task.yml body is a list",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "an issue form's body is a list",
+      "handoff": "agent",
+      "fix": "make `body:` a list of form elements",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A17",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "at least one template GitHub can offer (local)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "at least one issue template GitHub can offer",
+      "handoff": "agent",
+      "fix": "fix one template so GitHub offers it: the per-file lines above say what each lacks",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A11",
+      "state": "info",
+      "shown": "INFO",
+      "message": "a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "info",
+      "area": "files",
+      "name": "a local ISSUE_TEMPLATE replaces the owner's set",
+      "handoff": "person",
+      "fix": "",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A18",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".github/dependabot.yml present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "Dependabot configured",
+      "handoff": "agent",
+      "fix": "add .github/dependabot.yml for the project's ecosystems and its GitHub Actions",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A23",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".gitattributes present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": ".gitattributes present",
+      "handoff": "agent",
+      "fix": "add a .gitattributes; plinth-template's normalises line endings and folds lockfiles",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A24",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".gitattributes normalises line endings (* text=auto)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": ".gitattributes normalises line endings",
+      "handoff": "agent",
+      "fix": "add `* text=auto` to .gitattributes",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A25",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".gitattributes folds uv.lock in diffs (linguist-generated)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": ".gitattributes folds uv.lock in diffs",
+      "handoff": "agent",
+      "fix": "add `uv.lock linguist-generated` to .gitattributes",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A26",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".gitattributes has no rule that needs local git config",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": ".gitattributes needs no local git config",
+      "handoff": "agent",
+      "fix": "remove the diff=, merge= or filter= driver that only works with each user's local git config",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B01",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json present",
+      "handoff": "agent",
+      "fix": "add .claude/settings.json with plinth-template's permissions.deny",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B03",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies force push",
+      "handoff": "agent",
+      "fix": "add plinth-template's force-push rules to permissions.deny; /plinth:template-update brings them",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B04",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies rm -rf",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies rm -rf",
+      "handoff": "agent",
+      "fix": "add a permissions.deny rule that stops rm -rf",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B05",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies gh auth token",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies gh auth token",
+      "handoff": "agent",
+      "fix": "add a permissions.deny rule that stops gh auth token",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B06",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies .env reads",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies .env reads",
+      "handoff": "agent",
+      "fix": "add a permissions.deny rule that stops .env reads",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B07",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies `. ./.env`",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies `. ./.env`",
+      "handoff": "agent",
+      "fix": "add a permissions.deny rule that stops `. ./.env`",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B08",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies `source .env`",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies `source .env`",
+      "handoff": "agent",
+      "fix": "add a permissions.deny rule that stops `source .env`",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B09",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies `cat .env`",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies `cat .env`",
+      "handoff": "agent",
+      "fix": "add a permissions.deny rule that stops `cat .env`",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B10",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies `grep KEY .env`",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies `grep KEY .env`",
+      "handoff": "agent",
+      "fix": "add a permissions.deny rule that stops `grep KEY .env`",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-B11",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".claude/settings.json denies gh config reads",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "agent",
+      "name": ".claude/settings.json denies gh config reads",
+      "handoff": "agent",
+      "fix": "add a permissions.deny rule that stops gh config reads",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A27",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "relative links in 5 markdown files resolve",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "relative links in the Markdown documents resolve",
+      "handoff": "agent",
+      "fix": "point each broken link at a file that exists, or remove it",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-A28",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "no dotenv file is tracked (21 tracked files read; names only, not contents or history)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "files",
+      "name": "no dotenv file is tracked",
+      "handoff": "agent",
+      "fix": "untrack the file and ignore it in .gitignore; rotate a value that was ever real",
+      "keepable": false,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-D01",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "every action in 2 workflow files is pinned to a commit (1 uses)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "ci",
+      "name": "every action is pinned to a commit",
+      "handoff": "agent",
+      "fix": "pin each uses: to a full commit SHA, with the old ref as its comment",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-F01",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "template: the recorded tag is the target tag (v1.52.0)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "plinth",
+      "name": "the recorded template tag is the one plinth is tested with",
+      "handoff": "person",
+      "fix": "run /plinth:template-update to move the repository to the target tag",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-F01",
+      "state": "info",
+      "shown": "INFO",
+      "message": "  not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (offline or API error)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "tag",
+      "area": "plinth",
+      "name": "the recorded template tag is the one plinth is tested with",
+      "handoff": "person",
+      "fix": "run /plinth:template-update to move the repository to the target tag",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-F02",
+      "state": "info",
+      "shown": "INFO",
+      "message": "template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.52.0",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "unread",
+      "area": "plinth",
+      "name": "this installed plinth targets the newest template tag",
+      "handoff": "person",
+      "fix": "update the plinth plugin, then run /plinth:template-update",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": false
+    },
+    {
+      "id": "FC-C01",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "pyproject.toml present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "pyproject.toml present",
+      "handoff": "agent",
+      "fix": "add a pyproject.toml, or run again with --project=<the directory that has one>",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C02",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "uv.lock committed",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "uv.lock committed",
+      "handoff": "agent",
+      "fix": "run `uv lock` and commit uv.lock",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C03",
+      "state": "info",
+      "shown": "INFO",
+      "message": "archetype backend: container image, .env.example and JSON logs required",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "service",
+      "area": "project",
+      "name": "the archetype is known",
+      "handoff": "person",
+      "fix": "pass --archetype, or keep .copier-answers.yml",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C19",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "Dockerfile present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "Dockerfile present",
+      "handoff": "agent",
+      "fix": "add a Dockerfile; plinth-template's builds from uv.lock as a non-root user",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C20",
+      "state": "info",
+      "shown": "INFO",
+      "message": "kept by choice (deliberately-different): base images not pinned by digest: ['python:3.12-slim']",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "bad",
+      "area": "project",
+      "name": "every base image is pinned by digest",
+      "handoff": "agent",
+      "fix": "pin each FROM image as name@sha256:<digest>",
+      "keepable": true,
+      "kept": {
+        "reason": "deliberately-different",
+        "why": "pinned by the mirror, see #12",
+        "path": "Dockerfile",
+        "until": null,
+        "was": "fail"
+      },
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C21",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "the image does not run as root",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "the image does not run as root",
+      "handoff": "agent",
+      "fix": "end the Dockerfile with a USER that is not root",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C22",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "the image installs from the lockfile (uv sync --locked)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "the image installs from the lockfile",
+      "handoff": "agent",
+      "fix": "install with `uv sync --locked` in the Dockerfile",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C23",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "CMD runs python -m app and src/app/__main__.py exists",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "the image's CMD runs the package",
+      "handoff": "agent",
+      "fix": "make CMD [\"python\", \"-m\", \"<package>\"] with src/<package>/__main__.py",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C24",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".dockerignore present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": ".dockerignore present",
+      "handoff": "agent",
+      "fix": "add a .dockerignore that leaves out .git, .env and .venv",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C25",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".dockerignore keeps .git, .env, .venv out of the image",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": ".dockerignore keeps .git, .env and .venv out",
+      "handoff": "agent",
+      "fix": "add the missing names to .dockerignore",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C27",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".env.example present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": ".env.example present",
+      "handoff": "agent",
+      "fix": "add a .env.example naming each variable the code reads, with no real value",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C28",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".env.example documents every variable the code reads",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": ".env.example documents every variable the code reads",
+      "handoff": "agent",
+      "fix": "add the missing names to .env.example",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C26",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "the service logs JSON",
+      "handoff": "agent",
+      "fix": "give the root logger a handler whose formatter writes one JSON object per record",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C08",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".github/workflows/release.yml present",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "the release workflow present",
+      "handoff": "agent",
+      "fix": "copier update, then follow docs/how-to/publish-a-release.md",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C09",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".github/workflows/release.yml runs on a pushed tag only",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "the release workflow runs on a pushed tag only",
+      "handoff": "agent",
+      "fix": "make `on:` a push of tags and nothing else",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-C10",
+      "state": "pass",
+      "shown": "PASS",
+      "message": ".github/workflows/release.yml reads no stored secret",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "project",
+      "name": "the release workflow reads no stored secret",
+      "handoff": "agent",
+      "fix": "publish with the run's own token or Trusted Publishing, and delete the stored secret",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-D06",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "ci.yml carries the image job (docker build, docker run)",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "ci",
+      "name": "ci.yml carries the image job",
+      "handoff": "agent",
+      "fix": "add the template's `image` job, which builds and runs the container, to ci.yml",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-D02",
+      "state": "pass",
+      "shown": "PASS",
+      "message": "the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000",
+      "reason": null,
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "good",
+      "area": "ci",
+      "name": "the ci job calls plinth's python-ci.yml at a commit",
+      "handoff": "agent",
+      "fix": "make the `ci` job call coolbress/plinth's python-ci.yml at a full commit SHA, as the template renders it",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    },
+    {
+      "id": "FC-E06",
+      "state": "unknown",
+      "shown": "SKIP",
+      "message": "no --repo: wall not checked",
+      "reason": "no --repo",
+      "cannot_be_read_here": false,
+      "reader": null,
+      "key": "norepo",
+      "area": "wall",
+      "name": "the repository is read for the wall",
+      "handoff": "person",
+      "fix": "pass --repo owner/name, online, with a login that can read it",
+      "keepable": true,
+      "kept": null,
+      "lifecycle": "stable",
+      "view": "report",
+      "ci_visible": true
+    }
+  ],
+  "not_evaluated": [
+    {
+      "id": "FC-A12",
+      "name": "a Markdown issue template has a name",
+      "area": "files"
+    },
+    {
+      "id": "FC-A19",
+      "name": "Dependabot does not run on GitLab",
+      "area": "files"
+    },
+    {
+      "id": "FC-A20",
+      "name": "GitLab issue templates present",
+      "area": "files"
+    },
+    {
+      "id": "FC-A21",
+      "name": "GitLab merge request templates present",
+      "area": "files"
+    },
+    {
+      "id": "FC-A22",
+      "name": "a GitLab issue template labels its issues",
+      "area": "files"
+    },
+    {
+      "id": "FC-B02",
+      "name": ".claude/settings.json is valid JSON",
+      "area": "agent"
+    },
+    {
+      "id": "FC-B12",
+      "name": ".claude/settings.json denies glab auth status --show-token",
+      "area": "agent"
+    },
+    {
+      "id": "FC-B13",
+      "name": ".claude/settings.json denies glab auth status -t",
+      "area": "agent"
+    },
+    {
+      "id": "FC-B14",
+      "name": ".claude/settings.json denies glab config get token",
+      "area": "agent"
+    },
+    {
+      "id": "FC-B15",
+      "name": ".claude/settings.json denies glab config reads",
+      "area": "agent"
+    },
+    {
+      "id": "FC-C04",
+      "name": "read as a JavaScript or TypeScript project",
+      "area": "project"
+    },
+    {
+      "id": "FC-C05",
+      "name": "the Python items do not apply to a JavaScript project",
+      "area": "project"
+    },
+    {
+      "id": "FC-C06",
+      "name": "a Bun lockfile is not the only lockfile",
+      "area": "project"
+    },
+    {
+      "id": "FC-C07",
+      "name": "MODEL_CARD.md present",
+      "area": "project"
+    },
+    {
+      "id": "FC-C11",
+      "name": "the release uploads no pickle",
+      "area": "project"
+    },
+    {
+      "id": "FC-C12",
+      "name": "render.yaml present",
+      "area": "project"
+    },
+    {
+      "id": "FC-C13",
+      "name": "render.yaml is read",
+      "area": "project"
+    },
+    {
+      "id": "FC-C14",
+      "name": "a Render web service has a health check",
+      "area": "project"
+    },
+    {
+      "id": "FC-C15",
+      "name": "a Render web service deploys after the checks pass",
+      "area": "project"
+    },
+    {
+      "id": "FC-C16",
+      "name": "a Render database is on a paid plan",
+      "area": "project"
+    },
+    {
+      "id": "FC-C17",
+      "name": "no secret-named Render variable carries a literal value",
+      "area": "project"
+    },
+    {
+      "id": "FC-C18",
+      "name": "a web app hosted elsewhere",
+      "area": "project"
+    },
+    {
+      "id": "FC-D03",
+      "name": "the ci job keeps max-diff-lines at or below plinth's default",
+      "area": "ci"
+    },
+    {
+      "id": "FC-D04",
+      "name": "the ci job keeps deps-fail-on-severity at plinth's default or stricter",
+      "area": "ci"
+    },
+    {
+      "id": "FC-D05",
+      "name": "a web project's ci job passes web: true",
+      "area": "ci"
+    },
+    {
+      "id": "FC-D07",
+      "name": ".gitlab-ci.yml carries the docker-image job",
+      "area": "ci"
+    },
+    {
+      "id": "FC-D08",
+      "name": ".gitlab-ci.yml includes plinth's GitLab pipeline at a commit, with a checksum",
+      "area": "ci"
+    },
+    {
+      "id": "FC-E01",
+      "name": "the GitLab default branch is protected",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E02",
+      "name": "a GitLab merge request merges only on a green pipeline",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E03",
+      "name": "a GitLab merge request is squashed and fast-forwarded",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E04",
+      "name": "the default branch carries the GitLab pipeline definition",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E05",
+      "name": "every label the door creates is present",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E07",
+      "name": "the default branch is main",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E08",
+      "name": "squash commits carry the pull request title and description",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E09",
+      "name": "push protection is on",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E10",
+      "name": "SECURITY.md names a route this repository takes",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E11",
+      "name": "private vulnerability reporting is on",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E12",
+      "name": "rules govern the default branch",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E13",
+      "name": "the default branch has a deletion rule",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E14",
+      "name": "the default branch has a non_fast_forward rule",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E15",
+      "name": "the default branch has a pull_request rule",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E16",
+      "name": "the default branch has a required_status_checks rule",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E17",
+      "name": "merge methods stay within the ruleset's",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E18",
+      "name": "required checks are strict",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E19",
+      "name": "every expected check is required",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E20",
+      "name": "each required check comes from its expected app",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E21",
+      "name": "CodeQL is enforced on the default branch",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E22",
+      "name": "CodeQL's alert thresholds are the ruleset's",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E23",
+      "name": "CodeQL default setup analyses the project's language",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E24",
+      "name": "no ruleset has a bypass actor",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E25",
+      "name": "a ruleset reserves the merge to the repository admin",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E26",
+      "name": "the merge is a boundary for this login",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E27",
+      "name": "the Actions allowlist lets every action the workflows use start",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E28",
+      "name": "the Actions token reads only and cannot approve a pull request",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E29",
+      "name": "a tag ruleset keeps released tags from being moved or deleted",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E30",
+      "name": "the repository has a description",
+      "area": "wall"
+    },
+    {
+      "id": "FC-F03",
+      "name": "third_party_review: true has its workflow",
+      "area": "plinth"
+    },
+    {
+      "id": "FC-F04",
+      "name": "code_of_conduct: true has its CODE_OF_CONDUCT.md",
+      "area": "plinth"
+    },
+    {
+      "id": "FC-F05",
+      "name": "the owner's .github still publishes CODE_OF_CONDUCT.md (answered owner_has_code_of_conduct)",
+      "area": "plinth"
+    },
+    {
+      "id": "FC-F08",
+      "name": "the owner's .github still publishes PULL_REQUEST_TEMPLATE.md (answered owner_has_pr_template)",
+      "area": "plinth"
+    },
+    {
+      "id": "FC-F06",
+      "name": "every plinth workflow pin names one commit",
+      "area": "plinth"
+    },
+    {
+      "id": "FC-F07",
+      "name": "the recorded host is one this checker reads",
+      "area": "plinth"
+    },
+    {
+      "id": "FC-G01",
+      "name": "this machine's Claude Code sandbox setting",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G02",
+      "name": "each plugin from the plinth marketplace is at its pin",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G03",
+      "name": "the agent's login lists no scope that changes the workflows",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G04",
+      "name": "no token variable is set in this environment",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G05",
+      "name": "no variable moves the gh or git configuration read",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G06",
+      "name": "the CLI stores one login for the host",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G07",
+      "name": "git asks no credential helper but the CLI's for the host",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G08",
+      "name": "git config sends no Authorization header to the host",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G09",
+      "name": "~/.netrc holds no login for the host",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G10",
+      "name": "the SSH keys that push",
+      "area": "machine"
+    },
+    {
+      "id": "FC-G11",
+      "name": "no production database URL is within the agent's reach",
+      "area": "machine"
+    }
+  ],
+  "summary": {
+    "pass": 58,
+    "fail": 0,
+    "warn": 0,
+    "unknown": 1,
+    "review": 0,
+    "not_applicable": 0,
+    "info": 6,
+    "cannot_be_read_here": 0
+  },
+  "exit": 0,
+  "crashed": null
+}
+--- again with --verdicts: exit 0
+pass: the floor, no FAIL in what this run read
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/adopt --no-network
+--- exit 1
+--- stdout
+floor check: root=$WORK/adopt project=.
+  FAIL  .plinth-adoption.yml is not valid: line 6: a quoted value with more than a comment after it, or not closed: "ci" then more; nothing in it is applied
+  PASS  LICENSE present
+  PASS  README.md present
+  PASS  CHANGELOG.md present
+  PASS  AGENTS.md present
+  PASS  CONTRIBUTING.md present
+  PASS  CONTRIBUTING.md says how to build and test
+  PASS  CONTRIBUTING.md says how to land a change
+  PASS  CONTRIBUTING.md is not a stub (10 lines)
+  PASS  SECURITY.md present
+  PASS  issue templates found (local): bug.yml, feature.yml, task.yml
+  PASS  bug.yml has name, description, body
+  PASS  bug.yml has no unquoted YAML alias
+  PASS  bug.yml labels its issues
+  PASS  bug.yml body is a list
+  PASS  feature.yml has name, description, body
+  PASS  feature.yml has no unquoted YAML alias
+  PASS  feature.yml labels its issues
+  PASS  feature.yml body is a list
+  PASS  task.yml has name, description, body
+  PASS  task.yml has no unquoted YAML alias
+  PASS  task.yml labels its issues
+  PASS  task.yml body is a list
+  PASS  at least one template GitHub can offer (local)
+  INFO  a local ISSUE_TEMPLATE replaces the owner's shared set; GitHub does not merge them
+  PASS  .github/dependabot.yml present
+  PASS  .gitattributes present
+  PASS  .gitattributes normalises line endings (* text=auto)
+  PASS  .gitattributes folds uv.lock in diffs (linguist-generated)
+  PASS  .gitattributes has no rule that needs local git config
+  PASS  .claude/settings.json present
+  PASS  .claude/settings.json denies force push: `git push --force`, `git push -f`, `--force-with-lease`, `--force` after other arguments, `-f` after other arguments, a `+` refspec, `git -C <dir> push --force`, `git -C <dir> push -f`, `git -C <dir> push <b> -f`, `git -C <dir> push +<b>`, `-f` between other arguments, `git -C <dir> push -f <b>`
+  PASS  .claude/settings.json denies rm -rf
+  PASS  .claude/settings.json denies gh auth token
+  PASS  .claude/settings.json denies .env reads
+  PASS  .claude/settings.json denies `. ./.env`
+  PASS  .claude/settings.json denies `source .env`
+  PASS  .claude/settings.json denies `cat .env`
+  PASS  .claude/settings.json denies `grep KEY .env`
+  PASS  .claude/settings.json denies gh config reads
+  PASS  relative links in 5 markdown files resolve
+  PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
+  PASS  every action in 2 workflow files is pinned to a commit (1 uses)
+  PASS  template: the recorded tag is the target tag (v1.52.0)
+  INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (offline or API error)
+  INFO  template: the latest plinth release was not read (offline or API error); going on with the template tag this plinth targets, v1.52.0
+  PASS  pyproject.toml present
+  PASS  uv.lock committed
+  INFO  archetype backend: container image, .env.example and JSON logs required
+  PASS  Dockerfile present
+  PASS  every base image is pinned by digest
+  PASS  the image does not run as root
+  PASS  the image installs from the lockfile (uv sync --locked)
+  PASS  CMD runs python -m app and src/app/__main__.py exists
+  PASS  .dockerignore present
+  PASS  .dockerignore keeps .git, .env, .venv out of the image
+  PASS  .env.example present
+  PASS  .env.example documents every variable the code reads
+  PASS  JSON logs: static hint in src/app/__main__.py (a logging.Formatter subclass that calls json.dumps); a hint in the source, not proof of what the process prints
+  PASS  .github/workflows/release.yml present
+  PASS  .github/workflows/release.yml runs on a pushed tag only
+  PASS  .github/workflows/release.yml reads no stored secret
+  PASS  ci.yml carries the image job (docker build, docker run)
+  PASS  the ci job in the checkout, not the default branch (--no-network) calls coolbress/plinth/.github/workflows/python-ci.yml@0000000000000000000000000000000000000000
+  SKIP  no --repo: wall not checked
+-- 1 failed, 1 not verified
+--- again with --verdicts: exit 1
+fail: .plinth-adoption.yml is not valid: line 6: a quoted value with more than a comment after it, or not closed: "ci" then more; nothing in it is applied; run /plinth:floor-check, which writes the fix for each item: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it can read this: https://github.com/coolbress/plinth/blob/main/skills/floor-check/SKILL.md#report
+=== --root $WORK/adopt --no-network
 --- exit 1
 --- stdout
 floor check: root=$WORK/adopt project=.

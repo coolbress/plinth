@@ -2770,12 +2770,29 @@ def today() -> datetime.date:
     return datetime.date.fromisoformat(given) if given else datetime.datetime.now(datetime.timezone.utc).date()
 
 
-def yaml_scalar(text: str) -> str:
-    """One value of the record's form: quoted ('…' or "…"), or plain up to a ` #` comment."""
+# A quoted value, then nothing or a ` #` comment: the comment is taken off
+# outside the quotes, so a `#` inside them stays in the value.
+SINGLE_QUOTED = re.compile(r"'((?:[^']|'')*)'(?:\s+#.*)?")
+DOUBLE_QUOTED = re.compile(r'("(?:[^"\\]|\\.)*")(?:\s+#.*)?')
+
+
+def yaml_scalar(text: str, n: int) -> str:
+    """One value of the record's form, on line `n`: quoted ('…' or "…"), with
+    or without a ` #` comment after the closing quote, or plain up to a ` #`
+    comment. A quote that does not close, or anything but a comment after
+    it, is a ValueError naming the line, never a value with its quotes."""
     t = text.strip()
-    if len(t) >= 2 and t[0] == t[-1] and t[0] in "'\"":
-        return t[1:-1].replace("''", "'") if t[0] == "'" else json.loads(t)
-    return re.sub(r"\s+#.*$", "", t)
+    if t[:1] == "'":
+        m = SINGLE_QUOTED.fullmatch(t)
+        if m:
+            return m.group(1).replace("''", "'")
+    elif t[:1] == '"':
+        m = DOUBLE_QUOTED.fullmatch(t)
+        if m:
+            return json.loads(m.group(1))
+    else:
+        return re.sub(r"\s+#.*$", "", t)
+    raise ValueError(f"line {n}: a quoted value with more than a comment after it, or not closed: {t}")
 
 
 def read_adoption(text: str) -> dict:
@@ -2795,7 +2812,7 @@ def read_adoption(text: str) -> dict:
             if key in out:
                 raise ValueError(f"line {n}: {key} given twice")
             in_kept = key == "kept" and value in ("", "[]")
-            out[key] = [] if in_kept else yaml_scalar(value)
+            out[key] = [] if in_kept else yaml_scalar(value, n)
             if in_kept and value == "[]":
                 in_kept = False
             item = None
@@ -2808,7 +2825,7 @@ def read_adoption(text: str) -> dict:
             assert item is not None
             if entry.group(2) in item:
                 raise ValueError(f"line {n}: {entry.group(2)} given twice in one kept entry")
-            item[entry.group(2)] = yaml_scalar(entry.group(3) or "")
+            item[entry.group(2)] = yaml_scalar(entry.group(3) or "", n)
             continue
         raise ValueError(f"line {n} is not in the form this checker reads")
     return out

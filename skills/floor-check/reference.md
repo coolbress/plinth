@@ -498,7 +498,8 @@ kept:
 
 The checker reads this form, not all of YAML: top-level `key: value` lines
 and `kept:` as a list of `- key: value` entries (or `kept: []`), values plain
-or quoted. [`scripts/plinth-adoption.schema.json`](../../scripts/plinth-adoption.schema.json)
+or quoted, each with a comment (a space, then `#`) after it or not (a `#` inside quotes is
+part of the value). [`scripts/plinth-adoption.schema.json`](../../scripts/plinth-adoption.schema.json)
 is its shape; `floor-check.py --print-adoption` prints the file in that shape.
 
 - **A kept finding** (a FAIL or WARN whose id is in `kept`) prints as

@@ -4131,6 +4131,32 @@ a_run 2026-11-10
 expect "a kept id that names no check is a FAIL, never a silent pass" \
   'is "$out" FC-F09 fail && grep -qF "keeps FC-Z99, which names no check" <<<"$out"'
 
+# A comment after a quoted value is taken off outside the quotes; a `#`
+# inside them stays (#1236 review).
+adoption 'schema: 1
+plinth: "v2.45.0"   # the release that wrote it
+origin: none
+archetype: backend
+started: 2026-11-01
+step: ci
+wall_due: "2026-11-20" # finish the wall
+kept:
+  - id: FC-C20
+    path: Dockerfile
+    reason: deliberately-different
+    why: "pinned by the mirror, see #12" # the decision'
+eval "$unpin"
+a_run 2026-11-10
+expect "quoted values with a comment after them are read, and a # inside the quotes stays" \
+  'is "$out" FC-F09 info && is "$out" FC-C20 kept && grep -qF "the wall due by 2026-11-20" <<<"$out" && [ "$rc" = 0 ]'
+out="$(FLOOR_CHECK_TODAY=2026-11-10 python3 "$checker" --root "$adopt" --no-network --format json 2>&1)"
+expect "the # inside the quotes is in the kept reason given, not taken for a comment" \
+  'jq -e '"'"'[.results[] | select(.id == "FC-C20")][0].kept.why == "pinned by the mirror, see #12"'"'"' <<<"$out" >/dev/null'
+adoption "$(sed 's/^step: ci$/step: "ci" then more/' <<<"$record_head")"
+a_run 2026-11-10
+expect "a quoted value followed by more than a comment is a FAIL naming the line, not a value with its quotes" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml is not valid: line 6: a quoted value with more than a comment after it" <<<"$out"'
+
 adoption "$record_head
 kept: [FC-C20]
 step: wall"
