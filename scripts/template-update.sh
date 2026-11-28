@@ -144,17 +144,30 @@ dupes="$(for ((i = 0; i < ${#answers[@]}; i += 2)); do echo "${answers[i]}"; don
 # a pull request on GitHub, `glab api` and a merge request on GitLab, asked
 # of the host and project origin's URL names. --finish reads the host from
 # the record --apply wrote.
-origin_parts() { # <top>: "<host> <path>" from origin's URL as configured, or exit 1
-  local url h p
+# A port an https origin names is the API's too, a self-hosted GitLab on its
+# own HTTPS port (#1152). glab takes no port in --hostname (glab 1.122.0
+# refuses `--hostname host:port`: "invalid hostname"), so it goes to glab as
+# GITLAB_API_HOST=<host>:<port> beside --hostname <host>, which glab then
+# asks (measured: https://<host>:<port>/api/v4/...). An ssh:// origin's port
+# is the SSH server's, not the API's, and is dropped; so is an http:// one,
+# which glab would ask over https anyway (its api_protocol is the person's
+# glab configuration). The token is glab's for <host>: a login made as
+# `glab auth login --hostname <host>:<port>` is not found under <host>.
+origin_parts() { # <top>: "<host> <path> [<host>:<port>]" from origin's URL as configured, or exit 1
+  local url h p port=""
   url="$(git -C "$1" config --get remote.origin.url 2>/dev/null)" || return 1
   case "$url" in
-    *://*) h="${url#*://}"; p="${h#*/}"; h="${h%%/*}"; h="${h##*@}"; h="${h%%:*}"
+    *://*) h="${url#*://}"; p="${h#*/}"; h="${h%%/*}"; h="${h##*@}"
+           case "$h" in *:*) port="${h##*:}"; h="${h%%:*}" ;; esac
+           case "$url" in [Hh][Tt][Tt][Pp][Ss]://*) ;; *) port="" ;; esac
+           case "$port" in *[!0-9]*) port="" ;; esac
            [ "$p" != "${url#*://}" ] || p="" ;;
     [!/]*:*) h="${url%%:*}"; case "$h" in */*) return 1 ;; esac; h="${h##*@}"; p="${url#*:}" ;;
     *) return 1 ;;
   esac
   p="${p%/}"; p="${p%.git}"; p="${p#/}"
-  printf '%s %s\n' "$(printf '%s' "$h" | tr '[:upper:]' '[:lower:]')" "$p"
+  h="$(printf '%s' "$h" | tr '[:upper:]' '[:lower:]')"
+  printf '%s %s%s\n' "$h" "$p" "${port:+ $h:$port}"
 }
 on_gitlab() {
   local top h _
@@ -164,13 +177,13 @@ on_gitlab() {
   case "$h" in gitlab.com | *.gitlab.com | gitlab.*) return 0 ;; esac
   return 1
 }
-host=github; gl_host=""; gl_path=""
+host=github; gl_host=""; gl_path=""; gl_api_host=""
 if [ "$mode" = finish ]; then
   rec="$(git -C "$wt_arg" rev-parse --absolute-git-dir 2>/dev/null)/$state_name"
   [ "$(sed -n 's/^host=//p' "$rec" 2>/dev/null | head -n 1)" = gitlab ] && host=gitlab
 elif on_gitlab; then
   host=gitlab
-  read -r gl_host gl_path < <(origin_parts "$(git rev-parse --show-toplevel)") || gl_path=""
+  read -r gl_host gl_path gl_api_host < <(origin_parts "$(git rev-parse --show-toplevel)") || gl_path=""
   case "$gl_path" in
     */*) ;;
     *) die "this repository is on GitLab, but origin's URL names no GitLab project (<host>/<group>/<name>), which glab is asked about: nothing was changed. Set origin to the project's GitLab URL, then run this again." ;;
@@ -186,7 +199,15 @@ done
 # A path segment for GitLab's API: the project's path or a branch, encoded whole.
 enc() { python3 -I -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
 # GET (or another method) on GitLab's API through glab, as the person's own login.
-gl_api() { glab api --hostname "$gl_host" "$@"; }
+# With a port origin names (#1152), glab is told it in GITLAB_API_HOST.
+gl_api() {
+  if [ -n "$gl_api_host" ]; then GITLAB_API_HOST="$gl_api_host" glab api --hostname "$gl_host" "$@"
+  else glab api --hostname "$gl_host" "$@"; fi
+}
+# The same, as a command printed for a person to run.
+gl_api_words() { # <host> <api host or empty>
+  printf '%sglab api --hostname %s' "${2:+GITLAB_API_HOST=$2 }" "$1"
+}
 # A field of a JSON object on stdin, by a path of keys (a.b); nothing when absent.
 json_get() { python3 -I -c '
 import json, sys
@@ -439,7 +460,7 @@ print("gl_protect=" + ("yes " + ", ".join(names) if names else "no"))' "$rules" 
 gl_move_steps() { # <state file>
   local sf="$1" repo default gh_ gate prot cmd
   repo="$(state_get "$sf" repo)"; default="$(state_get "$sf" default)"; gh_="$(state_get "$sf" gl_host)"
-  local e; e="$(state_get "$sf" gl_enc)"
+  local e glab_words; e="$(state_get "$sf" gl_enc)"; glab_words="$(gl_api_words "$gh_" "$(state_get "$sf" gl_api_host)")"
   gate="$(state_get "$sf" gl_gate)"; prot="$(state_get "$sf" gl_protect)"
   local jobs=""
   while IFS= read -r c; do [ -n "$c" ] && jobs="$jobs${jobs:+, }$c stops"; done < <(sed -n 's/^job_drop=//p' "$sf")
@@ -447,13 +468,13 @@ gl_move_steps() { # <state file>
   jobs="${jobs:-no job starts or stops}"
   case "$gate" in
     on) echo "GitLab requires no check by name: $repo merges a merge request only on a green pipeline (\"Pipelines must succeed\" on, skipped pipelines not counted), and the move's jobs ($jobs) go with that pipeline: nothing to change in the project's settings for them." ;;
-    off*) cmd="glab api --hostname $gh_ -X PUT projects/$e -F only_allow_merge_if_pipeline_succeeds=true -F allow_merge_on_skipped_pipeline=false"
+    off*) cmd="$glab_words -X PUT projects/$e -F only_allow_merge_if_pipeline_succeeds=true -F allow_merge_on_skipped_pipeline=false"
           echo "GitLab requires no check by name: what holds a merge request back is \"Pipelines must succeed\", and on $repo it is not set as the door sets it (${gate#off }), so no job, the move's ($jobs) or any other, holds a merge back. Before the move's merge request merges, a Maintainer runs, with their own login (never the agent's): $cmd" ;;
     *) echo "GitLab requires no check by name; whether \"Pipelines must succeed\" is on was not read (${gate#unread }), and it is what holds the move's jobs ($jobs) to the pipeline. \`/plinth:floor-check\`, run with a login that reads the project's settings, names it and the command a Maintainer runs." ;;
   esac
   case "$prot" in
     yes*) echo "$default is protected on $repo (rules that apply: ${prot#yes }); the move changes no rule. \`/plinth:floor-check\` judges how strong they are." ;;
-    no) echo "$default is not a protected branch on $repo: anyone with Developer can push to it. A Maintainer runs, with their own login (never the agent's): glab api --hostname $gh_ -X POST projects/$e/protected_branches -f name=$default -F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false" ;;
+    no) echo "$default is not a protected branch on $repo: anyone with Developer can push to it. A Maintainer runs, with their own login (never the agent's): $glab_words -X POST projects/$e/protected_branches -f name=$default -F push_access_level=0 -F merge_access_level=40 -F allow_force_push=false" ;;
     *) echo "whether $default is protected was not read (${prot#unread }); \`/plinth:floor-check\` reads it with a Maintainer's login." ;;
   esac
 }
@@ -644,7 +665,8 @@ finish() { # <worktree>
   repo="$(state_get "$sf" repo)"; default="$(state_get "$sf" default)"; base="$(state_get "$sf" base)"
   from="$(state_get "$sf" from)"; to="$(state_get "$sf" to)"; cmd="$(state_get "$sf" command)"
   pr="$(state_get "$sf" pr)"
-  gl_host="$(state_get "$sf" gl_host)"; local gl_enc gl_id; gl_enc="$(state_get "$sf" gl_enc)"; gl_id="$(state_get "$sf" gl_id)"
+  gl_host="$(state_get "$sf" gl_host)"; gl_api_host="$(state_get "$sf" gl_api_host)"
+  local gl_enc gl_id; gl_enc="$(state_get "$sf" gl_enc)"; gl_id="$(state_get "$sf" gl_id)"
   local pin_note; pin_note="$(state_get "$sf" pin_note)"
   if [ -n "$pr" ]; then
     echo "The draft $noun is already open: $pr"
@@ -1062,7 +1084,7 @@ if [ "$host" = gitlab ]; then
   default="$(json_get default_branch <<<"$project_json")" || default=""
   gl_id="$(json_get id <<<"$project_json")" || gl_id=""
   [ -n "$repo" ] && [ -n "$default" ] && [ -n "$gl_id" ] \
-    || die "glab cannot name the GitLab project $gl_host/$gl_path or its default branch (glab api projects/$gl_enc; glab auth login --hostname $gl_host)"
+    || die "glab cannot name the GitLab project $gl_host/$gl_path or its default branch ($(gl_api_words "$gl_host" "$gl_api_host") projects/$gl_enc; glab auth login --hostname $gl_host${gl_api_host:+ --api-host $gl_api_host})"
 else
   read -r repo default < <(gh repo view --json nameWithOwner,defaultBranchRef \
     --jq '.nameWithOwner + " " + .defaultBranchRef.name' 2>/dev/null) || true
@@ -1279,7 +1301,7 @@ if [ "$mode" = plan ] && [ -n "$move" ]; then
   fi
   if [ "$host" = gitlab ]; then
     # GitLab's pipeline is .gitlab-ci.yml, its jobs the top-level keys (#1012).
-    { printf 'repo=%s\ndefault=%s\ngl_host=%s\ngl_enc=%s\n' "$repo" "$default" "$gl_host" "$gl_enc"
+    { printf 'repo=%s\ndefault=%s\ngl_host=%s\ngl_api_host=%s\ngl_enc=%s\n' "$repo" "$default" "$gl_host" "$gl_api_host" "$gl_enc"
       gl_job_lines "$r"; gl_settings; } > "$tmp/checks"
     echo "CI jobs that stop:"; listed "$(sed -n 's/^job_drop=/.gitlab-ci.yml: /p' "$tmp/checks")"
     echo "CI jobs that start:"; listed "$(sed -n 's/^job_add=/.gitlab-ci.yml: /p' "$tmp/checks")"
@@ -1744,7 +1766,7 @@ sf="$(state_file "$wt")"
 {
   printf 'repo=%s\ndefault=%s\nbase=%s\nbranch=%s\nfrom=%s\nto=%s\ncommand=%s\npin_note=%s\nhost=%s\n' \
     "$repo" "$default" "$base" "$branch" "$from" "$to" "$cmd${ans_shown:-}" "$pin_note" "$host"
-  [ "$host" = github ] || printf 'gl_host=%s\ngl_enc=%s\ngl_id=%s\n' "$gl_host" "$gl_enc" "$gl_id"
+  [ "$host" = github ] || printf 'gl_host=%s\ngl_api_host=%s\ngl_enc=%s\ngl_id=%s\n' "$gl_host" "$gl_api_host" "$gl_enc" "$gl_id"
   if [ -n "$move" ]; then
     printf 'archetype=%s\nold_archetype=%s\ncompared=yes\n' "$move" "$old_arch"
     while IFS= read -r p; do [ -n "$p" ] && printf 'keep=%s\n' "$p"; done <<<"$keeps"

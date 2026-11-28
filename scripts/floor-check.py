@@ -743,6 +743,7 @@ PUSH_DOCS = f"{DOCS}#push-protection"
 ALLOWLIST_DOCS = f"{DOCS}#the-actions-allowlist-and-private-vulnerability-reporting"
 BESIDE_DOCS = f"{DOCS}#what-the-door-sets-beside-the-wall-and-the-projects-own-answers"
 PRIVATE_DOCS = f"{DOCS}#a-private-repository"
+ALERTS_DOCS = f"{DOCS}#dependabot-alerts-secret-scanning-and-registry-tokens"
 # The rule types the door's ruleset carries on the default branch, each its own check (#1103).
 WALL_RULES = (("FC-E13", "deletion"), ("FC-E14", "non_fast_forward"), ("FC-E15", "pull_request"),
               ("FC-E16", "required_status_checks"))
@@ -1133,6 +1134,69 @@ def _wall() -> tuple[dict, ...]:
               messages={"good": "the repository has a description",
                         "none": "the repository has no description: GitHub's community profile counts one; set it "
                                 "with gh repo edit {repo} --description '<one line>'"}),
+        check("FC-E31", "Dependabot alerts are on, and none is open", states=("pass", "warn", "unknown", "review", "info"),
+              handoff="admin", docs=ALERTS_DOCS, hosts=gh, needs=admin,
+              fix="turn Dependabot alerts on, and fix or dismiss each open alert",
+              messages={"good": "Dependabot alerts are on, and none is open",
+                        "open": "{count} open Dependabot alert(s) ({severities}): a dependency this repository uses "
+                                "has a published vulnerability",
+                        "list": "  https://github.com/{repo}/security/dependabot lists them",
+                        "off": "Dependabot alerts are off: GitHub does not say when a dependency this repository uses "
+                               "has a published vulnerability",
+                        "hint": "  gh api -X PUT repos/{repo}/vulnerability-alerts   (needs repository administration)",
+                        "unread": "Dependabot alerts not verified ({what}: a token with the {permission} permission "
+                                  "(read) reads it)",
+                        "review": "Dependabot alerts are not read here: /plinth:floor-check reads them with a login "
+                                  "that administers the repository"}),
+        check("FC-E32", "Dependabot security updates are on", states=("pass", "warn", "unknown", "review", "info"),
+              handoff="admin", docs=ALERTS_DOCS, hosts=gh, needs=admin,
+              fix="turn Dependabot security updates on",
+              messages={"good": "Dependabot security updates are on: Dependabot opens a pull request that moves a "
+                                "vulnerable dependency to a fixed version",
+                        "off": "Dependabot security updates are off: an open Dependabot alert gets no pull request "
+                               "with the fix",
+                        "paused": "Dependabot security updates are paused (GitHub pauses them after a run of pull "
+                                  "requests nobody merges): an open alert gets no pull request with the fix",
+                        "hint": "  gh api -X PUT repos/{repo}/automated-security-fixes   (needs repository "
+                                "administration; it needs Dependabot alerts on)",
+                        "unread": "Dependabot security updates not verified (no answer this checker reads: a token "
+                                  "with the Administration permission (read) reads it)",
+                        "review": "Dependabot security updates are not read here: /plinth:floor-check reads them with "
+                                  "a login that administers the repository"}),
+        check("FC-E33", "secret scanning is on, and no alert is open",
+              states=("pass", "warn", "unknown", "review", "info"), handoff="admin", docs=ALERTS_DOCS, hosts=gh,
+              needs=admin, baseline=("OSPS-BR-07.01",),
+              not_keepable="an open alert is a secret on GitHub that everyone who can read the repository can use "
+                           "until it is revoked",
+              fix="turn secret scanning on; revoke each secret an open alert names, then close the alert",
+              messages={"good": "secret scanning is on, and no alert is open",
+                        "open": "{count} open secret scanning alert(s): {where}. Each is a secret on GitHub until "
+                                "it is revoked at its provider; closing the alert does not revoke it",
+                        "list": "  https://github.com/{repo}/security/secret-scanning lists them",
+                        "off": "secret scanning is off: GitHub does not say when a secret in a format it knows is "
+                               "in this repository",
+                        "hint": "  gh api -X PATCH repos/{repo} --input - <<<'{body}'   (needs repository "
+                                "administration)",
+                        "gap": "secret scanning is not on this private repository: it needs GitHub Secret Protection, "
+                               "a paid product for Team and Enterprise. In its place: `ci / secrets`. {turn_on}",
+                        "unread": "secret scanning not verified ({what}: a token with the {permission} permission "
+                                  "(read) reads it)",
+                        "review": "secret scanning and its open alerts are not read here: /plinth:floor-check reads "
+                                  "them with a login that administers the repository"}),
+        check("FC-E34", "no registry token among the secrets while release.yml publishes through OIDC",
+              states=("pass", "warn", "unknown", "review", "info"), handoff="person", docs=ALERTS_DOCS, hosts=gh,
+              needs=admin, lifecycle="experimental",
+              fix="delete the registry token secrets once the trusted publisher works",
+              messages={"good": "release.yml publishes through OIDC, and no secret is named like a registry token",
+                        "bad": "release.yml publishes through OIDC, and these secrets are named like a token for "
+                               "that registry: {names}. A long-lived token is a second way to publish, and it never "
+                               "expires on its own",
+                        "hint": "  {line}   (once a release has published through OIDC and no other workflow "
+                                "reads it)",
+                        "unread": "the secret names not verified ({what}: a token with the {permission} permission "
+                                  "(read) lists them; values are never read)",
+                        "review": "the secret names are not read here: /plinth:floor-check lists them (names only) "
+                                  "with a login that administers the repository"}),
     )
 
 
@@ -1588,6 +1652,30 @@ ABSENT = object()   # 404: the resource does not exist
 ERROR = object()    # anything else went wrong: do not conclude
 
 
+def json_pages(text: str):
+    """The answer `gh api --paginate` prints: one JSON value per page, one
+    after another ("Each page is a separate JSON array or object", gh api
+    --help). One value is returned as it is; several arrays are one list. A
+    value that is not an array among several pages is a ValueError: no page
+    of it is guessed at."""
+    dec, i, pages = json.JSONDecoder(), 0, []
+    while True:
+        while i < len(text) and text[i].isspace():
+            i += 1
+        if i == len(text):
+            break
+        value, i = dec.raw_decode(text, i)
+        pages.append(value)
+    if len(pages) == 1:
+        return pages[0]
+    if pages and all(isinstance(p, list) for p in pages):
+        return [x for p in pages for x in p]
+    raise ValueError(f"{len(pages)} pages, not all of them arrays")
+
+
+NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
+
+
 def api(path: str, network: bool, paginate: bool = False):
     """GET api.github.com/<path>. Returns the JSON, ABSENT on 404, ERROR when
     offline or on any other failure. FLOOR_CHECK_API_DIR serves fixtures.
@@ -1622,20 +1710,37 @@ def api(path: str, network: bool, paginate: bool = False):
         except (OSError, subprocess.TimeoutExpired):
             r = None
         if r is not None and r.returncode == 0:
+            # A 204 has no body (repos/{r}/vulnerability-alerts answers so when on): an empty object.
+            if not r.stdout.strip():
+                return {}
             try:
-                return json.loads(r.stdout)
+                return json_pages(r.stdout) if paginate else json.loads(r.stdout)
             except ValueError:
                 return ERROR
         if r is not None and "HTTP 404" in r.stderr:
             return ABSENT
-    req = urllib.request.Request(f"https://api.github.com/{path}")
-    req.add_header("Accept", "application/vnd.github+json")
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
+    url: str | None = f"https://api.github.com/{path}"
+    pages: list = []
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return json.loads(resp.read().decode())
+        # With paginate, each page's `Link: <…>; rel="next"` is followed, as
+        # gh does; a page that is not an array ends it as an ERROR.
+        while url is not None and len(pages) < 100:
+            req = urllib.request.Request(url)
+            req.add_header("Accept", "application/vnd.github+json")
+            if token:
+                req.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                body = resp.read().decode()
+                link = NEXT_LINK.search(resp.headers.get("Link") or "") if paginate else None
+            value = json.loads(body) if body.strip() else {}
+            if not paginate or (link is None and not pages):
+                return value
+            if not isinstance(value, list):
+                return ERROR
+            pages.append(value)
+            url = link.group(1) if link else None
+        return ERROR if url is not None else [x for p in pages for x in p]
     except urllib.error.HTTPError as e:
         return ABSENT if e.code == 404 else ERROR
     except (urllib.error.URLError, TimeoutError, ValueError):
@@ -5317,6 +5422,211 @@ def check_actions_token(repo: str, network: bool, actions_token: bool = False) -
     emit("FC-E28", "info", "hint", {"repo": repo})
 
 
+# What a token needs to read each of the items below, as GitHub's table of
+# fine-grained token permissions gives it (read 2026-11-28): the alerts'
+# on/off and security updates under "Administration", the open Dependabot
+# alerts under "Dependabot alerts", the open secret scanning alerts under
+# "Secret scanning alerts", repository secrets' names under "Secrets" and an
+# environment's under "Environments". A classic token or gh's own login
+# needs `repo`. No endpoint here returns a secret's value; the secret
+# scanning alert does carry it, and it is never kept or printed.
+SEVERITIES = ("critical", "high", "medium", "low")
+# A release workflow that publishes through OIDC (it asks for the identity
+# token, and a step publishes with it), and the secret names a token for that
+# same registry goes by. Only the registry the workflow publishes to through
+# OIDC is matched: a token for another registry (an image's, an npm publish
+# without provenance) may still be in use.
+OIDC_REGISTRIES = (
+    (re.compile(r"pypa/gh-action-pypi-publish|\buv publish\b"), re.compile(r"PYPI|TWINE|UV_PUBLISH", re.IGNORECASE)),
+    (re.compile(r"\bnpm publish\b.*--provenance"), re.compile(r"NPM|NODE_AUTH", re.IGNORECASE)),
+)
+
+
+def unread(cid: str, actions_token: bool, values: dict, reason: str) -> None:
+    """An answer not read: left to the skill under --actions-token, otherwise a SKIP."""
+    if actions_token:
+        emit(cid, "review", "review", reader=ADMIN_READER)
+    else:
+        emit(cid, "unknown", "unread", values, reason=reason)
+
+
+def check_dependabot_alerts(repo: str, meta: dict, network: bool, actions_token: bool) -> None:
+    """Dependabot alerts on, and how many are open, by severity (#1118). The
+    on/off is a 204 or a 404 on repos/{r}/vulnerability-alerts, and GitHub
+    answers 404 as well to a login that does not administer the repository:
+    a 404 is "off" only when the repository's answer says this login does.
+    Count and severity only; GitHub only (FC-A19 is GitLab's line)."""
+    on = api(f"repos/{repo}/vulnerability-alerts", network)
+    admin = isinstance(meta.get("permissions"), dict) and meta["permissions"].get("admin") is True
+    if on is ABSENT and admin and not actions_token:
+        emit("FC-E31", "warn", "off")
+        emit("FC-E31", "info", "hint", {"repo": repo})
+        return
+    if not isinstance(on, dict):
+        unread("FC-E31", actions_token, {"what": "whether they are on was not answered", "permission": "Administration"},
+               "Dependabot alerts not read")
+        return
+    alerts = api(f"repos/{repo}/dependabot/alerts?state=open&per_page=100", network, paginate=True)
+    if not isinstance(alerts, list):
+        unread("FC-E31", actions_token, {"what": "they are on; the open alerts were not read",
+                                         "permission": "Dependabot alerts"}, "the open Dependabot alerts not read")
+        return
+    sev = [((a.get("security_advisory") or {}).get("severity") or (a.get("security_vulnerability") or {}).get("severity"))
+           for a in alerts if isinstance(a, dict) and a.get("state", "open") == "open"]
+    if not sev:
+        emit("FC-E31", "pass", "good")
+        return
+    counts = [f"{sev.count(s)} {s}" for s in SEVERITIES if s in sev]
+    other = sum(s not in SEVERITIES for s in sev)
+    emit("FC-E31", "warn", "open", {"count": len(sev),
+                                    "severities": ", ".join(counts + ([f"{other} of no severity"] if other else []))})
+    emit("FC-E31", "info", "list", {"repo": repo})
+
+
+def check_security_updates(repo: str, network: bool, actions_token: bool) -> None:
+    """Dependabot security updates on (#1118): repos/{r}/automated-security-fixes
+    answers `enabled` and `paused`. Anything else is not read."""
+    got = api(f"repos/{repo}/automated-security-fixes", network)
+    enabled = got.get("enabled") if isinstance(got, dict) else None
+    if enabled is True and got.get("paused") is not True:
+        emit("FC-E32", "pass", "good")
+    elif enabled is True:
+        emit("FC-E32", "warn", "paused")
+        emit("FC-E32", "info", "hint", {"repo": repo})
+    elif enabled is False:
+        emit("FC-E32", "warn", "off")
+        emit("FC-E32", "info", "hint", {"repo": repo})
+    elif actions_token:
+        emit("FC-E32", "review", "review", reader=ADMIN_READER)
+    else:
+        emit("FC-E32", "unknown", "unread", reason="Dependabot security updates not read")
+
+
+def alert_place(repo: str, number, network: bool) -> str:
+    """Where an open secret scanning alert's secret is: the first location's
+    path, or its kind (an issue comment, an Actions log); never the value."""
+    locs = api(f"repos/{repo}/secret-scanning/alerts/{number}/locations", network)
+    first = locs[0] if isinstance(locs, list) and locs and isinstance(locs[0], dict) else None
+    if first is None:
+        return "where not read"
+    details = first.get("details")
+    path = details.get("path") if isinstance(details, dict) else None
+    if isinstance(path, str) and path:
+        return f"in {path}"
+    kind = str(first.get("type") or "place").replace("_", " ")
+    return f"in {'an' if kind[:1] in 'aeiou' else 'a'} {kind}"
+
+
+def check_secret_scanning(repo: str, meta: dict, network: bool, actions_token: bool, hidden: str | None) -> None:
+    """Secret scanning on, and its open alerts named by type and where, never
+    by value (#1118). The status is in `security_and_analysis`, as push
+    protection's is (FC-E09), which reports an unanswered block once for
+    both; a private repository without GitHub Secret
+    Protection has it off by plan, an INFO naming the plan. With alerts open
+    the row is the alerts, not "on"."""
+    security = meta.get("security_and_analysis")
+    if not isinstance(security, dict) or hidden is not None:
+        # The settings were not answered: push protection's line (FC-E09)
+        # reports that one read, a SKIP, its plan or an INFO left to the
+        # skill, and a second line here would count the same answer twice.
+        return
+    entry = security.get("secret_scanning")
+    status = entry.get("status") if isinstance(entry, dict) else None
+    if status == "disabled" and is_private(meta):
+        emit("FC-E33", "info", "gap", {"turn_on": TURN_ON})
+        return
+    if status == "disabled":
+        emit("FC-E33", "warn", "off")
+        body = json.dumps({"security_and_analysis": {"secret_scanning": {"status": "enabled"}}})
+        emit("FC-E33", "info", "hint", {"repo": repo, "body": body})
+        return
+    if status != "enabled":
+        unread("FC-E33", actions_token, {"what": "its status was not answered", "permission": "Administration"},
+               "secret scanning not read")
+        return
+    alerts = api(f"repos/{repo}/secret-scanning/alerts?state=open&per_page=100&hide_secret=true", network,
+                 paginate=True)
+    if not isinstance(alerts, list):
+        unread("FC-E33", actions_token, {"what": "it is on; the open alerts were not read",
+                                         "permission": "Secret scanning alerts"}, "the open secret scanning alerts not read")
+        return
+    open_ = [a for a in alerts if isinstance(a, dict) and a.get("state", "open") == "open"]
+    if not open_:
+        emit("FC-E33", "pass", "good")
+        return
+    # Only the type and the place are taken from each alert. The request asks
+    # GitHub to leave the value out (hide_secret), and its `secret` field,
+    # should one come back, is never read into a message.
+    named = [f"{a.get('secret_type_display_name') or a.get('secret_type') or 'a secret'} "
+             f"{alert_place(repo, a.get('number'), network)}" for a in open_[:10]]
+    more = f"; {len(open_) - 10} more" if len(open_) > 10 else ""
+    emit("FC-E33", "warn", "open", {"count": len(open_), "where": "; ".join(named) + more})
+    emit("FC-E33", "info", "list", {"repo": repo})
+
+
+def check_registry_secrets(root: Path, repo: str, network: bool, actions_token: bool) -> None:
+    """Secrets named like a registry token while release.yml publishes through
+    OIDC (#1118): names only, from the repository and each environment; a
+    value is never read (GitHub returns none). Experimental, a WARN at most:
+    the names are a guess at what a secret holds."""
+    rel = root / RELEASE_WORKFLOW
+    text = read(rel) if rel.is_file() else ""
+    names = [n for publish, n in OIDC_REGISTRIES if publish.search(text)]
+    if not (re.search(r"id-token:\s*write", text) and names):
+        return
+
+    def listed(got) -> bool:
+        """A whole list of secrets: more than one page is not read, so not listed."""
+        return (isinstance(got, dict) and isinstance(got.get("secrets"), list)
+                and not (isinstance(got.get("total_count"), int) and got["total_count"] > len(got["secrets"])))
+
+    repo_secrets = api(f"repos/{repo}/actions/secrets?per_page=100", network)
+    if not listed(repo_secrets):
+        unread("FC-E34", actions_token, {"what": "the repository's secrets were not listed", "permission": "Secrets"},
+               "the secret names not read")
+        return
+    found = [(s.get("name"), None) for s in repo_secrets["secrets"] if isinstance(s, dict)]
+    envs = api(f"repos/{repo}/environments?per_page=100", network)
+    if envs is ABSENT:
+        envs = {"environments": []}
+    if not isinstance(envs, dict) or not isinstance(envs.get("environments"), list) or (
+            isinstance(envs.get("total_count"), int) and envs["total_count"] > len(envs["environments"])):
+        unread("FC-E34", actions_token, {"what": "the environments were not listed", "permission": "Actions"},
+               "the environments not read")
+        return
+    for env in envs["environments"]:
+        name = env.get("name") if isinstance(env, dict) else None
+        got = api(f"repos/{repo}/environments/{name}/secrets?per_page=100", network) if name else None
+        if not listed(got) or not isinstance(got, dict):
+            unread("FC-E34", actions_token, {"what": f"environment {name}'s secrets were not listed",
+                                             "permission": "Environments"}, "an environment's secret names not read")
+            return
+        found += [(s.get("name"), name) for s in got["secrets"] if isinstance(s, dict)]
+    tokens = [(n, e) for n, e in found if isinstance(n, str) and any(r.search(n) for r in names)]
+    if not tokens:
+        emit("FC-E34", "pass", "good")
+        return
+    emit("FC-E34", "warn", "bad", {"names": ", ".join(f"{n} ({'environment ' + e if e else 'repository'})"
+                                                      for n, e in tokens)})
+    for n, e in tokens:
+        emit("FC-E34", "info", "hint", {"line": f"gh secret delete {n} --repo {repo}" + (f" --env {e}" if e else "")})
+
+
+def check_security_reads(root: Path, repo: str, network: bool, actions_token: bool) -> None:
+    """The admin reads of #1118, after the wall: alerts, security updates,
+    secret scanning and the registry token names."""
+    if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
+        return
+    meta = api(f"repos/{repo}", network)
+    if not isinstance(meta, dict):
+        return   # FC-E06 has said the repository was not read
+    hidden = hidden_security(repo, meta, network, actions_token)
+    check_dependabot_alerts(repo, meta, network, actions_token)
+    check_security_updates(repo, network, actions_token)
+    check_secret_scanning(repo, meta, network, actions_token, hidden)
+    check_registry_secrets(root, repo, network, actions_token)
+
+
 # The patterns that cover every `v*` tag: the door's, and the two wider ones.
 TAG_NAMESPACE = ("refs/tags/v*", "refs/tags/*", "~ALL")
 
@@ -6735,6 +7045,7 @@ def main() -> int:
                    None if a.archetype else archetype, (project / ".copier-answers.yml").relative_to(root).as_posix())
         check_actions_allowlist(root, a.repo, network, a.actions_token)
         check_actions_token(a.repo, network, a.actions_token)
+        check_security_reads(root, a.repo, network, a.actions_token)
         check_tag_ruleset(a.repo, archetype, network, a.actions_token, project)
         check_description(a.repo, network)
         check_labels(a.repo, network)
