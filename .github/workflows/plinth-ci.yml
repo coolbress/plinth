@@ -266,6 +266,9 @@ jobs:
       - name: The guide's next step per state, and only the arsenal's tools
         run: ./tests/guide-cases.sh
 
+      - name: The template's AGENTS.md, the arsenal, run-a-project and the guide name the same next step
+        run: ./tests/guidance-agree.sh
+
       - name: The template update runs the checker's command in a worktree and opens nothing over a conflict
         run: ./tests/template-update-cases.sh
 
