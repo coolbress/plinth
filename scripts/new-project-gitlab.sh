@@ -44,13 +44,15 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # sq: a value as one shell word, for every command printed to be pasted.
 # shellcheck source=scripts/lib/shell-word.sh
 . "$here/lib/shell-word.sh"
+# copier_pinned: copier's dependencies at their locked versions (#1220).
+# shellcheck source=scripts/lib/copier-pin.sh
+. "$here/lib/copier-pin.sh"
 
 # The pins come from new-project.sh, their one source: run through it.
 template_repo="${PLINTH_DOOR_TEMPLATE_REPO:?run it as new-project.sh <name> --host gitlab}"
 template_ref="${PLINTH_DOOR_TEMPLATE_REF:?run it as new-project.sh <name> --host gitlab}"
 template_sha="${PLINTH_DOOR_TEMPLATE_SHA:?run it as new-project.sh <name> --host gitlab}"
 copier_version="${PLINTH_DOOR_COPIER_VERSION:?run it as new-project.sh <name> --host gitlab}"
-copier_newer="${PLINTH_DOOR_COPIER_NEWER:?run it as new-project.sh <name> --host gitlab}"
 claude_floor="${PLINTH_DOOR_CLAUDE_FLOOR:?run it as new-project.sh <name> --host gitlab}"
 git_floor="${PLINTH_DOOR_GIT_FLOOR:?run it as new-project.sh <name> --host gitlab}"
 # The glab this door was run with on GitLab.com (#353): `glab api` with -X and
@@ -58,8 +60,8 @@ git_floor="${PLINTH_DOOR_GIT_FLOOR:?run it as new-project.sh <name> --host gitla
 glab_floor="1.122.0"
 gitlab="gitlab.com"
 
-usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--hosting=local] [--preflight] [--check]"
-gl_place=""; preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""; desc=""; desc_said=""; lang=""
+usage="usage: new-project.sh [<namespace>/]<name> --host gitlab [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--no-third-party-review] [--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--hosting=local] [--no-scheduled-run] [--preflight] [--check]"
+gl_place=""; preflight=0; check=0; target=""; lic=mit; arch=cli; dir=""; visibility=private; vis_said=""; desc=""; desc_said=""; lang=""; no_sched=0
 for a in "$@"; do case "$a" in
   --preflight)   preflight=1 ;;
   --check)       check=1 ;;
@@ -86,6 +88,11 @@ for a in "$@"; do case "$a" in
   # the template's default; Render is GitHub only. Checked below, once the
   # archetype is known.
   --hosting=*)   gl_place="${a#*=}" ;;
+  # A cli's scheduled run (#1070) is a GitHub Actions workflow; a GitLab
+  # pipeline schedule was not tried, and the template refuses it on GitLab
+  # too. Saying no to it is what GitLab gets.
+  --no-scheduled-run) no_sched=1 ;;
+  --scheduled-run) echo "--scheduled-run is for GitHub only: the scheduled run is a GitHub Actions workflow, and a GitLab pipeline schedule was not tried; nothing was read or created"$'\n'"  fix: drop --scheduled-run and start the command on your computer (cron, launchd), or drop --host gitlab to make it on GitHub" >&2; exit 2 ;;
   --custom-user-model|--no-custom-user-model) echo "$a is for --archetype=web, which is made on GitHub only; nothing was read or created"$'\n'"  fix: drop $a, or drop --host gitlab" >&2; exit 2 ;;
   -*)            echo "unknown option for --host gitlab: $a"$'\n'"$usage" >&2; exit 2 ;;
   *)             [ -z "$target" ] || { echo "one name only: $target, $a"$'\n'"$usage" >&2; exit 2; }; target="$a" ;;
@@ -96,6 +103,7 @@ esac; done
 case "$vis_said" in *+*-*|*-*+*) echo "--private and --public: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 case "$desc_said" in *+*-*|*-*+*) echo "--description and --no-description: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 answers_fit "$usage" "$desc" "$lang"
+[ "$no_sched" = 0 ] || [ "$arch" = cli ] || { echo "--no-scheduled-run is for --archetype=cli only"$'\n'"$usage" >&2; exit 2; }
 # Before any tool or login is read, so nothing on GitLab is touched; the
 # template's own validator says the same, later (#615).
 [ "$arch" != web ] || stop "the web archetype is GitHub only: its deployment and checks are built for GitHub" \
@@ -338,11 +346,11 @@ if [ "$check" = 1 ]; then
   exit 0
 fi
 
-# Render, as the GitHub door does: copier at its pinned version and date,
+# Render, as the GitHub door does: copier and its dependencies at their pinned versions,
 # into a plain directory whose .git is removed, then initialised (#118).
 # Without a token in its environment: gh's two names, and the three glab reads
 # (GITLAB_TOKEN, GITLAB_ACCESS_TOKEN, OAUTH_TOKEN; its configuration reference).
-env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+copier_pinned "$here/.." env -u GH_TOKEN -u GITHUB_TOKEN -u GITLAB_TOKEN -u GITLAB_ACCESS_TOKEN -u OAUTH_TOKEN uvx --quiet --from "copier==$copier_version" \
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$ns" --data "license=$spdx" --data "archetype=$arch" \
   --data "host=gitlab" ${desc:+--data "description=$desc"} ${lang:+--data "records_language=$lang"} \

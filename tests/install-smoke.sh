@@ -267,15 +267,29 @@ done
 # of its tag, then replaced by this checkout's files, its version raised so that
 # `update` sees a newer one (a pull request carries the released version).
 upgrade_cmds=("claude plugin install plinth@plinth" "claude plugin prune")
-# A dependency that left plinth for another (taste-skill for frontend-design,
-# #1082): `update` does not remove the old one, which stays "not found in
-# marketplace", and `prune` cannot tell an orphan while it is (measured for
-# #468). From Claude Code 2.1.319 `update` installs the new one; before it, it
-# did not (#468, on 2.1.296). The README names install, then uninstall of the
-# old one.
-swap_cmds=("claude plugin install plinth@plinth" "claude plugin uninstall taste-skill@plinth")
-grep -qF "\`${swap_cmds[0]}\` and then \`${swap_cmds[1]}\`" <<<"$(tr -s ' \n' ' ' <"$root/README.md")" \
-  || { echo "  FAIL  README.md does not name \`${swap_cmds[0]}\` and then \`${swap_cmds[1]}\`"; exit 1; }
+# The retired entries (#1229), read from docs/reference/dependency-entries.md's
+# table: each one's command is in the README's upgrade paragraph. A removed
+# entry's comes after `claude plugin install plinth@plinth`: from Claude Code
+# 2.1.319 `update` installs a replacement, before it only `install` does (#468).
+# Its `renames` key and forceRemoveDeletedPlugins make Claude Code uninstall it
+# at the next session start (measured for #1229); the command covers a session
+# not yet restarted.
+retired_rows="$(python3 "$root/scripts/retired-entries.py" "$root")" \
+  || { echo "  FAIL  the Retired entries table in docs/reference/dependency-entries.md does not read"; exit 1; }
+retired=()
+while IFS= read -r r; do [ -z "$r" ] || retired+=("$r"); done <<<"$retired_rows"
+[ "${#retired[@]}" -gt 0 ] || { echo "  FAIL  the Retired entries table has no row: taste-skill's at least"; exit 1; }
+readme_flat="$(tr -s ' \n' ' ' <"$root/README.md")"
+for r in "${retired[@]}"; do
+  IFS=$'\t' read -r r_name r_kind _ _ r_cmd <<<"$r"
+  if [ "$r_kind" = removed ]; then
+    grep -qF "\`claude plugin install plinth@plinth\` and then \`$r_cmd\`" <<<"$readme_flat" \
+      || { echo "  FAIL  README.md does not name \`claude plugin install plinth@plinth\` and then \`$r_cmd\` for the retired $r_name"; exit 1; }
+  else
+    grep -qF "\`$r_cmd\`" <<<"$readme_flat" || { echo "  FAIL  README.md does not name \`$r_cmd\` for the retired $r_name"; exit 1; }
+  fi
+  echo "  PASS  README.md names \`$r_cmd\` for the retired $r_name"
+done
 # The docs name them in this order; the other order leaves no mattpocock-skills
 # skill until `install` runs.
 # The README is their one source (#835); tests/doc-consistency.sh holds the
@@ -309,7 +323,11 @@ rm -rf "$up/mkt/.git"
   # With the release's mattpocock-skills-extra installed too: the case where a
   # skill moved between the two entries (#704) could end up under both names.
   claude plugin install mattpocock-skills-extra@plinth -y >/dev/null
-  had_taste=no; rel_list="$(claude plugin list --json)"; ! grep -qF '"taste-skill@plinth"' <<<"$rel_list" || had_taste=yes
+  rel_list="$(claude plugin list --json)"; had=()
+  for r in "${retired[@]}"; do
+    n="${r%%$'\t'*}"; ! grep -qF "\"$n@plinth\"" <<<"$rel_list" || had+=("$n")
+  done
+  echo "  INFO  retired entries $tag installed: ${had[*]:-none}"
   rm -rf "$up/mkt" && mkdir "$up/mkt"
   (cd "$root" && git ls-files -z -co --exclude-standard | tar --null -T - -cf -) | tar -xf - -C "$up/mkt"
   for m in plugin.json marketplace.json; do
@@ -320,40 +338,46 @@ rm -rf "$up/mkt/.git"
   claude plugin list --json | python3 -c 'import json, sys
 for p in json.load(sys.stdin):
     print("  INFO  after update alone: %s errors=%s" % (p["id"], p.get("errors", [])))'
-  # What `update` alone does to the swap (#1082), held to what the README
-  # says: taste-skill stays, with an error, when the release installed it, and
-  # from 2.1.319 frontend-design is installed. Below 2.1.319 (the floor is
-  # 2.1.274) whether frontend-design is installed is recorded, not judged. A
-  # Claude Code that does otherwise fails here, so the README's one-time
-  # commands are rewritten, not left stale.
+  # What `update` alone does to each retired entry the release installed,
+  # recorded, not judged: with its `renames` key a removed entry is disabled
+  # without an error (measured for #1229), and forceRemoveDeletedPlugins takes
+  # it at the next session start, which this run does not make. From 2.1.319
+  # `update` installs a removed entry's replacement, and that is judged (#468):
+  # a Claude Code that stops doing it fails here, so the README is rewritten.
   new_dep_v=2.1.319
   new_dep=no; [ "$(printf '%s\n%s\n' "$new_dep_v" "$v" | sort -V | head -1)" = "$new_dep_v" ] && new_dep=yes
   claude plugin list --json | python3 -c 'import json, sys
 ids = {p["id"]: p for p in json.load(sys.stdin)}
-had, new_dep, v, new_dep_v = sys.argv[1] == "yes", sys.argv[2] == "yes", sys.argv[3], sys.argv[4]
-for n in ("taste-skill@plinth", "frontend-design@plinth"):
-    print("  INFO  after update alone, %s: %s" % (n, ("installed, errors=%s" % ids[n].get("errors", [])) if n in ids else "not installed"))
+new_dep, v, new_dep_v, had = sys.argv[1] == "yes", sys.argv[2], sys.argv[3], set(sys.argv[5:])
 bad = []
-if had:
-    if "taste-skill@plinth" not in ids:
-        bad.append("update removed taste-skill@plinth")
-    elif not ids["taste-skill@plinth"].get("errors"):
-        bad.append("taste-skill@plinth has no error after update")
-else:
-    print("  INFO  the release did not install taste-skill@plinth: nothing to leave behind")
-if new_dep and "frontend-design@plinth" not in ids:
-    bad.append("update did not install frontend-design@plinth on claude %s (%s or later)" % (v, new_dep_v))
-if not new_dep:
-    print("  INFO  claude %s is below %s: frontend-design@plinth %s after update alone, recorded, not judged" % (v, new_dep_v, "installed" if "frontend-design@plinth" in ids else "not installed"))
+for row in filter(None, sys.argv[4].split("\n")):
+    name, kind, _, replaced, _ = row.split("\t")
+    if name not in had:
+        continue
+    i = ids.get(name + "@plinth")
+    print("  INFO  after update alone, %s@plinth (%s): %s" % (name, kind, ("installed, enabled=%s errors=%s" % (i.get("enabled"), i.get("errors", []))) if i else "not installed"))
+    if kind == "removed" and replaced != "-":
+        r = replaced + "@plinth"
+        if new_dep and r not in ids:
+            bad.append("update did not install %s, which replaced %s, on claude %s (%s or later)" % (r, name, v, new_dep_v))
+        if not new_dep:
+            print("  INFO  claude %s is below %s: %s %s after update alone, recorded, not judged" % (v, new_dep_v, r, "installed" if r in ids else "not installed"))
+if not had:
+    print("  INFO  the release installed no retired entry: nothing to leave behind")
 if bad:
     print("  FAIL  " + "; ".join(bad) + ": the README says otherwise; rewrite its one-time commands"); sys.exit(1)
-print("  PASS  update alone left the swap as the README says")' "$had_taste" "$new_dep" "$v" "$new_dep_v"
+print("  PASS  update alone left the retired entries as the README says")' "$new_dep" "$v" "$new_dep_v" "$(printf '%s\n' "${retired[@]}")" ${had[@]+"${had[@]}"}
   # Then the README's commands, in its order: install plinth@plinth, then the
   # old dependency's uninstall (no -y: without --prune it asks nothing, and the
   # floor may not take it), then prune for the moves of v1.11.0 and earlier.
-  echo "+ ${swap_cmds[0]} -y"; read -ra cmd <<<"${swap_cmds[0]}"; "${cmd[@]}" -y
-  if [ "$had_taste" = yes ]; then echo "+ ${swap_cmds[1]}"; read -ra cmd <<<"${swap_cmds[1]}"; "${cmd[@]}"
-  else echo "  INFO  $tag did not install taste-skill@plinth: no uninstall"; fi
+  echo "+ ${upgrade_cmds[0]} -y"; read -ra cmd <<<"${upgrade_cmds[0]}"; "${cmd[@]}" -y
+  for r in "${retired[@]}"; do
+    IFS=$'\t' read -r r_name r_kind _ _ r_cmd <<<"$r"
+    [ "$r_kind" = removed ] || continue
+    if [[ " ${had[*]-} " == *" $r_name "* ]]; then
+      echo "+ $r_cmd"; read -ra cmd <<<"$r_cmd"; "${cmd[@]}"
+    else echo "  INFO  $tag did not install $r_name@plinth: no uninstall"; fi
+  done
   echo "+ ${upgrade_cmds[1]} -y"; read -ra cmd <<<"${upgrade_cmds[1]}"; "${cmd[@]}" -y
   for c in "${dep_cmds[@]}"; do echo "+ $c"; read -ra cmd <<<"$c"; "${cmd[@]}"; done
   # check_list holds no ponytail-skills here: the release installed it as a

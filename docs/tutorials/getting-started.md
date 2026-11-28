@@ -93,7 +93,8 @@ type an answer instead):
 3. **The kind it recommends**, with your words quoted as the reason and what
    it makes and does not make: a terminal command (`cli`), the one to choose
    when unsure, and also the choice for a tool that runs on a schedule on the
-   owner's machine (a data collector, a pipeline); code other code imports
+   owner's machine (a data collector, a pipeline), or on GitHub while your
+   computer is off (asked when you describe a schedule); code other code imports
    (`library`); a service or API (`backend`); a model trained here, with a
    model card (`data-ml`; on GitHub a `v*` tag publishes the model, its
    metrics and the card as release files); a website people log in to
@@ -166,6 +167,13 @@ you can type instead:
   with `--hosting=<place>`), or `dashboard` for a page of tables and charts
   with no login, on your computer (`--hosting=local`, the default) or on
   Render, about US $7 a month (`--hosting=render`, GitHub only).
+- `--scheduled-run` (`cli` only, GitHub only): the command also runs on
+  GitHub every day and by hand, even while your computer is off; each run's
+  results are a download under Artifacts on the run's page, kept 90 days,
+  never a commit. Runs can start late or be dropped when GitHub is busy, and
+  in a public repository GitHub turns the schedule off after 60 days with
+  no activity. `--no-scheduled-run`, the default, runs it on your computer
+  only.
 - `--third-party-review`: the reviewer's check, for an account with a code
   reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
   `--no-third-party-review` says no without being asked.
