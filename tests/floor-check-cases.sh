@@ -2125,6 +2125,31 @@ if [ "$(printf '%s\n' "${sched_out//$sched/<root>}" | uncount)" = "$(printf '%s\
    && grep -q -- '-- 0 failed' <<<"$sched_out" && grep -qF 'PASS  every action in 3 workflow files is pinned to a commit (3 uses)' <<<"$sched_out"
 then ok "a cli with the scheduled run gets the same report as one without, its workflow's actions read as pinned"
 else bad "a cli with the scheduled run is reported differently"; diff <(printf '%s\n' "${plain_out//$web.empty/<root>}") <(printf '%s\n' "${sched_out//$sched/<root>}") | sed 's/^/        /'; fi
+# A project that calls Claude (#1071, coolbress/plinth-template#371): with
+# `calls_claude: true` recorded, .env.example is required and names
+# ANTHROPIC_API_KEY, for a cli as for a service; without the answer a cli is
+# asked for no .env.example.
+claude="$work/claude"; rm -rf "$claude"; cp -R "$web.empty" "$claude"
+printf 'calls_claude: true\n' >> "$claude/.copier-answers.yml"
+printf 'APP_PORT=8000\nANTHROPIC_API_KEY=\n' > "$claude/.env.example"; git -C "$claude" add -A
+out="$(python3 "$checker" --root "$claude" --no-network 2>&1)"
+if is "$out" FC-C03 info && is "$out" FC-C27 pass && is "$out" FC-C28 pass && grep -q -- '-- 0 failed' <<<"$out" \
+   && ! is "$plain_out" FC-C27 pass && ! is "$plain_out" FC-C27 fail
+then ok "a cli that calls Claude is asked for .env.example naming its key; one that does not is asked for none"
+else bad "a cli that calls Claude and its .env.example"; printf '%s\n' "$out" | grep -E 'FAIL|env' | sed 's/^/        /'; fi
+for broken in "rm .env.example" "printf 'APP_PORT=8000\n' > .env.example"; do
+  b="$work/claude-broken"; rm -rf "$b"; cp -R "$claude" "$b"; (cd "$b" && eval "$broken" && git add -A)
+  out="$(python3 "$checker" --root "$b" --no-network 2>&1)"
+  case "$broken" in rm*) want="FC-C27 fail" ;; *) want="FC-C28 fail" ;; esac
+  if reports "$out" "$want" && { [ "$want" = "FC-C27 fail" ] || grep -qE "FAIL  .env.example is missing .*'ANTHROPIC_API_KEY'" <<<"$out"; }
+  then ok "a cli that calls Claude: $broken is caught ($want)"
+  else bad "a cli that calls Claude: $broken is not caught"; printf '%s\n' "$out" | grep -E 'FAIL|env' | sed 's/^/        /'; fi
+done
+svc="$work/claude-svc"; rm -rf "$svc"; cp -R "$web" "$svc"; printf 'calls_claude: true\n' >> "$svc/.copier-answers.yml"; git -C "$svc" add -A
+out="$(python3 "$checker" --root "$svc" --no-network 2>&1)"
+if is "$out" FC-C28 fail && grep -qE "FAIL  .env.example is missing .*'ANTHROPIC_API_KEY'" <<<"$out"
+then ok "a service that calls Claude without ANTHROPIC_API_KEY in .env.example is caught, though no line under src/ reads it"
+else bad "a service that calls Claude without its key"; printf '%s\n' "$out" | grep -E 'FAIL|env' | sed 's/^/        /'; fi
 # What render.yaml says (#811), read when the file is there: each web
 # service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
 # other than free, and secret-named envVars set without a literal value. Each
