@@ -417,6 +417,15 @@ jq -n --arg c "$(base64 < "$good/.github/workflows/ci.yml" | tr -d '\n')" '{type
   > "$api/repos/o/r/contents/.github/workflows/ci.yml.json"
 good_setup='{"state":"configured","languages":["actions","python"],"query_suite":"default"}'
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+# Dependabot alerts on with none open, security updates on, and no open secret
+# scanning alert (#1118): GitHub answers the first with a 204, read as {}.
+mkdir -p "$api/repos/o/r/dependabot" "$api/repos/o/r/secret-scanning"
+printf '{}' > "$api/repos/o/r/vulnerability-alerts.json"
+printf '[]' > "$api/repos/o/r/dependabot/alerts?state=open&per_page=100.json"
+printf '{"enabled":true,"paused":false}' > "$api/repos/o/r/automated-security-fixes.json"
+printf '[]' > "$api/repos/o/r/secret-scanning/alerts?state=open&per_page=100&hide_secret=true.json"
+# The same answers where gh serves them (its mock below drops the query).
+printf '[]' > "$api/repos/o/r/dependabot/alerts.json"; printf '[]' > "$api/repos/o/r/secret-scanning/alerts.json"
 # The Actions allowlist the door sets, and private vulnerability reporting on (#747).
 mkdir -p "$api/repos/o/r/actions/permissions"
 good_perms='{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}'
@@ -927,6 +936,132 @@ else bad "scripts/e2e.sh passes --actions-token, or its checker call was not fou
 if [ -n "$skill_call" ] && ! grep -q -- '--actions-token' <<<"$skill_call"; then ok "the skill's Run block calls the checker without --actions-token"
 else bad "the skill's Run block passes --actions-token, or its call was not found"; fi
 
+# Dependabot alerts, Dependabot security updates, secret scanning and registry
+# token names (#1118): admin reads, each a WARN at most, left to the skill
+# under --actions-token. The base fixture has all three on and nothing open.
+va="$api/repos/o/r/vulnerability-alerts.json"; da="$api/repos/o/r/dependabot/alerts?state=open&per_page=100.json"
+asf="$api/repos/o/r/automated-security-fixes.json"; ssa="$api/repos/o/r/secret-scanning/alerts?state=open&per_page=100&hide_secret=true.json"
+admin_meta="{$repo_meta,\"permissions\":{\"admin\":true},\"security_and_analysis\":{\"secret_scanning\":{\"status\":\"enabled\"},\"secret_scanning_push_protection\":{\"status\":\"enabled\"}}}"
+sec_reset() { printf '{}' > "$va"; printf '[]' > "$da"; printf '{"enabled":true,"paused":false}' > "$asf"; printf '[]' > "$ssa"; }
+sr() { wall "$@"; sec_reset; }
+sr "Dependabot alerts on with none open is a PASS" "FC-E31 pass"
+sr "Dependabot alerts off, read by a login that administers the repository, is a WARN" "FC-E31 warn" \
+  "rm \"$va\"; printf '%s' '$admin_meta' > \"$api/repos/o/r.json\""
+sr "Dependabot alerts off carries the call that turns them on" "gh api -X PUT repos/o/r/vulnerability-alerts" \
+  "rm \"$va\"; printf '%s' '$admin_meta' > \"$api/repos/o/r.json\""
+sr "a 404 to a login not shown to administer the repository is not read as off" "FC-E31 unknown" "rm \"$va\""
+sr "Dependabot alerts open are a WARN counted by severity" "2 open Dependabot alert(s) (1 critical, 1 high)" \
+  "printf '[{\"state\":\"open\",\"security_advisory\":{\"severity\":\"high\"}},{\"state\":\"open\",\"security_vulnerability\":{\"severity\":\"critical\"}}]' > \"$da\""
+sr "open Dependabot alerts are the row, not on" "FC-E31 warn" \
+  "printf '[{\"state\":\"open\",\"security_advisory\":{\"severity\":\"low\"}}]' > \"$da\""
+sr "open Dependabot alerts not read are a SKIP" "FC-E31 unknown" "printf 'x' > \"$da\""
+sr "Dependabot security updates on is a PASS" "FC-E32 pass"
+sr "Dependabot security updates off is a WARN" "FC-E32 warn" "printf '{\"enabled\":false,\"paused\":false}' > \"$asf\""
+sr "Dependabot security updates off carries the call" "gh api -X PUT repos/o/r/automated-security-fixes" \
+  "printf '{\"enabled\":false,\"paused\":false}' > \"$asf\""
+sr "Dependabot security updates paused is a WARN" "FC-E32 warn" "printf '{\"enabled\":true,\"paused\":true}' > \"$asf\""
+sr "Dependabot security updates not answered is a SKIP" "FC-E32 unknown" "rm \"$asf\""
+sr "secret scanning on with no open alert is a PASS" "FC-E33 pass"
+ss_open='[{"number":3,"state":"open","secret_type":"github_personal_access_token","secret_type_display_name":"GitHub Personal Access Token","secret":"ghp_THISVALUEMUSTNOTPRINT"},{"number":4,"state":"open","secret_type":"slack_api_token","secret":"xoxb-THISVALUEMUSTNOTPRINT"}]'
+mkdir -p "$api/repos/o/r/secret-scanning/alerts/3" "$api/repos/o/r/secret-scanning/alerts/4"
+printf '[{"type":"commit","details":{"path":"config/settings.py","start_line":3}}]' > "$api/repos/o/r/secret-scanning/alerts/3/locations.json"
+printf '[{"type":"issue_comment","details":{"issue_comment_url":"https://api.github.com/x"}}]' > "$api/repos/o/r/secret-scanning/alerts/4/locations.json"
+sr "open secret scanning alerts are the row, not on" "FC-E33 warn" "printf '%s' '$ss_open' > \"$ssa\""
+sr "an open secret scanning alert is named by type and path" "GitHub Personal Access Token in config/settings.py" \
+  "printf '%s' '$ss_open' > \"$ssa\""
+sr "an alert found outside a file is named by where" "slack_api_token in an issue comment" "printf '%s' '$ss_open' > \"$ssa\""
+printf '%s' "$ss_open" > "$ssa"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+out_json="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --format json 2>&1)"
+sec_reset
+if ! grep -q "THISVALUEMUSTNOTPRINT" <<<"$out$out_json"; then ok "an open secret scanning alert's value is printed nowhere, text or JSON"
+else bad "an open secret scanning alert's value was printed"; fi
+sr "open secret scanning alerts not read are a SKIP" "FC-E33 unknown" "printf 'x' > \"$ssa\""
+sr "secret scanning off on a public repository is a WARN" "FC-E33 warn" \
+  "security '{\"secret_scanning\":{\"status\":\"disabled\"},\"secret_scanning_push_protection\":{\"status\":\"disabled\"}}'"
+sr "secret scanning off carries the call that turns it on" '"secret_scanning": {"status": "enabled"}' \
+  "security '{\"secret_scanning\":{\"status\":\"disabled\"},\"secret_scanning_push_protection\":{\"status\":\"disabled\"}}'"
+sr "secret scanning with no status in the settings is a SKIP" "FC-E33 unknown" "security '{\"secret_scanning_push_protection\":{\"status\":\"enabled\"}}'"
+private_off="{$repo_meta,\"private\":true,\"security_and_analysis\":{\"secret_scanning\":{\"status\":\"disabled\"},\"secret_scanning_push_protection\":{\"status\":\"disabled\"}}}"
+sr "secret scanning off on a private repository says the plan, not off" "FC-E33 info" \
+  "printf '%s' '$private_off' > \"$api/repos/o/r.json\""
+out="$(printf '%s' "$private_off" > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+printf '%s' "$good_meta" > "$api/repos/o/r.json"
+if ! is "$out" FC-E33 warn && grep -q "secret scanning is not on this private repository: it needs GitHub Secret Protection" <<<"$out"
+then ok "secret scanning on a private repository without Secret Protection is no WARN, and names the product"
+else bad "secret scanning on a private repository without Secret Protection"; grep -i "secret scanning" <<<"$out" | sed 's/^/        /'; fi
+hidden_meta="{$repo_meta,\"private\":true,\"permissions\":{\"admin\":true}}"
+for m in "$hidden_meta" "{$repo_meta}"; do
+  out="$(printf '%s' "$m" > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"
+  if ! states "$out" | grep -q '^FC-E33 ' && states "$out" | grep -q '^FC-E09 unknown$'
+  then ok "security settings not answered: push protection's SKIP says so once, and secret scanning adds no second line"
+  else bad "security settings not answered: secret scanning"; grep -iE "secret scanning|push protection" <<<"$out" | sed 's/^/        /'; fi
+done
+# In ci / floor-check: unread, each is an INFO left to the skill, and the FAIL
+# and SKIP counts are the ones a run without the new reads prints.
+ci_run() { FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1; }
+security; rm -f "$va" "$asf"
+out="$(ci_run)"
+sec_reset; printf '%s' "$good_meta" > "$api/repos/o/r.json"
+if is "$out" FC-E31 review && is "$out" FC-E32 review && is "$out" FC-E09 review && ! states "$out" | grep -q '^FC-E33 '
+then ok "--actions-token: Dependabot alerts and security updates unread are left to /plinth:floor-check; the security settings once, on push protection's line"
+else bad "--actions-token: the settings unread"; grep -iE "dependabot|secret scanning|push protection" <<<"$out" | sed 's/^/        /'; fi
+printf 'x' > "$ssa"; out_ss="$(ci_run)"; sec_reset
+if is "$out_ss" FC-E33 review; then ok "--actions-token: secret scanning on with its open alerts unread is left to /plinth:floor-check"
+else bad "--actions-token: open alerts unread"; grep -i "secret scanning" <<<"$out_ss" | sed 's/^/        /'; fi
+# Their only lines there are those INFOs: no FAIL, WARN or SKIP of theirs, so
+# the summary's failed and not-verified counts are as before (the golden test
+# compares every recorded CI-form run line for line).
+if ! states "$out" | grep -qE '^FC-E3[1-4] (fail|warn|unknown)$'; then ok "--actions-token: unread, the new reads print no FAIL, WARN or SKIP"
+else bad "--actions-token: a new read printed a FAIL, WARN or SKIP"; states "$out" | grep '^FC-E3[1-4]' | sed 's/^/        /'; fi
+# Registry token names beside OIDC (experimental): only when release.yml
+# publishes through OIDC; names only.
+oidc_rel='name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions: {}
+jobs:
+  publish:
+    permissions:
+      id-token: write
+    steps:
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+'
+sec_api="$api/repos/o/r/actions/secrets?per_page=100.json"; env_api="$api/repos/o/r/environments?per_page=100.json"
+mkdir -p "$api/repos/o/r/environments/pypi"
+env_sec="$api/repos/o/r/environments/pypi/secrets?per_page=100.json"
+cp "$rel" "$work/release.yml.keep2"
+tok() { # <description> <expected> <repository secrets json> [environments json] [pypi environment secrets json] [flags]
+  printf '%s' "$oidc_rel" > "$rel"; printf '%s' "$3" > "$sec_api"
+  local no_envs='{"environments":[]}' no_secrets='{"secrets":[]}'
+  printf '%s' "${4:-$no_envs}" > "$env_api"; printf '%s' "${5:-$no_secrets}" > "$env_sec"
+  local out; out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" ${6:-} 2>&1)"
+  if sees "$out" "$2" -F -- "$2"; then ok "$1"; else bad "$1"; grep -iE "secret|registry" <<<"$out" | sed 's/^/        /'; fi
+  cp "$work/release.yml.keep2" "$rel"; rm -f "$sec_api" "$env_api" "$env_sec"
+}
+tok "OIDC publishing with no token-like secret is a PASS" "FC-E34 pass" '{"secrets":[{"name":"SLACK_WEBHOOK"}]}'
+tok "OIDC publishing with a PyPI token secret is a WARN" "FC-E34 warn" '{"secrets":[{"name":"PYPI_API_TOKEN"}]}'
+tok "the WARN names the secret and where" "PYPI_API_TOKEN (repository), TWINE_PASSWORD (environment pypi)" \
+  '{"secrets":[{"name":"PYPI_API_TOKEN"}]}' '{"environments":[{"name":"pypi"}]}' '{"secrets":[{"name":"TWINE_PASSWORD"}]}'
+tok "each named secret has its delete line" "gh secret delete TWINE_PASSWORD --repo o/r --env pypi" \
+  '{"secrets":[]}' '{"environments":[{"name":"pypi"}]}' '{"secrets":[{"name":"TWINE_PASSWORD"}]}'
+tok "a token for another registry than the one OIDC publishes to is not named" "FC-E34 pass" \
+  '{"secrets":[{"name":"DOCKER_REGISTRY_TOKEN"},{"name":"NPM_TOKEN"}]}'
+tok "a list longer than the page read is a SKIP, not a pass" "FC-E34 unknown" \
+  '{"total_count":120,"secrets":[{"name":"SLACK_WEBHOOK"}]}'
+tok "more environments than the page read is a SKIP, not a pass" "FC-E34 unknown" \
+  '{"secrets":[]}' '{"total_count":101,"environments":[{"name":"pypi"}]}'
+tok "secret names not listed are a SKIP naming the permission" "FC-E34 unknown" 'x'
+tok "an environment's secrets not listed are a SKIP" "FC-E34 unknown" '{"secrets":[]}' '{"environments":[{"name":"pypi"}]}' 'x'
+tok "--actions-token: secret names not listed are left to the skill" "FC-E34 review" 'x' "" "" --actions-token
+printf '%s' '{"secrets":[{"name":"PYPI_API_TOKEN"}]}' > "$sec_api"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+rm -f "$sec_api"
+if ! grep -q "registry token" <<<"$out"; then ok "a release.yml that does not publish through OIDC: no registry token line"
+else bad "registry token line without OIDC"; fi
+
 # A private repository's wall is read against what its licences allow (#351,
 # decided in #320): the code_scanning rule is expected only where GitHub Code
 # Security is enabled on the repository, push protection only where GitHub
@@ -1245,6 +1380,32 @@ else bad "a missing label produced a FAIL"; fi
 # that includes a passed item is the defect in the other direction.
 if grep -qx -- "-- 0 failed, 0 not verified" <<<"$out" && ! grep -q '^  SKIP ' <<<"$out"; then ok "a run whose every read was answered counts 0 not verified, and says so"
 else bad "a fully read run still counts something as not verified"; printf '%s\n' "$out" | grep -E 'SKIP|failed' | sed 's/^/        /'; fi
+# GitHub answers Dependabot alerts on with a 204 and no body: through gh, an
+# empty answer is read as on, not as an error (#1118).
+: > "$api/repos/o/r/vulnerability-alerts.json"
+out_204="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+printf '{}' > "$api/repos/o/r/vulnerability-alerts.json"
+if is "$out_204" FC-E31 pass; then ok "through gh, a 204 with no body reads Dependabot alerts as on"
+else bad "through gh, a 204 with no body"; grep -i dependabot <<<"$out_204" | sed 's/^/        /'; fi
+# `gh api --paginate` prints one JSON array per page, one after another
+# (#1247 review): every page is read, not taken for an error.
+python3 - "$api/repos/o/r" <<'PYEOF'
+import json, sys
+d = sys.argv[1]
+page = lambda n, sev: json.dumps([{"state": "open", "security_advisory": {"severity": sev}}] * n)
+open(f"{d}/dependabot/alerts.json", "w").write(page(100, "high") + "\n" + page(1, "critical") + "\n")
+alerts = [{"number": 7, "state": "open", "secret_type": "slack_api_token"}]
+open(f"{d}/secret-scanning/alerts.json", "w").write(json.dumps(alerts * 100) + json.dumps(alerts))
+PYEOF
+mkdir -p "$api/repos/o/r/secret-scanning/alerts/7"; printf '[{"type":"commit","details":{"path":"a.py"}}]' > "$api/repos/o/r/secret-scanning/alerts/7/locations.json"
+out_pages="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+printf '[]' > "$api/repos/o/r/dependabot/alerts.json"; printf '[]' > "$api/repos/o/r/secret-scanning/alerts.json"
+if is "$out_pages" FC-E31 warn && grep -qF "101 open Dependabot alert(s) (1 critical, 100 high)" <<<"$out_pages"
+then ok "through gh, two pages of Dependabot alerts are both counted"
+else bad "through gh, two pages of Dependabot alerts"; grep -i dependabot <<<"$out_pages" | sed 's/^/        /'; fi
+if is "$out_pages" FC-E33 warn && grep -qF "101 open secret scanning alert(s)" <<<"$out_pages"
+then ok "through gh, two pages of secret scanning alerts are both counted"
+else bad "through gh, two pages of secret scanning alerts"; grep -i "secret scanning" <<<"$out_pages" | sed 's/^/        /'; fi
 if grep -q -- "--paginate" "$work/gh-calls.log"; then ok "the label read is paginated (30 per page would report labels missing that are there)"
 else bad "the label read is not paginated"; sed 's/^/        /' "$work/gh-calls.log"; fi
 # The exit code is the property that keeps consumers merging; lock it.
