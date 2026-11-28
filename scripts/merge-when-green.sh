@@ -26,6 +26,16 @@
 # (#423). What is written before the push is the judgement, as with `verify`.
 #
 # It stops, and merges nothing, when:
+#   - before anything else, and before --update (#1264): a top-level inline
+#     comment has no reply, a check whose run started last on the head finished
+#     and is not green (a neutral one, and coolbress/plinth's
+#     `ci / release-gate`, are left to the checks below), or the pull request
+#     has a merge conflict with its base. These are read with GET calls; a read
+#     that fails, or `mergeable` UNKNOWN, stops nothing, and the run goes on;
+#   - a check is still pending after MERGE_CHECKS_WAIT seconds (2 hours by
+#     default), or a pending check's Actions job stays in progress for
+#     MERGE_STALL_WAIT seconds (5 minutes by default) after its run completed
+#     (#1264): it prints `gh run rerun <run> --job <job>` and re-runs nothing;
 #   - on coolbress/plinth, the pull request is titled `chore(release): vX.Y.Z`
 #     and the `e2e` run started last on the head, of those on a `release/v*`
 #     branch, is not green, or there is none (#855, #862): the merge is what reaches an
@@ -125,6 +135,46 @@ state="$(gh pr view "$pr" -R "$repo" --json state --jq .state)" || stop "cannot 
 # The head this run reads and merges. Everything below is about this commit.
 head="$(gh pr view "$pr" -R "$repo" --json headRefOid --jq .headRefOid)" || stop "cannot read the head of $pr"
 echo "pull request $repo#$pr, head $head"
+plinth=no; [ "$(tr '[:upper:]' '[:lower:]' <<<"$repo")" = coolbress/plinth ] && plinth=yes
+
+# A check is pending in any of these states. One line per check name: the run
+# started last speaks for the name (not the one finished last: overlapping runs
+# can finish out of order), and an unfinished one, if any, holds it (#363).
+pending_def='def pending: .state | IN("PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED");'
+latest_jq="$pending_def"'
+  group_by(.name)
+  | map(if any(.[]; pending) then (map(select(pending)) | .[0]) else max_by(.startedAt // .completedAt // "") end)
+  | .[] | "\(.state)\t\(.name)"'
+# Top-level inline comments with no reply, one line each, from the pull
+# request's comments as "<id>\t<in reply to>\t<path:line>\t<first line>".
+comments_jq='.[]|"\(.id)\t\(.in_reply_to_id // "")\t\(.path):\(.line // .original_line)\t\(.body|split("\n")[0])"'
+unanswered() { awk -F'\t' '$2!=""{answered[$2]=1; next} {top[NR]=$0; id[NR]=$1} END{for (i in top) if (!(id[i] in answered)) print top[i]}'; }
+
+# -- what is already visible (#1264) -------------------------------------------
+# Before --update and before the checks wait, with GET calls only: an inline
+# comment with no reply, a check finished and not green on this head, or a
+# conflict with the base. Each stops the run later anyway; read first, it stops
+# before --update makes a merge commit on the branch and a full CI run is
+# waited for. A failing check stops here even where an update could turn it
+# green. A neutral check is left to the checks below (#872), and so is
+# `ci / release-gate` on coolbress/plinth, which is re-run there (#863). A read
+# that fails, and `mergeable` UNKNOWN, say nothing: the run goes on as before.
+# --round reads only, and none of this runs for it.
+if [ "$only_round" = 0 ]; then
+  if seen="$(gh api --paginate "repos/$repo/pulls/$pr/comments" --jq "$comments_jq" 2>/dev/null)"; then
+    open="$(unanswered <<<"$seen")"
+    [ -z "$open" ] || stop "before updating or waiting: inline comments with no reply (fix, answer or move each, and reply):" "$open"
+  fi
+  if seen="$(gh pr checks "$pr" -R "$repo" --json name,state,startedAt,completedAt --jq "$latest_jq" 2>/dev/null)"; then
+    gate=""; [ "$plinth" = no ] || gate="ci / release-gate"
+    red="$(awk -F'\t' -v gate="$gate" '$1 != "" && $1 !~ /^(SUCCESS|NEUTRAL|PENDING|QUEUED|IN_PROGRESS|WAITING|REQUESTED|EXPECTED)$/ && $2 != gate' <<<"$seen")"
+    [ -z "$red" ] || stop "before updating or waiting: checks not green on $head:" "$red" \
+      "Fix what failed, or re-run a check that failed on something the change does not touch, then run this again."
+  fi
+  if seen="$(gh pr view "$pr" -R "$repo" --json mergeable --jq .mergeable 2>/dev/null)" && [ "$seen" = CONFLICTING ]; then
+    stop "before updating or waiting: $head has a merge conflict with its base branch. Resolve it in a new commit on the branch, then run this again."
+  fi
+fi
 
 # -- --update (#997) -----------------------------------------------------------
 # How many commits of the base branch <sha> lacks; stops when it cannot tell.
@@ -242,7 +292,6 @@ e2e_runs_on_head() {
   gh api -X GET "repos/$repo/actions/workflows/e2e.yml/runs" -f "head_sha=$head" -F per_page=100 \
     --jq ".workflow_runs | map(select(.head_sha == \"$head\" and ((.head_branch // \"\") | startswith(\"release/v\")))) | sort_by(.run_started_at // .created_at) | reverse | .[] | \"\(.conclusion // .status) \(.html_url)\"" 2>&1
 }
-plinth=no; [ "$(tr '[:upper:]' '[:lower:]' <<<"$repo")" = coolbress/plinth ] && plinth=yes
 if [ "$plinth" = yes ]; then
   title="$(gh pr view "$pr" -R "$repo" --json title --jq .title)" || stop "cannot read the title of $pr"
   if [[ "$title" =~ ^chore\(release\):\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -299,17 +348,45 @@ if [ "$plinth" = yes ]; then
 fi
 
 # -- checks ----------------------------------------------------------------
-gh pr checks "$pr" -R "$repo" --watch --interval "$poll" >/dev/null 2>&1
+# Wait while any check is pending, up to MERGE_CHECKS_WAIT seconds (2 hours by
+# default); what is still pending then is not green, below. GitHub can leave a
+# job in progress after its run has completed, and that job never ends (#1264):
+# a pending check whose Actions run reads `completed` for MERGE_STALL_WAIT
+# seconds (5 minutes by default) stops the wait with the job and the command
+# that re-runs it. Nothing is re-run here: that needs a login that can write to
+# the repository's Actions, and a person should see a hang that is real. A read
+# that fails ends the wait, and the read below decides.
+checks_wait="${MERGE_CHECKS_WAIT:-7200}"; stall_wait="${MERGE_STALL_WAIT:-300}"
+t0=$SECONDS; stalled=""   # "<job>\t<first seen completed>" lines, kept between polls
+while :; do
+  waiting="$(gh pr checks "$pr" -R "$repo" --json name,state,link \
+    --jq "$pending_def"' .[] | select(pending) | "\(.name)\t\(.link // "")"' 2>/dev/null)" || break
+  [ -n "$waiting" ] || break
+  still=""
+  while IFS=$'\t' read -r name link; do
+    [[ "$link" =~ /actions/runs/([0-9]+)/job/([0-9]+) ]] || continue
+    run_id="${BASH_REMATCH[1]}"; job="${BASH_REMATCH[2]}"
+    [ "$(gh api "repos/$repo/actions/runs/$run_id" --jq .status 2>/dev/null)" = completed ] || continue
+    since="$(awk -F'\t' -v j="$job" '$1 == j {print $2}' <<<"$stalled")"; since="${since:-$SECONDS}"
+    still+="$job"$'\t'"$since"$'\n'
+    [ $((SECONDS - since)) -lt "$stall_wait" ] \
+      || stop "checks: $name (job $job) is still in progress, though its run $run_id has completed: GitHub left the job hanging." \
+              "Re-run that job, then run this again:" \
+              "  gh run rerun $run_id --job $job --repo $(sq "$repo")" \
+              "Nothing was re-run here: that needs a login that can write to the repository's Actions."
+  done <<<"$waiting"
+  stalled="$still"
+  if [ $((SECONDS - t0)) -ge "$checks_wait" ]; then
+    echo "checks: still pending after $((checks_wait / 60)) minute(s), so they are not green:"
+    printf '%s\n' "$waiting" | cut -f1 | sed 's/^/  /'
+    break
+  fi
+  sleep "$poll"
+done
 # One line per check name. A name can carry several runs on the head: a
 # review that lands after the review check gave up starts a new run that
-# passes beside the failed one (#369, #363). The run started last speaks for
-# the name (not the one finished last: overlapping runs can finish out of
-# order), and an unfinished one, if any, holds it.
-checks="$(gh pr checks "$pr" -R "$repo" --json name,state,startedAt,completedAt --jq '
-  def pending: .state | IN("PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED");
-  group_by(.name)
-  | map(if any(.[]; pending) then (map(select(pending)) | .[0]) else max_by(.startedAt // .completedAt // "") end)
-  | .[] | "\(.state)\t\(.name)"')" || stop "cannot read the checks"
+# passes beside the failed one (#369, #363).
+checks="$(gh pr checks "$pr" -R "$repo" --json name,state,startedAt,completedAt --jq "$latest_jq")" || stop "cannot read the checks"
 [ -n "$checks" ] || stop "no checks reported on $head"
 bad="$(awk -F'\t' '$1!="SUCCESS"' <<<"$checks")"
 # A neutral `CodeQL` (#872): code scanning could not compare this pull
@@ -356,9 +433,9 @@ else
 fi
 
 # -- every inline comment answered -------------------------------------------
-comments="$(gh api --paginate "repos/$repo/pulls/$pr/comments" --jq '.[]|"\(.id)\t\(.in_reply_to_id // "")\t\(.path):\(.line // .original_line)\t\(.body|split("\n")[0])"')" \
+comments="$(gh api --paginate "repos/$repo/pulls/$pr/comments" --jq "$comments_jq")" \
   || stop "cannot read the inline comments"
-open="$(awk -F'\t' '$2!=""{answered[$2]=1; next} {top[NR]=$0; id[NR]=$1} END{for (i in top) if (!(id[i] in answered)) print top[i]}' <<<"$comments")"
+open="$(unanswered <<<"$comments")"
 [ -z "$open" ] || stop "inline comments with no reply (fix, answer or move each, and reply):" "$open"
 
 # -- merge -------------------------------------------------------------------

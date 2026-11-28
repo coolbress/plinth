@@ -56,8 +56,9 @@ its own checks must have passed on the commit it tags.
    `template/CLAUDE.md.jinja` or anything under `template/.claude/`. It is
    the answer `scripts/make-release.sh` reaches in run 1, read the same way.
    Then it prints what is left, the steps below. If the new tag needs a
-   newer copier, raise `copier_version` and `copier_newer` in
-   `scripts/new-project.sh` by hand.
+   newer copier, raise it in `tools/copier/pyproject.toml` and run
+   `uv lock --project tools/copier`, or merge Dependabot's pull request that
+   does (#1220).
 3. Re-render `canary-template/`, the new tag's `cli` project that the
    `canary-template` job runs through this commit's `python-ci.yml`:
 
