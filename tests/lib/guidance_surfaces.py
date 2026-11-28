@@ -145,7 +145,12 @@ def main() -> None:
             if part is None:
                 print(f"{situation}\t{surface}\tmissing: the part ({lead})")
                 continue
-            lacking = [t for t in tokens if t.lower() not in part.lower()]
+            # A token ends where a word does: `/implement` is not `/implement-foo`.
+            lacking = [
+                t
+                for t in tokens
+                if not re.search(re.escape(t) + r"(?![\w-])", part, re.IGNORECASE)
+            ]
             print(
                 f"{situation}\t{surface}\t"
                 + ("ok" if not lacking else "missing: " + ", ".join(lacking))

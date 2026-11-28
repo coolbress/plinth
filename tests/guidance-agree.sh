@@ -78,7 +78,8 @@ PY
     local situation="$1" d="$2" out lines lacking="" t; shift 2
     out="$(MOCK_DIR="$d" bash "$root/scripts/guide-state.sh" "$d" 2>&1)"
     lines="$(grep -E '^(command|before|note): ' <<<"$out")"
-    for t in "$@"; do grep -qiF -- "$t" <<<"$lines" || lacking="${lacking:+$lacking, }$t"; done
+    # A token ends where a word does, as the surfaces' are read.
+    for t in "$@"; do grep -qiE -- "$(sed 's/[][\.*^$/]/\\&/g' <<<"$t")([^[:alnum:]_-]|\$)" <<<"$lines" || lacking="${lacking:+$lacking, }$t"; done
     if [ -z "$lines" ]; then printf '%s\tguide\tmissing: the part (no command line; %s)\n' "$situation" "$(head -1 <<<"$out")"
     elif [ -n "$lacking" ]; then printf '%s\tguide\tmissing: %s\n' "$situation" "$lacking"
     else printf '%s\tguide\tok\n' "$situation"; fi
@@ -134,7 +135,11 @@ done <<<"$known"
 if [ -d "$root/skills/records-check" ]; then
   ok "/plinth:records-check still ships (until #1108), so naming it is not checked"
 else
-  left="$({ grep -rlF '/plinth:records-check' "$root/skills" "$root/docs/how-to" "$root/docs/tutorials" "$root/README.md" 2>/dev/null; grep -lF '/plinth:records-check' "$agents"; } | sed "s|^$root/||")"
+  # Named as a command, with or without the plugin's prefix (README's skill
+  # table writes `records-check [owner/name]`), on the pages and in what the
+  # guide prints.
+  pat='(^|[^[:alnum:]_-])(/plinth:)?records-check([^[:alnum:]_-]|$)'
+  left="$({ grep -rlE "$pat" "$root/skills" "$root/docs/how-to" "$root/docs/tutorials" "$root/README.md" "$root/scripts/guide-state.sh" 2>/dev/null; grep -lE "$pat" "$agents"; } | sed "s|^$root/||")"
   if [ -z "$left" ]; then ok "/plinth:records-check is retired and no shipped surface names it"
   else bad "/plinth:records-check is retired, but these still name it: $(paste -sd ' ' - <<<"$left")"; fi
 fi
