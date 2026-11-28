@@ -131,6 +131,20 @@ for k in guidance boundary; do
   shape "the merge as $k" "$out"
 done
 
+# What .plinth-adoption.yml holds off (#1112): one line each, on any machine, not counted.
+doc adopted '
+r("FC-E12", "info", "the wall: later, after the first green run on main (until 2026-12-01, .plinth-adoption.yml'"'"'s wall_due)", key="later", handoff="admin")
+r("FC-A06", "info", "kept by choice (deliberately-different): CONTRIBUTING.md has no run or PR instructions", area="files", name="CONTRIBUTING.md says how to run the checks and open a pull request")
+d["results"][-1]["kept"] = {"reason": "deliberately-different", "why": "our own guide", "path": "CONTRIBUTING.md", "until": None, "was": "fail"}
+'
+out="$(python3 "$report" --no-note "$work/adopted.json")"
+if grep -qxF "The wall: later, after the first green run on main (until 2026-12-01, .plinth-adoption.yml's wall_due)." <<<"$out" \
+   && grep -qxF "Kept by you in .plinth-adoption.yml, not counted: CONTRIBUTING.md says how to run the checks and open a pull request (deliberately-different)." <<<"$out" \
+   && ! grep -qE '^[0-9]+\. ' <<<"$out" && head -1 <<<"$out" | grep -q "^No check failed"
+then ok "a kept finding and a wall held off are one line each, not rows, and not counted"
+else bad "the kept line or the wall held off is not said as one line" "$out"; fi
+shape "a record that keeps a finding" "$out"
+
 doc many '
 for k in range(1, 9):
     r(f"FC-E{k:02d}", "warn" if k % 2 else "fail", f"finding {k}")
