@@ -2141,13 +2141,13 @@ for broken in "rm .env.example" "printf 'APP_PORT=8000\n' > .env.example"; do
   b="$work/claude-broken"; rm -rf "$b"; cp -R "$claude" "$b"; (cd "$b" && eval "$broken" && git add -A)
   out="$(python3 "$checker" --root "$b" --no-network 2>&1)"
   case "$broken" in rm*) want="FC-C27 fail" ;; *) want="FC-C28 fail" ;; esac
-  if reports "$out" "$want" && { [ "$want" = "FC-C27 fail" ] || grep -q 'ANTHROPIC_API_KEY' <<<"$out"; }
+  if reports "$out" "$want" && { [ "$want" = "FC-C27 fail" ] || grep -qE "FAIL  .env.example is missing .*'ANTHROPIC_API_KEY'" <<<"$out"; }
   then ok "a cli that calls Claude: $broken is caught ($want)"
   else bad "a cli that calls Claude: $broken is not caught"; printf '%s\n' "$out" | grep -E 'FAIL|env' | sed 's/^/        /'; fi
 done
 svc="$work/claude-svc"; rm -rf "$svc"; cp -R "$web" "$svc"; printf 'calls_claude: true\n' >> "$svc/.copier-answers.yml"; git -C "$svc" add -A
 out="$(python3 "$checker" --root "$svc" --no-network 2>&1)"
-if is "$out" FC-C28 fail && grep -q 'ANTHROPIC_API_KEY' <<<"$out"
+if is "$out" FC-C28 fail && grep -qE "FAIL  .env.example is missing .*'ANTHROPIC_API_KEY'" <<<"$out"
 then ok "a service that calls Claude without ANTHROPIC_API_KEY in .env.example is caught, though no line under src/ reads it"
 else bad "a service that calls Claude without its key"; printf '%s\n' "$out" | grep -E 'FAIL|env' | sed 's/^/        /'; fi
 # What render.yaml says (#811), read when the file is there: each web
