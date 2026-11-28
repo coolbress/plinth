@@ -1931,6 +1931,12 @@ def workflow_triggers(text: str) -> set[str] | None:
         child = None
         for _, ind, ln in lines[i + 1:]:
             if ind == 0:
+                item = re.fullmatch(r"-\s+['\"]?([\w-]+)['\"]?\s*(?:#.*)?", ln)
+                if item and child is None:
+                    events.add(item.group(1))   # on:\n- issues (an indentless list)
+                    continue
+                if child is None and ln.lstrip().startswith("-"):
+                    return None
                 break
             child = ind if child is None else child
             km = WF_KEY.match(ln)
@@ -1961,7 +1967,8 @@ def workflow_jobs(text: str) -> list[tuple[str, int, int]]:
     """(job id, first line index, end line index) of each job under `jobs:`."""
     raw = text.splitlines()
     syntax = [(n - 1, ind, ln) for n, ind, ln in yaml_lines(text)]
-    start = next((k for k, (_, ind, ln) in enumerate(syntax) if ind == 0 and re.match(r"jobs\s*:\s*(?:#.*)?$", ln)), None)
+    start = next((k for k, (_, ind, ln) in enumerate(syntax)
+                  if ind == 0 and (m := WF_KEY.match(ln)) and m.group(2) == "jobs" and not m.group(3)), None)
     if start is None:
         return []
     jobs: list[tuple[str, int, int]] = []
@@ -1986,10 +1993,30 @@ def agent_action(value: str) -> str | None:
     return next((x for x in AI_AGENT_ACTIONS if v.startswith((x + "@", x + "/"))), None)
 
 
+def without_comments(text: str) -> str:
+    """`text` with each line's YAML comment (a `#` after a space, outside
+    quotes) taken off: a name in a comment is no condition."""
+    out = []
+    for ln in text.splitlines():
+        quote, cut = None, len(ln)
+        for i, ch in enumerate(ln):
+            if quote:
+                quote = None if ch == quote else quote
+            elif ch in "'\"":
+                quote = ch
+            elif ch == "#" and (i == 0 or ln[i - 1] in " \t"):
+                cut = i
+                break
+        out.append(ln[:cut])
+    return "\n".join(out)
+
+
 def author_gate(conds: list[str]) -> str:
     """"gate" when one of the `if:` texts names the author and reads as a
     positive check, "loose" when one names it beside a negation or an `||`
-    (not evaluated, so not verified), "" when none names it."""
+    (not evaluated, so not verified), "" when none names it. Comments are
+    not read."""
+    conds = [without_comments(c) for c in conds]
     named = [c for c in conds if AUTHOR_GATE.search(c)]
     if any(not LOOSE_GATE.search(c.split(":", 1)[1] if ":" in c else c) for c in named):
         return "gate"
@@ -2072,7 +2099,8 @@ def check_agent_workflows(root: Path) -> None:
                 while step > 0 and not body[step].lstrip().startswith("-"):
                     step -= 1
                 step_lines = key_block(body, step).splitlines()
-                ifs = [key_block(step_lines, j) for j, s in enumerate(step_lines) if re.match(r"\s*(?:-\s+)?if\s*:", s)]
+                ifs = [key_block(step_lines, j) for j, s in enumerate(step_lines)
+                       if re.match(r"""\s*(?:-\s+)?['"]?if['"]?\s*:""", s)]
                 gate = author_gate(job_if + ifs)
                 if gate == "gate":
                     continue

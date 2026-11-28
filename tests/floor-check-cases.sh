@@ -373,6 +373,12 @@ exp "FC-D09: a secret in the top-level env: is every job's" \
   "printf 'on: issue_comment\npermissions:\n  contents: read\nenv:\n  K: \${{ secrets.K }}\njobs:\n  a:\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 warn"
 exp "FC-D09: an agent line inside a run: block is not a step" \
   "printf 'on: issue_comment\npermissions:\n  contents: read\njobs:\n  a:\n    steps:\n      - run: |\n          - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 pass"
+exp "FC-D09: an indentless on: list is read" \
+  "printf 'on:\n- issues\npermissions:\n  contents: write\njobs:\n  a:\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: a quoted jobs: key is read" \
+  "printf 'on: issues\npermissions:\n  contents: write\n\"jobs\":\n  a:\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: an author name only in the if: line's comment is no gate" \
+  "printf 'on: issues\npermissions:\n  contents: write\njobs:\n  a:\n    if: contains(github.event.issue.body, %s) # TODO restrict github.actor\n    steps:\n      - uses: $agent\n' \"'@claude'\" > .github/workflows/a.yml" "FC-D09 warn"
 exp "FC-D09: an on: it cannot read is not verified, not passed" \
   "printf 'on: &t\n  issues:\njobs:\n  g:\n    steps:\n      - uses: $agent\n' > .github/workflows/g.yml" "FC-D09 unknown"
 out="$(rm -rf "$work/case"; cp -R "$good" "$work/case"; (cd "$work/case" && eval "$planted"); python3 "$checker" --root "$work/case" --no-network 2>&1)"
