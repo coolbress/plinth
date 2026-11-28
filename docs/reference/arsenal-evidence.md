@@ -73,7 +73,7 @@ text, not a typed skill, carried steps 2, 4, 7 and 8.
 | Safety | An injection, log-in or data-exposure risk in the change | `/security-review` (built in) | person | Type it before you merge: it reads the diff against `origin`'s default branch, so it needs an `origin` remote; the required CodeQL check still runs | 0 |
 | Use | Can I see it running | Built-in `/run`; the built-in `/verify` is shadowed by the template's (#476) | person or agent | Type `/run`, or ask to see it running | `run` 1 (U2) |
 | Proof | What no check asserts | `third-party / review` | CI | Turn on the reviewer (configure-the-third-party-reviewer.md) | off in the observed runs |
-| Use | A `web` page that some people cannot use: no label, too little contrast, a slow load | `ci / web-audit`: Lighthouse CI and axe-core on `/` and the log-in page; reports, never fails, required by no ruleset | CI | Nothing to type on a `web` project: read the job's summary on the pull request. Automated checks catch only part of accessibility, so also try the page with the keyboard alone and a screen reader | 0; no recorded run had it (#709) |
+| Use | A `web` page that some people cannot use: no label, too little contrast, a slow load | `ci / web-audit`: Lighthouse CI and axe-core on `/` and the log-in page; fails on a critical or serious WCAG 2.2 A or AA violation, never on a score, required by no ruleset | CI | Nothing to type on a `web` project: read the job's summary on the pull request. Automated checks catch only part of accessibility, so also go through the summary's checklist by hand | 0; no recorded run had it (#709) |
 
 ### 6 Merge, 7 Break, 8 Resume
 
