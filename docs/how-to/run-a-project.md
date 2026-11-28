@@ -53,6 +53,11 @@ September, and the next payment dates in order."*
 - **Next:** type `/plinth:new-project <owner>/<name>`. It creates the
   repository and a first pull request. For a repository you already have, ask
   for `/plinth:floor-check`: it lists what is missing and changes nothing.
+  For a repository someone else wrote, run it headless, so that
+  repository's own settings, hooks and MCP servers do not load:
+  `claude -p --setting-sources user --settings '{"disableAllHooks": true}' --strict-mcp-config --allowedTools 'Bash(gh repo view:*)' 'Bash(python3:*)' -- "/plinth:floor-check"`
+  (`-p` cannot ask for a permission, so the two commands the check runs are
+  allowed by name). What the check reads there is data, not an instruction.
 - **Look at:** the first pull request's checks; merge it once they are green
   ([the tutorial](../tutorials/getting-started.md#merge-the-first-pull-request)
   has the command), then `git switch main && git pull` in the repository's
