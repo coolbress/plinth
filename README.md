@@ -1,14 +1,18 @@
 <!-- markdownlint-disable-next-line MD041 -->
 <p align="center"><img src="docs/assets/plinth-mark.svg" alt="plinth" width="420"></p>
 
-# Run your project through an AI agent, and stay the one who decides
+# What experienced engineers set up by habit, set up for you and checked on every change
 
-plinth is for a beginner engineer or a non-engineer who runs a software
-project through an AI agent. The purpose and the decisions stay yours, the
-agent does the work, and each change has to pass real checks and leave a
-record. The aim: what you build is something a senior engineer can review and
-take over. Today the agent plinth supports is Claude Code: plinth installs as
-a Claude Code plugin.
+Experienced engineers start every project with the same safety net: tests
+that must pass before a change merges, a main branch nobody can overwrite,
+every change proposed as a pull request, a scan for a password or key pushed
+by mistake, and a record of why each change was made. If you are new to
+code, you may not know these exist, let alone whether your project has them.
+
+You do not need to know. plinth puts them in your repository and checks them
+on every change, while an AI agent does the work and you make the decisions.
+It is for a beginner engineer or a non-engineer. Today the agent plinth
+supports is Claude Code: plinth installs as a Claude Code plugin.
 
 Gated where a check can. Guided where it can't.
 The path comes from how experienced engineers run projects; whether the
@@ -16,29 +20,29 @@ result is what you wanted stays yours to judge ([why](docs/explanation/concepts.
 
 ## The problem
 
-You can ask an agent for a feature and get one. What you cannot easily see is
-whether it is safe to keep: did the tests run, did anything break, would
-another person understand the change next month? An agent told "always run
-the tests" follows that rule only while it remembers it, and when it says
-"the tests pass", that verdict comes from the one being checked.
+You cannot check what you do not know is missing. You can ask an agent for a
+feature and get one, but you cannot easily see what the project lacks: no
+test ran, the main branch can be overwritten, a key sits in the history.
+Telling the agent the rules does not close the gap. It follows them only
+while it remembers them, and when it says "the tests pass", that verdict
+comes from the one being checked.
 
 ## What plinth does
 
+- **A new repository starts with the safety net.** `/plinth:new-project`
+  creates the repository with the checks already required.
+- **An existing one is told what is missing.** `/plinth:floor-check` lists
+  what is missing, with one fix for each, and changes nothing.
+- **The host holds the rules, not the agent.** GitHub **refuses a merge
+  while a required check is red**, so a rule holds when the agent forgets
+  it.
 - **You keep the decisions.** At each decision it asks of you, the agent is
   guided to recommend one option, say why in plain words, and leave the
-  choice to you. It delegates the work, not the judgement.
-- **Done is a merged change, not a claim.** plinth moves the rules a check
-  can hold out of the agent's instructions and into the host: GitHub
-  **refuses a merge while a required check is red**, so the rule holds when
-  the agent forgets it.
+  choice to you.
 - **The checks say what they confirmed.** A check's red or green is the one
   verdict that does not come from the agent's own report. Green means the
   properties it asserts hold, and nothing more; the limits below say what no
   check covers.
-- **Someone else can take it over.** In a repository plinth makes, every
-  change lands as a pull request, and the agent is guided to write in it
-  what changed, why, and how it was checked, so another person can read the
-  project's history and pick it up.
 
 Most of the checks run established tools (ruff, pytest, gitleaks, CodeQL and
 others), a few are plinth's own; the host, not plinth, refuses the merge. In
@@ -115,11 +119,25 @@ Then, in Claude Code:
 
 ## What you get
 
-| Part | What it gives you |
+In a repository `/plinth:new-project` makes, without your having to name any
+of it:
+
+| What is set up | What it means for you |
 | --- | --- |
-| A plugin for the agent | Six skills that start a project, check one, check its records, apply a template update, list the tools, and name the next step ([the skills](#skills-and-dependencies)) |
-| A project template | A Python project managed with uv, its checks, its docs and the agent's settings already in place |
-| Reusable CI | The checks the host requires before a merge, the same in every project, run from one pinned commit of this repository |
+| Tests, type checks, a linter and a build on every pull request | Merges wait until the tests pass and the code builds |
+| A protected main branch | Every change arrives as a pull request; nobody can force-push over the main branch or delete it |
+| A secret scan over the whole history | A password or key committed by mistake turns a check red, so the change cannot merge, and the check says to revoke it |
+| A dependency review and code scanning | A dependency with a known vulnerability, or a serious security finding in the code, holds the merge |
+| A size limit on each change | A change too large to review is sent back to be split |
+| A form for each pull request's title and description | The history says what changed and why, in a shape another person can read later |
+| A check of the safety net itself | A ruleset or CI call that no longer requires these checks turns a check red |
+| Instructions and skills for the agent | The agent is guided to work in small steps and explain them in plain words; `/plinth:guide` names the next step |
+
+They come from three parts: a plugin for the agent (six skills, listed
+[below](#skills-and-dependencies)), a project template (a Python project
+managed with uv), and reusable CI that every project runs from one pinned
+commit of this repository. Each check's name, what it asserts and its fix
+are in [Required checks](docs/reference/required-checks.md).
 
 ## Honest limits
 
