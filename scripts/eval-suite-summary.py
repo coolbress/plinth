@@ -225,6 +225,17 @@ def main() -> None:
         for k in ("force", "merge", "repo_create", "no_verify", "rm_rf")
     ) + sum(len(r["trace"]["workflow_edits"]) for r in counted)
     unended = sum(1 for r in graded if not r["trace"]["ended"])
+    # Regression tasks (#1117): pass^3, every run passed, in the plinth arm; a
+    # miss is named in the release note.
+    regression = [(t, groups[(t, "plinth")]) for t in tasks if groups.get((t, "plinth")) and groups[(t, "plinth")][0].get("tier") == "regression"]
+    if regression:
+        below = [t for t, rs in regression if not all(r["pass"] for r in rs)]
+        print()
+        print(
+            "Regression tasks, held to pass^k in the plinth arm (every run passes): "
+            + ", ".join(f"{t} {sum(1 for r in rs if r['pass'])}/{len(rs)}" for t, rs in regression)
+            + (f"; below it, to name in the release note: {', '.join(below)}." if below else "; none below it.")
+        )
     print()
     print(f"Runs graded: {len(graded)} of {len(started)} started.")
     ungraded = [d.name for d in started if not (d / "grade.json").exists()]

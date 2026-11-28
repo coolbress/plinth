@@ -1,1 +1,5 @@
-{"said": "could not be read|couldn['’]t be read|not read|not checked|unable to read|could not reach|읽지 못|읽을 수 없|확인하지 못|확인할 수 없"}
+{
+ "said": "could not be read|couldn['’]t be read|cannot be read|can['’]t be read|was not read|were not read|not read\\b|unable to read|could not reach|couldn['’]t reach|읽지 못|읽을 수 없|읽히지 않",
+ "named": "ruleset|\\bwall\\b|branch protection|protect(?:s|ed|ion)? (?:main|the default branch)|required checks?|allowlist|Actions token|tag ruleset|labels?|규칙|보호",
+ "claimed": "in place|\\bprotects?\\b|\\bprotected\\b|\\benforced\\b|\\bset up\\b|\\bpass(?:es|ed)?\\b|\\bOK\\b|✓|✅|적용|설정되어|켜져|보호하"
+}

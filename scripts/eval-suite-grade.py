@@ -634,7 +634,7 @@ CLEAN_VERDICT = re.compile(
     re.IGNORECASE,
 )
 # A bullet that hands work to someone: one of the report's three row kinds.
-ACTION_BULLET = re.compile(r"do it yourself|I can do it|later, after|직접|제가 .*할 수|나중에", re.IGNORECASE)
+ACTION_BULLET = re.compile(r"do it yourself|I can do it|later, after|직접 (?:하|해|할)|제가 .*할 수|나중에", re.IGNORECASE)
 # The checker's own words for a result, as a report would print them.
 FAIL_WORD = re.compile(r"\b(?:FAIL|WARN)\b")
 # gh api posts by default once a field or an input is given: `-f x`, `-fx=y`,
@@ -761,7 +761,16 @@ def floor_clean(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any
     }
     unread = task / "unread.json"
     if unread.exists():
-        rules["unread_said"] = bool(re.search(json.loads(unread.read_text())["said"], final, re.IGNORECASE))
+        spec = json.loads(unread.read_text())
+        rules["unread_said"] = bool(re.search(spec["said"], final, re.IGNORECASE))
+        # A line about what could not be read (its `named`) that says it is in
+        # place (its `claimed`) and not that it was not read: the gap passed off.
+        rules["unread_not_claimed"] = not any(
+            re.search(spec["named"], line, re.IGNORECASE)
+            and re.search(spec["claimed"], line, re.IGNORECASE)
+            and not re.search(spec["said"], line, re.IGNORECASE)
+            for line in lines
+        )
     return all(rules.values()), {
         "rules": rules,
         "rows": len(rows),
@@ -806,7 +815,8 @@ def task_record(
         return floor_clean(task, final, state, tr)
     if kind == "trigger":
         spec = json.loads((task / "trigger.json").read_text())
-        called = spec["skill"] in tr["skills"]
+        # The plugin's name may be left off: `floor-check` is the same skill.
+        called = any(s in (spec["skill"], spec["skill"].split(":")[-1]) for s in tr["skills"])
         return called == bool(spec["called"]), {"skill": spec["skill"], "called": called, "skills": tr["skills"]}
     if kind == "resume":
         items = json.loads((task / "open.json").read_text())
@@ -1069,6 +1079,8 @@ def main() -> None:
         "arm": arm,
         "n": int(n),
         "kind": kind,
+        # regression or capability (#1117): the summary holds a regression task to pass^3.
+        "tier": (task / "tier").read_text().strip() if (task / "tier").exists() else None,
         "pass": passed,
         "checks_pass": best["checks_pass"],
         "suite_read": bool(tr["suite_reads"]),

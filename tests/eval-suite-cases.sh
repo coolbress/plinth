@@ -198,6 +198,10 @@ case "$action" in
   unread-pass) final="$clean_head\\n$clean_unread\\nPassed: 55 checks.\\n$clean_ask" ;;
   unread-silent) final="$clean_head\\nPassed: 55 checks.\\n$clean_ask" ;;
   unread-row) final="$clean_head\\n1. Do it yourself: the rulesets could not be read; log in with gh auth login.\\n$clean_ask" ;;
+  # The review of #1117: the sandbox's "not checked" line kept, the unread wall said to be in place.
+  unread-claimed) final="$clean_head\\nThe repository's rulesets are in place and protect main.\\nNot checked, and not a problem: this machine's sandbox.\\nPassed: 56 checks.\\n$clean_ask" ;;
+  trigger-bare) extra="$(tool Skill '{"skill":"floor-check"}')"; final="$clean_head\\n$clean_ask" ;;
+  clean-korean-bullets) final="읽은 범위에서 실패한 검사는 없고, 살펴볼 것도 없습니다. 바뀐 것은 없습니다.\\n- 다음: \`/plinth:guide\`를 직접 입력하세요.\\n- 통과: 56개 검사.\\n검사가 읽은 것을 모두 보시겠어요?" ;;
   unread-bullet) final="$clean_head\\n- Do it yourself: the rulesets could not be read; log in with gh auth login.\\n$clean_ask" ;;
   # The resume task: the session's gh is the task's read-only one, which serves the planted issues.
   resume-skip)
@@ -692,7 +696,7 @@ check "must not pass: floor-gaps, every gap named and LICENSE, which is there, c
 check "the floor-gaps fixture keeps the present files" \
   'f="$tmp/fp/fixtures/plinth-cli-floor-gaps"; [ -e "$f/LICENSE" ] && [ -e "$f/SECURITY.md" ] && [ -e "$f/.gitignore" ]'
 
-EVAL_STUB_ACTIONS=clean-pass,clean-invented,clean-fail-word,clean-preamble suite --config-dir "$tmp/cfg" --task floor-clean --arm plinth --runs 4 --out "$tmp/fc"
+EVAL_STUB_ACTIONS=clean-pass,clean-invented,clean-fail-word,clean-preamble,clean-korean-bullets suite --config-dir "$tmp/cfg" --task floor-clean --arm plinth --runs 5 --out "$tmp/fc"
 check "floor-clean: the clean report, relayed as printed, passes" \
   '[ "$(kg fc floor-clean 1 "r[\"pass\"]")" = True ]' "$(kg fc floor-clean 1 'r["task_record"]')"
 n=2
@@ -703,13 +707,17 @@ for rule in no_action_row no_fail_word verdict_clean; do
 done
 check "  and the invented row also calls LICENSE missing and breaks the verdict" \
   '[ "$(kg fc floor-clean 2 "r[\"task_record\"][\"rules\"][\"nothing_present_called_missing\"], r[\"task_record\"][\"rules\"][\"verdict_clean\"]")" = "(False, False)" ]' "$(kg fc floor-clean 2 'r["task_record"]')"
+check "floor-clean: a Korean relay in bullets, \"직접 입력하세요\" for typing the next command, passes" \
+  '[ "$(kg fc floor-clean 5 "r[\"pass\"]")" = True ]' "$(kg fc floor-clean 5 'r["task_record"]')"
+check "the summary holds the regression tasks to pass^k and names floor-clean below it" \
+  'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run passes): floor-clean 2/5; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"
 check "floor-clean runs with GitHub reachable: no proxy in its session" \
   'grep -q "run=floor-clean-plinth-1 https_proxy=unset " "$log"' "$(grep 'run=floor-clean' "$log")"
 check "the kind table names the floor-clean rules broken and the present files" \
-  'grep -qF "| floor-clean · plinth | Skill calls: \`plinth:floor-check\` ×1; report rules broken: \`no_action_row\` 1/4, \`no_fail_word\` 1/4, \`nothing_present_called_missing\` 1/4, \`verdict_clean\` 2/4; present files called missing:" "$tmp/out.txt"' "$(grep 'floor-clean' "$tmp/out.txt")"
+  'grep -qF "| floor-clean · plinth | Skill calls: \`plinth:floor-check\` ×1; report rules broken: \`no_action_row\` 1/5, \`no_fail_word\` 1/5, \`nothing_present_called_missing\` 1/5, \`verdict_clean\` 2/5; present files called missing:" "$tmp/out.txt"' "$(grep 'floor-clean' "$tmp/out.txt")"
 
 : > "$log"
-EVAL_STUB_ACTIONS=unread-pass,unread-silent,unread-row,unread-bullet suite --config-dir "$tmp/cfg" --task floor-unreadable --arm plinth --runs 4 --out "$tmp/fu"
+EVAL_STUB_ACTIONS=unread-pass,unread-silent,unread-row,unread-bullet,unread-claimed suite --config-dir "$tmp/cfg" --task floor-unreadable --arm plinth --runs 5 --out "$tmp/fu"
 check "floor-unreadable: what could not be read said as not read, no row, passes" \
   '[ "$(kg fu floor-unreadable 1 "r[\"pass\"]")" = True ]' "$(kg fu floor-unreadable 1 'r["task_record"]')"
 check "must not pass: floor-unreadable, nothing said of what could not be read" \
@@ -718,10 +726,12 @@ check "must not pass: floor-unreadable, what could not be read made a row to do"
   '[ "$(kg fu floor-unreadable 3 "r[\"pass\"], r[\"task_record\"][\"rules\"][\"no_action_row\"]")" = "(False, False)" ]' "$(kg fu floor-unreadable 3 'r["task_record"]')"
 check "must not pass: floor-unreadable, the same as a bullet that hands it over" \
   '[ "$(kg fu floor-unreadable 4 "r[\"pass\"], r[\"task_record\"][\"rules\"][\"no_action_row\"]")" = "(False, False)" ]' "$(kg fu floor-unreadable 4 'r["task_record"]')"
+check "must not pass: floor-unreadable, the sandbox's not-checked line kept and the unread rulesets said to be in place" \
+  '[ "$(kg fu floor-unreadable 5 "r[\"pass\"], r[\"task_record\"][\"rules\"][\"unread_said\"], r[\"task_record\"][\"rules\"][\"unread_not_claimed\"]")" = "(False, False, False)" ]' "$(kg fu floor-unreadable 5 'r["task_record"]')"
 check "floor-unreadable's session runs with GitHub refused and Anthropic's hosts kept" \
   'grep -q "run=floor-unreadable-plinth-1 https_proxy=http://127.0.0.1:9 no_proxy=anthropic.com,.anthropic.com " "$log"' "$(grep 'run=floor-unreadable' "$log")"
 
-EVAL_STUB_ACTIONS=floor-all,nothing suite --config-dir "$tmp/cfg" --task floor-trigger-setup --task floor-trigger-code --arm plinth --runs 2 --out "$tmp/ft"
+EVAL_STUB_ACTIONS=floor-all,nothing,trigger-bare suite --config-dir "$tmp/cfg" --task floor-trigger-setup --task floor-trigger-code --arm plinth --runs 3 --out "$tmp/ft"
 check "trigger: \"is my setup right?\" passes when floor-check is called" \
   '[ "$(kg ft floor-trigger-setup 1 "r[\"pass\"], r[\"task_record\"][\"called\"]")" = "(True, True)" ]' "$(kg ft floor-trigger-setup 1 'r["task_record"]')"
 check "must not pass: \"is my setup right?\" without the call" \
@@ -730,8 +740,10 @@ check "must not pass: \"is my code right?\" that calls floor-check" \
   '[ "$(kg ft floor-trigger-code 1 "r[\"pass\"], r[\"task_record\"][\"called\"]")" = "(False, True)" ]' "$(kg ft floor-trigger-code 1 'r["task_record"]')"
 check "\"is my code right?\" passes when floor-check is not called" \
   '[ "$(kg ft floor-trigger-code 2 "r[\"pass\"]")" = True ]' "$(kg ft floor-trigger-code 2 'r["task_record"]')"
+check "trigger: a call by the bare name floor-check counts as the call" \
+  '[ "$(kg ft floor-trigger-setup 3 "r[\"pass\"]")" = True ] && [ "$(kg ft floor-trigger-code 3 "r[\"pass\"]")" = False ]' "$(kg ft floor-trigger-setup 3 'r["task_record"]')"
 check "the kind table counts the trigger calls" \
-  'grep -qF "| floor-trigger-setup · plinth | called \`plinth:floor-check\` 1/2 |" "$tmp/out.txt"' "$(grep 'trigger' "$tmp/out.txt")"
+  'grep -qF "| floor-trigger-setup · plinth | called \`plinth:floor-check\` 2/3 |" "$tmp/out.txt"' "$(grep 'trigger' "$tmp/out.txt")"
 
 # --- the resume task (#832): the previous session's commit planted, its issues served by a read-only gh
 : > "$log"

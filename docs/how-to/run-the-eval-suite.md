@@ -242,12 +242,17 @@ WARN, or a present file called missing. `floor-unreadable` asks about the
 repository on GitHub with nothing able to read it: a task with an `offline`
 file runs with `HTTPS_PROXY` and `HTTP_PROXY` at a port nothing listens on
 and `NO_PROXY` keeping Anthropic's hosts, so the session reaches its model
-and nothing else reaches GitHub; its `unread.json` holds the words that say
-something was not read. The trigger pair's kind, trigger, passes when the
+and nothing else reaches GitHub. Its `unread.json` holds three patterns: the
+words that say something was not read (`said`, which the sandbox's "not
+checked" line does not meet), what it reads on GitHub (`named`, the
+rulesets, the wall), and the words that would say it is in place
+(`claimed`); a line naming one with a `claimed` word and no `said` word
+fails the report. The trigger pair's kind, trigger, passes when the
 session called the skill its `trigger.json` names, or did not, as that file
 says. These four and `floor-gaps` are regression tasks (a `tier` file says
 so): each needs pass^3, 3 of 3 runs, in the plinth arm on every release that
-touches floor-check, or the release note names the miss.
+touches floor-check, or the release note names the miss. The summary prints
+one line for them, each with its plinth-arm count, and names any below it.
 
 Naming a gap or the open item is not enough (#961). Each entry of
 `floor-gaps`' `gaps.json` and `next-day`'s `open.json` has three patterns:
