@@ -99,8 +99,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # constraints (scripts/lib/copier-pin.sh), and Dependabot raises it. Raising
 # the tag with its commit is the only edit here.
 template_repo="coolbress/plinth-template"
-template_ref="v1.52.0"
-template_sha="8442a9661c170171230bf8c25f1c5fe8f89d83e5"
+template_ref="v1.53.0"
+template_sha="6a0c42a929eb60fff7186f6db6bfaa49d3c8c661"
 template_ci=".github/workflows/ci.yml"
 # shellcheck source=scripts/lib/copier-pin.sh
 . "$here/lib/copier-pin.sh"

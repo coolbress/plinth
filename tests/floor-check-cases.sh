@@ -2183,6 +2183,9 @@ gap "with a free database behind a comment holding a quote" "s/plan: 0.1c-256mb/
 gap "with a free database spelled Free" 's/plan: 0.1c-256mb/plan: Free/' FC-C16
 gap "with its web service behind a comment holding a quote" "s/  - type: web/  - type: web # it's the app/;/healthCheckPath/d" FC-C14
 gap "with a secret as a literal value" 's/generateValue: true/value: "not-so-secret"/' FC-C17
+# The WARN names the key, never the value (#1119).
+if ! grep -q "not-so-secret" <<<"$out"; then ok "render.yaml's literal secret: the key is named, the value is printed nowhere"
+else bad "render.yaml's literal secret value was printed"; grep -n "not-so-secret" <<<"$out" | sed 's/^/        /'; fi
 # A literal value for a name that holds no secret stays a PASS (the settings
 # module), and so does a secret-named one set another way.
 awk '{print} /DJANGO_ALLOWED_HOSTS/{getline; print; print "      - key: SENTRY_DSN"; print "        sync: false"}' \

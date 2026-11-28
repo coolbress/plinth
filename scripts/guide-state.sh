@@ -31,6 +31,9 @@
 # not have. A row it looks for and does not find is an error (exit 1), not a
 # guess. Issue and pull request titles are printed as they are: data.
 set -uo pipefail
+# Every git call (#1119, #1278): no fsmonitor program, no hook, no system
+# config and no lazy fetch. Its calls are rev-parse only, which runs no filter.
+git_safe() { GIT_CONFIG_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 git -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
 plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/admin-reach.sh
 . "$plugin/scripts/lib/admin-reach.sh" 2>/dev/null || { echo "guide-state: no $plugin/scripts/lib/admin-reach.sh" >&2; exit 1; }
@@ -59,7 +62,7 @@ done
 if [ -n "$features" ]; then
   echo "plinth guide state (read-only)"
   f_arch=none; f_dir=""
-  if f_top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)"; then
+  if f_top="$(git_safe -C "$dir" rev-parse --show-toplevel 2>/dev/null)"; then
     f_dir="$f_top"
     f_arch="$(sed -nE "s/^archetype: *['\"]?([^'\"]*)['\"]? *\$/\1/p" "$f_top/.copier-answers.yml" 2>/dev/null | head -1)"
     f_arch="${f_arch:-none}"
@@ -371,14 +374,14 @@ finish() {
 
 echo "plinth guide state (read-only)"
 
-if ! git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+if ! git_safe -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
   echo "repository: none here (not a git checkout)"
   set_mode full "no repository yet, so nothing has merged"
   echo
   say "No repository yet" "/plinth:new-project <owner>/<name>"
   finish
 fi
-top="$(git -C "$dir" rev-parse --show-toplevel)"; folder_name="$(basename "$top")"
+top="$(git_safe -C "$dir" rev-parse --show-toplevel)"; folder_name="$(basename "$top")"
 answers="$top/.copier-answers.yml"
 # shellcheck source=scripts/lib/copier-answers.sh
 . "$plugin/scripts/lib/copier-answers.sh"
