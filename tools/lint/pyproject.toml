@@ -10,8 +10,8 @@ version = "0"
 requires-python = ">=3.11"
 dependencies = [
     "zizmor==1.33.1",
-    "ruff==0.16.8",
-    "mypy==2.3.1",
+    "ruff==0.17.6",
+    "mypy==2.4.1",
 ]
 
 [tool.uv]
