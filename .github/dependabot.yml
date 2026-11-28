@@ -8,8 +8,10 @@
 #   door and /plinth:template-update run). The uv ecosystem rewrites the lock
 #   with uv itself, so it stays universal (every Python and platform marker
 #   kept); the pip ecosystem's pip-compile run was measured to drop them.
-#   A raise of zizmor leaves python-ci.yml's `uvx zizmor@` lines behind:
-#   tests/tool-pins.sh fails on that pull request until they move with it.
+#   Two raises need a hand on the bot's pull request: zizmor's leaves
+#   python-ci.yml's `uvx zizmor@` lines behind (tests/tool-pins.sh fails
+#   until they move with it), and copier's changes the update line the
+#   floor-check fixtures record (tests/floor-check-golden.sh --write).
 # Updates wait Dependabot's default cooldown. To run it now instead of waiting
 # for the week: Insights, Dependency graph, Dependabot, "Recent update jobs",
 # "Check for updates". That page answers 404 to a browser that is not signed

@@ -23,4 +23,6 @@
   `copier update` line no longer carries `--exclude-newer <date>`.
   [`/plinth:template-update`](https://github.com/coolbress/plinth/blob/main/skills/template-update/SKILL.md)
   runs it with copier's lock as uv's constraints, so the line names no path
-  on this machine. The pull request it opens quotes the shorter line.
+  on this machine. The pull request it opens quotes the shorter line. The
+  line is for that skill to run: pasted into a terminal by hand, it resolves
+  copier's dependencies at their newest.
