@@ -7,7 +7,7 @@
 # that names a tool #711 left out, fails (the must-not-pass cases first).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-script="$root/scripts/guide-state.sh"
+real="$root/scripts/guide-state.sh"
 names="$root/tests/lib/guide-names.sh"
 arsenal="$root/skills/arsenal/SKILL.md"
 work="$(mktemp -d)" && work="$(cd "$work" && pwd -P)" || { echo "guide-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
@@ -28,6 +28,8 @@ cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 # MOCK_CALLS_LOG gets one line per call, to count the calls of a run (#1145).
 [ -z "${MOCK_CALLS_LOG:-}" ] || echo "$1 $2" >> "$MOCK_CALLS_LOG"
+# GUIDE_RUN_LOG: the same, for the count every run is held to (#1180).
+[ -z "${GUIDE_RUN_LOG:-}" ] || echo "$1 $2" >> "$GUIDE_RUN_LOG"
 # MOCK_DIR holds open.json, merged.json, issues.json and all.json, and comments.json
 # when a case reads a pull request's comments; MOCK_GH_FAIL makes every call
 # fail as an unauthenticated gh does. A list is cut at --limit.
@@ -75,12 +77,20 @@ fi
 # Its search for the last look back (#1145) answers from history.json's
 # data.lookBack, else a look back opened a day ago, so that no case is due
 # one unless it says so, whatever day the tests run.
+# The login it runs under (#1150) is data.viewer, else "someone", the login
+# every pull request below is opened by, so that no case has a second person
+# unless it says so.
 if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *mergedPulls* ]]; then
   [ -n "${MOCK_HISTORY_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  # A partial error, as gh 2.x answers one (measured for #1180): the data and
+  # the errors to standard output, unfiltered, a message, exit 1.
+  [ -n "${MOCK_HISTORY_PARTIAL:-}" ] && { echo '{"data":{"lookBack":{"nodes":[]},"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],"message":"Could not resolve to a Repository with the name '"'"'o/r'"'"'."}]}'
+    echo "gh: Could not resolve to a Repository with the name 'o/r'." >&2; exit 1; }
   set -o pipefail
   if [ -f "$MOCK_DIR/history.json" ]; then cat "$MOCK_DIR/history.json"
   else echo '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":0},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":0,"nodes":[]},"firstMerges":{"nodes":[]}}}}'
-  fi | jq '.data.lookBack //= {nodes: [{number: 900, title: "Look back \(now - 86400 | todate | .[0:10])", createdAt: (now - 86400 | todate)}]}' | jq -r "$jqf"
+  fi | jq '.data.lookBack //= {nodes: [{number: 900, title: "Look back \(now - 86400 | todate | .[0:10])", createdAt: (now - 86400 | todate)}]}
+    | .data.viewer //= {login: "someone"}' | jq -r "$jqf"
   exit
 fi
 # The latest completed run of ci.yml on main (#1076): runs.json in the REST
@@ -102,6 +112,8 @@ if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *issueOrPullRequest* ]]; t
 fi
 if [ "$1" = api ] && [ "$2" = graphql ]; then
   [ -z "${MOCK_DEPS_LOG:-}" ] || echo deps >> "$MOCK_DEPS_LOG"
+  [ -n "${MOCK_DEPS_PARTIAL:-}" ] && { echo '{"data":{"repository":{"issues":{"nodes":[{"number":3,"blockedBy":null,"blocking":null}]}}},"errors":[{"type":"FORBIDDEN","path":["repository","issues","nodes",0,"blockedBy"],"message":"Resource not accessible by integration"}]}'
+    echo "gh: Resource not accessible by integration" >&2; exit 1; }
   [ -n "${MOCK_DEPS_FAIL:-}" ] && { echo "GraphQL: Field 'blockedBy' doesn't exist on type 'Issue' (repository.issues.nodes.0.blockedBy)" >&2; exit 1; }
   set -o pipefail
   if [ -f "$MOCK_DIR/deps.json" ]; then cat "$MOCK_DIR/deps.json"; else echo '{"data":{"repository":{"issues":{"nodes":[]}}}}'; fi | jq -r "$jqf"
@@ -181,6 +193,22 @@ jq --argjson n "$limit" --arg f "$fields" --arg l "$label" 'map(select($l == "" 
   | if $f == "" then . else map(with_entries(select(.key as $k | $f | split(",") | index($k)))) end' "$MOCK_DIR/$f" | jq -r "$jqf"
 MOCK
 chmod +x "$work/bin/gh"
+# The gh calls of one run (#1180): every case runs the script through this,
+# which counts the calls its run made and writes the count, with the case's
+# fixture and arguments, to $runs; the check near the end holds each to $cap.
+runs="$work/runs"; : > "$runs"
+script="$work/bin/guide-state"
+cat > "$script" <<WRAP
+#!/usr/bin/env bash
+log="\$(mktemp)"
+out="\$(mktemp)"
+GUIDE_RUN_LOG="\$log" "$real" "\$@" > "\$out" 2> "\$out.err"; rc=\$?
+cat "\$out"; cat "\$out.err" >&2; cat "\$out.err" >> "\$out"; rm -f "\$out.err"
+n="\$(grep -c . "$runs")"; [ -z "\${GUIDE_RUNS_OUT:-}" ] || cp "\$out" "$work/out.\$n"
+printf '%s\\t%s\\t%s\\n' "\$(grep -c . "\$log")" "\${MOCK_DIR:-none}" "\$*" >> "$runs"; rm -f "\$log" "\$out"
+exit \$rc
+WRAP
+chmod +x "$script"
 export PATH="$work/bin:$PATH"
 # floor-check's reads (#904) come from fixtures here, never the network: an
 # empty folder is a 404 for each, which it says as not read.
@@ -286,6 +314,64 @@ put "$d/issues.json" "$(issue 4 'Ask the user for their name' needs-triage)"
 out="$(MOCK_DIR="$d" "$script" "$d")"
 grep -qxF "command: /triage" <<<"$out" && ! grep -qF "$retro_line" <<<"$out" && ok "a merge an hour ago, no before: /clear: no /retro line" || bad "the /retro line without before: /clear"
 put "$d/merged.json" "$(pr 2 'docs: first pull request through the wall' false SUCCESS)"
+# A second person (#1150): someone besides the owner and the login this runs
+# under (the agent's own account) who can be assigned issues, or who opened a
+# pull request, open or merged. One line, until a CODEOWNERS file is there.
+d3="$(repo second)"
+people() { # <owner kind> <owner login> <assignable logins, comma-separated> [<first merge's author>]
+  jq -n --arg k "$1" --arg o "$2" --arg a "$3" --arg f "${4:-}" '{data: {repository: {createdAt: "2026-10-01T00:00:00Z", pushedAt: "2026-10-28T00:00:00Z",
+    mergedPulls: {totalCount: 0}, closedIssues: {totalCount: 0}, records: {nodes: []}, releases: {totalCount: 0, nodes: []},
+    tags: {totalCount: 0, nodes: []}, owner: {__typename: $k, login: $o},
+    firstMerges: {nodes: (if $f == "" then [] else [{number: 1, title: "docs: first", mergedAt: "2026-10-02T00:00:00Z", author: {__typename: "User", login: $f}}] end)},
+    assignableUsers: {nodes: ($a | split(",") | map(select(. != "")) | map({login: .}))}}}}' > "$d3/history.json"
+}
+by() { sed "s/\"login\":\"someone\"/\"login\":\"$1\"/"; }
+second_page="$root/docs/how-to/add-a-second-person.md"
+seconds() { grep -c '^a second person: ' <<<"$1" || true; }
+people User o "o,someone,b"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+if [ "$(seconds "$out")" = 1 ] && grep -qF "a second person: b (can be assigned here); before their first change, follow $second_page:" <<<"$out"
+then ok "a collaborator besides the owner and the agent's login: the second-person line, once"; else bad "a collaborator: $(grep '^a second person' <<<"$out" || echo no line)"; fi
+people User o "o,someone"
+put "$d3/open.json" "$(pr 7 'feat: x' false SUCCESS)"; put "$d3/merged.json" "$(pr 6 'feat: y' false SUCCESS | by O)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "only the owner (any case) and the agent's own account: no second-person line" || bad "the owner and the agent alone, yet: $(grep '^a second person' <<<"$out")"
+put "$d3/open.json" "$(pr 7 'feat: x' false SUCCESS | by carol)" "$(pr 8 'chore(deps): bump x' true SUCCESS)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 1 ] && grep -q '^a second person: carol (opened #7); ' <<<"$out" && ok "an open pull request by someone else: the line names them" || bad "an open pull request by carol: $(grep '^a second person' <<<"$out" || echo no line)"
+put "$d3/open.json" "$(pr 8 'chore(deps): bump x' true SUCCESS)"; put "$d3/merged.json" "$(pr 6 'feat: y' false SUCCESS | by dave)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+grep -q '^a second person: dave (opened #6); ' <<<"$out" && ok "a merged pull request by someone else: the line names them" || bad "a merged pull request by dave: $(grep '^a second person' <<<"$out" || echo no line)"
+put "$d3/merged.json" "$(pr 6 'feat: y' false SUCCESS)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "a bot's pull request is not a second person" || bad "Dependabot counted as a person"
+people User o "o,someone,b"; put "$d3/open.json" "$(pr 7 'feat: x' false SUCCESS | by b)" "$(pr 9 'feat: z' false SUCCESS | by e)"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 1 ] && grep -q '^a second person: b (can be assigned here), e (opened #9); ' <<<"$out" && ok "seen twice and two people: one line, each named once" || bad "two people: $(grep '^a second person' <<<"$out" || echo no line)"
+mkdir -p "$d3/.github"; : > "$d3/.github/CODEOWNERS"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "a CODEOWNERS file is there: the line has done its work" || bad "CODEOWNERS there, yet the line"
+rm -r "$d3/.github"; put "$d3/open.json"
+out="$(MOCK_HISTORY_FAIL=1 MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "the history not read: no second-person line (the login it runs under is not known)" || bad "the line without the history read"
+people User o "" frank
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+grep -q '^a second person: frank (opened #1); ' <<<"$out" && ok "nobody assignable read, a first merge by someone else: the line names them" || bad "the first merge's author: $(grep '^a second person' <<<"$out" || echo no line)"
+# An organization is not a person: one person and the agent is still one.
+people Organization acme "alice,someone"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+[ "$(seconds "$out")" = 0 ] && ok "an organization's repository, one person and the agent: no line" || bad "an organization with one person, yet: $(grep '^a second person' <<<"$out")"
+people Organization acme "alice,someone,bob"
+out="$(MOCK_DIR="$d3" "$script" "$d3")"
+grep -q '^a second person: alice (can be assigned here), bob (can be assigned here); ' <<<"$out" && ok "an organization's repository with two people: the line" || bad "an organization with two people: $(grep '^a second person' <<<"$out" || echo no line)"
+rm "$d3/history.json"
+# The end row (#1150): it opens the end-or-hand-over form, and a handover
+# goes through the second-person page first.
+out="$(MOCK_DIR="$d3" "$script" "$d3" map end)"
+if grep -qF 'purpose: Open the issue form "End or hand over this project" (New issue on GitHub)' <<<"$out" \
+   && grep -qF 'A handover: the new owner joins as a second person first, restores and ships one fix, and only then is the repository moved' <<<"$out" \
+   && grep -qF "for a handover, \`$second_page\` first" <<<"$out"
+then ok "map end: the end-or-hand-over form, and a handover's second-person-first order"; else bad "map end: $(grep -E '^  (purpose|how):' <<<"$out")"; fi
 # What it started with off (#763), through scripts/off-by-default.sh. The
 # whole list is the features view's (#1087), no longer the map's.
 out="$(MOCK_DIR="$d" "$script" "$d" features)"
@@ -980,6 +1066,13 @@ grep -qxF "ticket to take: #4, not blocked; the lowest number of the 2 left; Git
   grep -qxF 'command: /implement #4' <<<"$out" && grep -qxF 'skipped: 1 of 3 ready-for-agent; blocked by an open issue: #3 on #2' <<<"$out" &&
   ok "the dependencies not read: the bodies choose, the line says not read, the rest of the guide still read" ||
   { bad "the dependencies not read"; grep -E 'ticket|skipped|command|where' <<<"$out" | sed 's/^/        /'; }
+# A partial GraphQL error (#1180): the read started beside the others still
+# says it was not read, with gh's message, and nothing else moves.
+out="$(MOCK_DEPS_PARTIAL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "ticket to take: #4, not blocked; the lowest number of the 2 left; GitHub's issue dependencies: not read (gh: Resource not accessible by integration)" <<<"$out" &&
+  grep -qxF 'command: /implement #4' <<<"$out" &&
+  ok "the dependencies with a partial GraphQL error: not read, gh's message, the bodies choose" ||
+  { bad "the dependencies with a partial error"; grep -E 'ticket|command' <<<"$out" | sed 's/^/        /'; }
 log="$work/deps.log"; : > "$log"
 MOCK_DEPS_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
 [ "$(grep -c . "$log")" = 1 ] && ok "three ready tickets: the dependencies are one call" || bad "dependencies read $(grep -c . "$log") times for three ready tickets"
@@ -1156,7 +1249,7 @@ grep -qx 'where: not read' <<<"$out" && ! grep -q '^command:' <<<"$out" &&
 
 # A table that lost a row the guide looks for stops with exit 1, never guesses.
 mkdir -p "$work/plugin/skills/arsenal" "$work/plugin/skills/guide" "$work/plugin/scripts/lib"
-cp "$script" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
+cp "$real" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
 cp "$root/scripts/lib/admin-reach.sh" "$root/scripts/lib/stage-table.sh" "$work/plugin/scripts/lib/"
 cp "$root/skills/guide/steps.md" "$work/plugin/skills/guide/"
 grep -v '^| An idea in your own words' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
@@ -1685,6 +1778,12 @@ grep -qxF "so far: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "tot
 state "GitLab: so far not read" "$work/gitlab" "so far: not read (the guide reads GitHub only)"
 grep -qxF "release due: not read (HTTP 502: Bad Gateway)" <<<"$out" && ok "the history read failing: release due not read" ||
   bad "the history read failing: $(grep '^release due' <<<"$out")"
+out="$(MOCK_HISTORY_PARTIAL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+m="not read (gh: Could not resolve to a Repository with the name 'o/r'.)"
+grep -qxF "so far: $m" <<<"$out" && grep -qxF "started: $m" <<<"$out" && grep -qxF "look back: $m" <<<"$out" &&
+  [ "$(others "$out")" = "$(others "$base")" ] &&
+  ok "the history read with a partial GraphQL error: not read, gh's message, the rest unchanged" ||
+  { bad "the history read with a partial error"; diff <(others "$base") <(others "$out") | head; grep -E '^(started|so far|look back)' <<<"$out" | sed 's/^/        /'; }
 
 # ── a release due (#1077) ─────────────────────────────────────────────────
 # The last tag comes from the history read; the merges since it from the
@@ -1928,6 +2027,71 @@ put "$d/open.json" "$(pr 12 'Revert \"feat: other\"' false run)"
 state "an open revert of another pull request: still undo #9" "$d" "command: $undo_cmd"
 out="$(MOCK_DIR="$work/undo-cli" "$script" "$work/undo-cli" 2>&1)"
 grep -qF "read its log first (gh run view 31 --log-failed)" <<<"$out" && ok "  the undo note says to read the log first" || bad "the undo note does not say to read the log first"
+
+# ── a breaking-change revert and an open revert (#1203) ───────────────────
+# Every revert form ci / pr-title accepts is never undone: revert!: and
+# revert(<scope>)!: as revert: is.
+d="$(repo undo-bang)"
+for t in 'revert!: remove unsafe API' 'revert(api)!: remove unsafe API' 'revert(api): remove the endpoint' 'revert: remove the endpoint'; do
+  put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 "$t" false SUCCESS)"
+  redrun "$t (#9)" > "$d/runs.json"
+  state "main red on a revert's merge titled $t: never undo the undo" "$d" "!undo pull request" "problems: main's latest CI run fails (run 31)"
+done
+# An open revert of the breaking merge comes first, ahead of another pull
+# request's failing check: its checks running, green, or failing.
+d="$(repo undo-open-first)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 9 'feat: totals' false SUCCESS)"
+redrun 'feat: totals (#9)' > "$d/runs.json"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false run)" "$(pr 14 'feat: export' false FAILURE)"
+state "an open revert and another failing pull request: the revert first" "$d" \
+  "where: A pull request with checks running (step 5)" "command: /run" \
+  "note: pull request #12 reverts #9, whose merge failed main's latest CI run (run 31); it comes before any other pull request; checks pending: merge it once they are green" \
+  "!command: diagnose this: pull request #14" "!undo pull request"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)" "$(pr 14 'feat: export' false FAILURE)"
+state "  and once its checks are green: merge the revert" "$d" "where: Green, and seen working (step 6)" "command: merge #12" "!diagnose this: pull request #14"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false FAILURE)" "$(pr 14 'feat: export' false FAILURE)"
+state "  and with its own check failing: the revert is diagnosed, not the other" "$d" "command: diagnose this: pull request #12 has a failing check"
+# Review of this change: merge next names the revert too; a draft revert is
+# not merged; a revert in the type form that names #9 counts.
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)" "$(pr 14 'feat: export' false SUCCESS)"
+state "  with another green pull request: merge next is the revert, not it" "$d" "command: merge #12" \
+  "merge next: #12, the revert of #9: main stays broken until it merges, so it comes before any other" "!merge next: #14"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS | sed 's/"isDraft":false/"isDraft":true/')"
+state "  a draft revert, green: marked ready first, not merged" "$d" "command: /run" "!command: merge #12" \
+  "note: pull request #12 reverts #9, whose merge failed main's latest CI run (run 31); it comes before any other pull request; it is a draft: mark it ready for review on its page, then merge it once its checks are green"
+put "$d/open.json" "$(pr 12 'revert: take back the totals of #9' false run)"
+state "  a revert in the type form that names #9: the route, no second undo" "$d" "command: /run" "!undo pull request"
+# The second review: the revert's own Blocked by holds it, in the route and in
+# merge next, an open #14 or a number past the reads alike.
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS | jq -c '. + {body: "## Blocked by\n\n#14"}')"
+put "$d/issues.json" "$(issue 14 'Migrate the totals first' '')"
+state "  a green revert whose Blocked by #14 is open: not merged, merge next says it waits" "$d" \
+  "command: none: pull request #12 waits on its Blocked by (#14, still open)" \
+  "merge next: none: #12, the revert of #9, comes first, and it waits on its Blocked by (#14, still open)" "!command: merge #12"
+printf '[]' > "$d/issues.json"
+state "  and a Blocked by number past the reads waits too" "$d" "command: none: pull request #12 waits on its Blocked by (#14, not read)" "!command: merge #12"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)"
+state "  with no Blocked by, the green revert is merged" "$d" "command: merge #12"
+# One list (#1203): the revert forms the guide reads are ci / pr-title's.
+# The title check's pattern is read from python-ci.yml with its types as the
+# one type revert; the guide's from guide-state.sh. Each title is read by
+# both, and they must agree.
+ci_yml="$root/.github/workflows/python-ci.yml"
+ci_pat="$(sed -nE 's/.*grep -qE "\^\(\$types\)(.*)"; then$/\1/p' "$ci_yml" | head -1)"
+guide_pat="$(sed -nE "s/^revert_type='(.*)'\$/\\1/p" "$root/scripts/guide-state.sh")"
+ci_revert() { [[ "$1" != 'Revert "'*'"' ]] || return 0; grep -qE "^(revert)$ci_pat" <<<"$1"; }
+# The guide's own is_revert, read from the script, its quoted form with it.
+eval "$(grep -E '^(revert_type=|is_revert\(\))' "$root/scripts/guide-state.sh")"
+guide_revert() { is_revert "$1"; }
+disagree=""
+if [ -n "$ci_pat" ] && [ -n "$guide_pat" ]; then
+  for t in 'revert: x' 'revert!: x' 'revert(api): x' 'revert(api)!: x' 'revert(a b,c/d.e_f-g)!: x' 'Revert "feat: x"' 'revert : x' 'reverts: x' 'revert:x' 'revert(): x' 'feat: revert x' 'revert!!: x'; do
+    a=no; b=no; ci_revert "$t" && a=yes; guide_revert "$t" && b=yes
+    [ "$a" = "$b" ] || disagree="$disagree [$t: ci $a, guide $b]"
+  done
+fi
+if [ -n "$ci_pat" ] && [ -n "$guide_pat" ] && [ -z "$disagree" ]; then ok "the guide's revert forms are ci / pr-title's, title by title"
+else bad "the revert forms disagree, or a pattern was not read (ci: ${ci_pat:-none}, guide: ${guide_pat:-none}):$disagree"; fi
 
 # The row and step 7 (#1079): the undo page named; the order undo, restore,
 # reproduce and fix, incident note; a secret revoked before any history
@@ -2226,6 +2390,22 @@ grep -q 'CLAUDE_PLUGIN_ROOT' <<<"$out" && bad "the printed table still carries \
   ok "the printed table names the plugin's own path, not the variable"
 printf '%s\n' "$out" > "$work/printed"
 "$names" "$arsenal" "$work/printed" >/dev/null && ok "what the script prints names only the table's commands" || bad "the script's output names something outside the table"
+
+# Every run's gh calls, held to the cap (#1180): the most of any one run.
+# GUIDE_RUNS_OUT, when set, keeps the counts for a reading after the run.
+[ -z "${GUIDE_RUNS_OUT:-}" ] || { mkdir -p "$GUIDE_RUNS_OUT" && cp "$runs" "$GUIDE_RUNS_OUT/runs.tsv" &&
+  for f in "$work"/out.*; do [ -e "$f" ] && sed "s|$work|WORK|g" "$f" > "$GUIDE_RUNS_OUT/${f##*/}"; done; }
+cap=11
+# over_cap <runs file>: each row above the cap, as "<calls> calls: fixture <name> <arguments>".
+over_cap() { awk -F '\t' -v c="$cap" '$1 > c { n = split($2, p, "/"); print $1 " calls: fixture " p[n] " " $3 }' "$1"; }
+printf '12\t%s/too-many\tmap\n9\t%s/fine\t\n' "$work" "$work" > "$work/runs-over"
+[ "$(over_cap "$work/runs-over")" = "12 calls: fixture too-many map" ] && ok "the cap check names a run over $cap calls, and only it" ||
+  bad "the cap check on a run over the cap: $(over_cap "$work/runs-over")"
+most="$(sort -t "$(printf '\t')" -k1,1nr "$runs" | head -1)"
+over="$(over_cap "$runs")"
+f="$(cut -f2 <<<"$most")"
+if [ -s "$runs" ] && [ -z "$over" ]; then ok "every run makes at most $cap gh calls: $(grep -c . "$runs") runs, the most $(cut -f1 <<<"$most") (fixture ${f##*/})"
+else bad "runs over $cap gh calls:"; sed 's/^/        /' <<<"$over" | head; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

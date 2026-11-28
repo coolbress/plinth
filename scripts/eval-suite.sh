@@ -205,10 +205,14 @@ done
 # Every pin the render needs, from the door; a missing one stops here.
 pin() { sed -nE "s/^$1=\"([^\"]+)\"$/\1/p" "$root/scripts/new-project.sh"; }
 template_repo="$(pin template_repo)" template_ref="$(pin template_ref)" template_sha="$(pin template_sha)"
-copier_version="$(pin copier_version)" copier_newer="$(pin copier_newer)"
-for v in template_repo template_ref template_sha copier_version copier_newer; do
+for v in template_repo template_ref template_sha; do
   [ -n "${!v}" ] || die "no $v in scripts/new-project.sh"
 done
+# copier and its dependencies from tools/copier, their one source (#1220).
+# shellcheck source=scripts/lib/copier-pin.sh
+. "$root/scripts/lib/copier-pin.sh"
+copier_version="$(copier_pin_version "$root")"
+[ -n "$copier_version" ] || die "no copier==<version> in tools/copier/pyproject.toml"
 
 # The folders a session's Claude Code reads rules from are its workspace's parents.
 # Walks the real path of the nearest folder that exists, since --out may not yet.
@@ -397,7 +401,7 @@ make_fixtures() {
   for a in "${needed[@]}"; do
     echo "== render $template_repo@$template_ref ($template_sha) as $a"
     r="$out/fixtures/render-$a"
-    env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+    copier_pinned "$root" env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" \
       copier copy --defaults --quiet \
       --data "project_name=probe" --data "license=MIT" --data "archetype=$a" \
       --vcs-ref "$template_sha" "gh:$template_repo" "$r" < /dev/null

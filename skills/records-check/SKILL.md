@@ -34,8 +34,9 @@ items per rule, the rules not checked for want of a convention, and the
 records not verified.
 
 - **Facts**, whatever the conventions say: `ref` (a `#N` or `owner/repo#N`
-  outside code that was deleted, 410, or is a 404 above the highest number
-  that repository has used), `home-path` (a home path in a body, by line and
+  naming this repository, outside code, that was deleted, 410, or is a 404
+  above the highest number it has used; another repository's `owner/repo#N`
+  is a `SKIP`, never requested, since a run reads one repository), `home-path` (a home path in a body, by line and
   form; it never prints what followed the prefix, and neither do you),
   `body-size` (a body at 90% or more of GitHub's 65,536 limit, in characters
   or UTF-8 bytes). Each `ref` `WARN` or `SKIP` line names the records the

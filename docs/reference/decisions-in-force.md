@@ -17,7 +17,8 @@ contradict an earlier decision; open the record before relying on a line.
 - **A decision not built yet** ends in `(decided; not built yet: #N)`, naming
   the open issue that builds it; part of it may have landed already. The
   marker comes off in the pull request that finishes building it, the one
-  that closes #N.
+  that closes #N. `scripts/make-release.sh` stops on a marker whose issue is
+  closed as completed (`scripts/stale-decision-markers.sh`, #1221).
 - **Recording a reversal.** Reversing a decision is allowed; the records must
   say it. The earlier record gets a dated line, `- YYYY-MM-DD: reversed by #N
   (<what now holds>).`, under its `## Decisions` (or its Outcome for a closed
@@ -34,7 +35,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - `/plinth:new-project` and `/plinth:template-update` keep `disable-model-invocation: true`, with no router skill that runs them on an ordinary request; the agent names the command for the person to type. 2026-10-15, #515
 - When the current folder already holds something, new-project's recommended option writes nothing there and creates no repository from it; publishing existing code is offered as printed commands. 2026-11-25, #1121
 - The door never overwrites an owner's shared issue or pull-request templates; changing them happens only on a maintainer's word, as a draft pull request. 2026-09-19, #88
-- Questions come host first (each host's readiness shown), then what the project is, then name and visibility; every answer stays a flag. 2026-11-24, #1067 (decided; not built yet: #1067)
+- Questions come host first (each host's readiness shown), then what the project is, then name and visibility; every answer stays a flag. 2026-11-24, #1067
 - Every answer is shown in one table before anything is created; only the rows picked are asked again. 2026-11-24, #1068 (decided; not built yet: #1068)
 - Choices that change the wall are offered: required ones asked, the rest behind one recommended-defaults question, tuning values not asked. 2026-11-02, #765
 - What a new project starts with turned off is told at the end and in the guide, not asked. 2026-11-02, #763
@@ -50,13 +51,13 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - The answer opens with the next step, then open items and what is done so far (at most five record titles, verbatim); fixed status words, no progress bar. 2026-11-24, #1076 (decided; not built yet: #1076)
 - A step's tools are shown in depth only before the first merge (`mode: full`); this partly reverses #908. 2026-11-24, #1076 (decided; not built yet: #1076)
 - `guide map` is one screen with one step in depth through `map <step>`, and off-by-default features have their own `features` view; this reverses #908 for `map`. 2026-11-24, #1087 (decided; not built yet: #1087)
-- After the first merge only the token step blocks; the uptime monitor and error tracker move after the first deploy. 2026-11-24, #1078 (decided; not built yet: #1078)
-- A release is the next step only when nothing else is open and a `feat:` has merged since the last tag; not for web. 2026-11-24, #1077 (decided; not built yet: #1077)
+- After the first merge only the token step blocks; the uptime monitor and error tracker move after the first deploy. 2026-11-24, #1078
+- A release is the next step only when nothing else is open and a `feat:` or `fix:` by a person has merged since the last tag; not for web or dashboard. 2026-11-24, #1077
 - The guide names floor-check at three moments (after the adopt pull request merges, after a plinth update, before a release); a red `ci / floor-check` is left to CI's own message, and no hook runs floor-check at session start. 2026-11-25, #1113 (decided; not built yet: #1113)
 - A term from the fixed term table is explained once, at first use in a session, with the English term kept in brackets. 2026-11-04, #809
 - The start-of-project lines on the agent's reach are guidance, not gates. 2026-10-06, #412
 - Paid services are never in the default set; error tracking, uptime and previews are listed with their free tiers. 2026-10-28, #702
-- The arsenal says not to use `/ship` in a plinth project until a trial shows it keeps the pull-request rules. 2026-11-24, #1085 (decided; not built yet: #1085)
+- The arsenal says not to use `/ship` or `/steward` in a plinth project: a trial found that `/ship`'s pull request skips the template and its review is same-session, and that their watch pushed an unreviewed fix that weakened a test. 2026-11-24, #1085; trial 2026-11-28, #1085
 - The arsenal's "Not used with plinth" line lists only a tool an agent reaches without installing anything (a built-in, or a skill plinth installs) whose use breaks a plinth rule, with its class and the rule; tools that need installing are not listed. 2026-11-26, #1086
 
 ## floor-check and records
@@ -69,7 +70,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - A default branch whose `ci` job no longer calls plinth's workflow is a FAIL, as an after-merge backstop. 2026-09-28, #325
 - Settings the Actions token cannot read are INFO in CI and counted as left to `/plinth:floor-check`, never turned back into SKIPs. 2026-10-08, #436
 - A production database URL within the agent's reach is a WARN. 2026-10-24, #648
-- Every check has a stable id and result state, with CI's output unchanged. 2026-11-25, #1103 (decided; not built yet: #1103)
+- Every check has a stable id and result state, with CI's output unchanged. 2026-11-25, #1103
 - The records check is absorbed into floor-check, and `/plinth:records-check` is removed in the merging release with no pointer skill. 2026-11-25, #1108 (decided; not built yet: #1108)
 - Records checks that need judgement (a reversal, a parent to close, no tags) are questions for the person, never failures; nothing is written before the person approves that record's drafted line, one record at a time. 2026-11-25, #1109 (decided; not built yet: #1109)
 - The adopt pull request adds new files only; an existing file the template also renders is left untouched and listed as kept in `.plinth-adoption.yml`. 2026-11-25, #1106 (decided; not built yet: #1106)
@@ -96,9 +97,9 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - A missing linter is a FAIL, not a skip; zizmor and actionlint keep exact pins. 2026-09-17, #170
 - zizmor runs with a token and blocks at medium and above, except known-vulnerable-actions, which reports. 2026-10-09, #442
 - A closing keyword outside the closing line fails `ci / docs`; the closing line is read by its position at the end. 2026-10-01, #293
-- On a private GitHub repository without Code Security, `ci / deps` compares with osv-scanner, under the same check name. 2026-11-24, #1073 (decided; not built yet: #1073)
+- On a private GitHub repository without Code Security, `ci / deps` compares with osv-scanner, under the same check name. 2026-11-24, #1073
 - Everything kept off stays off and every strict default stays on, until its reopen condition; #1144 re-read these defaults on 2026-11-25 and kept every one (its Hypothesis change is to a rule this list never held). 2026-11-24, #1074
-- `ci / diff-size` keeps its 400-line cap. Its basis is small, revertable changes whose description says one thing, not a defect-detection limit; to get under it, split the change rather than shorten docs, docstrings or tests. 2026-11-25, #1144 (decided; not built yet: #1100, coolbress/plinth-template#352)
+- `ci / diff-size` keeps its 400-line cap. Its basis is small, revertable changes whose description says one thing, not a defect-detection limit; to get under it, split the change rather than shorten docs, docstrings or tests. 2026-11-25, #1144
 - `mypy --strict` stays on for tests, until a type error in a test stops the #163 tester or `type: ignore` lines pile up in tests. 2026-11-25, #1144
 - Zero required approvals stays, until a separate agent account is the default (#605) or a second person joins (#1150). 2026-11-25, #1144
 - The self-reported fresh-context review is a convention, not a control: nothing checks that it ran, and the description's `Review:` line is what the person reads. 2026-11-25, #1144
@@ -145,10 +146,10 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Web adds only two check names, `ci / migrations` and `ci / deploy-check`. 2026-10-20, #606
 - New web projects start with their own user model. 2026-11-24, coolbress/plinth-template#332
 - The records' language is a copier answer; headings that tools parse, commit types and code stay English. 2026-11-24, coolbress/plinth-template#331
-- The extra Python version CI runs is 3.14. 2026-11-24, coolbress/plinth-template#333 (decided; not built yet: coolbress/plinth-template#333)
+- The extra Python version CI runs is 3.14. 2026-11-24, coolbress/plinth-template#333
 - The rendered `AGENTS.md` stays within 60 lines for every archetype. 2026-10-28, coolbress/plinth-template#134
-- The rendered `AGENTS.md` keeps under `## Always` only what a required check, the ruleset or a deny rule holds; a rule no machine holds whose break cannot be undone goes under `## Ask first`, the rest moves to the page that owns it, and the file stays within 8,192 bytes. 2026-11-25, coolbress/plinth-template#352 (decided; not built yet: coolbress/plinth-template#352)
-- Hypothesis is guidance in the testing section, scoped to parsers, serializers and round-trip code, not an `Always` rule for every pure function. 2026-11-25, #1144 (decided; not built yet: coolbress/plinth-template#352)
+- The rendered `AGENTS.md` keeps under `## Always` only what a required check, the ruleset or a deny rule holds; a rule no machine holds whose break cannot be undone goes under `## Ask first`, the rest moves to the page that owns it, and the file stays within 8,192 bytes. 2026-11-25, coolbress/plinth-template#352
+- Hypothesis is guidance in the testing section, scoped to parsers, serializers and round-trip code, not an `Always` rule for every pure function. 2026-11-25, #1144
 - The template ships one `verify` skill, with the clean-up step folded in, and no hook. 2026-10-12, #496
 - The beginner output style is on by default; a person can turn it off. 2026-10-15, #515
 - The agent gives one recommended option before any choice, and a decision report at a merge. 2026-10-15, #515
@@ -175,6 +176,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - Each acceptance criterion met is ticked; one left unticked is named in the Outcome. 2026-10-03, #294
 - Whoever merges a pull request that names an issue ticks the criteria it met, closed or not. 2026-10-11, #489
 - After a merge, `merge-when-green.sh` prints the named issues' unticked criteria and a missing ending. 2026-10-11, #490
+- `merge-when-green.sh` stops on what is already visible (an unanswered inline comment, a failed check on the head, a conflict) before `--update` and the checks wait, and names a job GitHub left hanging instead of re-running it. 2026-11-28, #1264
 - An issue title is one sentence; a template-only ticket is filed in plinth-template. 2026-10-31, #746
 - A defect is a bug whoever finds it. 2026-11-18, #957
 - Re-grades go into the one living scorecard, not new issues. 2026-10-28, #643

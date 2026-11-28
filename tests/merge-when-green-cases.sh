@@ -22,15 +22,20 @@ case "$1 $2" in
   "pr view")
     case "$*" in
       *"state,mergeCommit"*) out "$fx/after.json" ;;
+      *"--json mergeable "*) [ ! -f "$fx/mergeable_fail" ] || { echo "HTTP 502" >&2; exit 1; }; out "$fx/pr.json" ;;
       *) out "$fx/pr.json" ;;
     esac ;;
   "pr checks")
+    # checks_fail_once: the next read of the checks fails, the ones after it do not.
+    [ ! -f "$fx/checks_fail_once" ] || { rm "$fx/checks_fail_once"; echo "HTTP 502" >&2; exit 1; }
     case "$*" in
-      *--watch*) exit 0 ;;
       *)
         # checks_late: how many more reads see no checks yet on the new head.
         n="$(cat "$fx/checks_late" 2>/dev/null || echo 0)"
+        # pending_reads: how many more reads see pending.json before checks.json.
+        k="$(cat "$fx/pending_reads" 2>/dev/null || echo 0)"
         if [ "$n" -gt 0 ]; then echo $((n - 1)) >"$fx/checks_late"; echo '[]' >"$fx/none.json"; out "$fx/none.json"
+        elif [ "$k" -gt 0 ]; then echo $((k - 1)) >"$fx/pending_reads"; out "$fx/pending.json"
         else out "$fx/checks.json"; fi ;;
     esac ;;
   "pr merge")
@@ -77,11 +82,17 @@ case "$1 $2" in
       *"/actions/runs/"*"/jobs"*)
         [[ "$*" =~ runs/([0-9]+)/jobs ]]; f="$fx/jobs-${BASH_REMATCH[1]}.json"
         [ -f "$f" ] || f="$fx/no-jobs.json"; out "$f" ;;
+      *"/actions/runs/"[0-9]*" --jq .status")
+        # One Actions run's status, from $fx/run-<id>.json.
+        [[ "$*" =~ runs/([0-9]+) ]]; f="$fx/run-${BASH_REMATCH[1]}.json"
+        [ -f "$f" ] || { echo "HTTP 404" >&2; exit 1; }; out "$f" ;;
       *"/actions/runs -f head_sha="*)
         [[ "$*" =~ head_sha=([0-9a-z]+) ]]; f="$fx/runs-${BASH_REMATCH[1]}.json"
         [ -f "$f" ] || { echo "HTTP 502" >&2; exit 1; }; out "$f" ;;
       "api repos/o/r/pulls/7 --jq"*) out "$fx/pull.json" ;;
-      *"/pulls/"*"/comments"*) out "$fx/comments.json" ;;
+      *"/pulls/"*"/comments"*)
+        [ ! -f "$fx/comments_fail_once" ] || { rm "$fx/comments_fail_once"; echo "HTTP 502" >&2; exit 1; }
+        out "$fx/comments.json" ;;
       *"/pulls/"*"/reviews"*) [ -f "$fx/reviews.json" ] || exit 1; out "$fx/reviews.json" ;;
       *"/issues/"*"/comments"*) [ -f "$fx/icomments.json" ] || exit 1; out "$fx/icomments.json" ;;
       *"/activity"*) [ -f "$fx/activity.json" ] || exit 1; out "$fx/activity.json" ;;
@@ -117,7 +128,8 @@ pass=0; fail=0
 run() { # <merge|stop> <label> [script args...]
   local want="$1" label="$2"; shift 2
   local got rc
-  PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_ANALYZE_WAIT=0 MERGE_UPDATE_WAIT=0 bash "$script" 7 --repo o/r "$@" >"$FX/out" 2>&1; rc=$?
+  PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_ANALYZE_WAIT=0 MERGE_UPDATE_WAIT=0 MERGE_CHECKS_WAIT=0 MERGE_STALL_WAIT=0 \
+    bash "$script" 7 --repo o/r "$@" >"$FX/out" 2>&1; rc=$?
   if [ -f "$FX/merged" ]; then got=merge; else got=stop; fi
   # A merge exits 0; a stop exits non-zero and leaves no merge call behind.
   local ok=no
@@ -379,7 +391,7 @@ release_pr e2e-none; e2e_runs
 run stop "no e2e run on the head" $P
 says_cmd; check "and it prints the dispatch command for the release branch" $?
 grep -q 'head_sha='"$H" "$FX/calls"; check "and the runs were asked by head_sha" $?
-! grep -q 'pr checks' "$FX/calls"; check "and it stops before waiting on the checks" $?
+! grep -q 'pr checks 7 -R coolbress/plinth --json name,state,link --jq' "$FX/calls"; check "and it stops before waiting on the checks (the pre-check only reads them, #1264)" $?
 release_pr e2e-red; e2e_runs "failure $H"
 run stop "a red e2e run on the head" $P
 says_cmd; check "and it prints the dispatch command" $?
@@ -531,7 +543,8 @@ run stop "an author named dependabot without [bot]"
 dependabot dep-red
 printf '[{"name":"ci / install","state":"FAILURE"},{"name":"third-party / review","state":"SUCCESS"},{"name":"CodeQL","state":"NEUTRAL"}]' >"$FX/checks.json"
 run stop "Dependabot, CodeQL neutral and another check red"
-says_neutral "other checks are not green"; check "  and it lists both" $?
+grep -qF 'before updating or waiting: checks not green' "$FX/out" && grep -qxF "STOP: FAILURE"$'\t'"ci / install" "$FX/out" && ! grep -q 'CodeQL' "$FX/out"
+check "  the pre-check stops on the red one, and leaves the neutral CodeQL to the checks (#1264)" $?
 dependabot dep-unread; rm "$FX/runs-$H.json"
 run stop "Dependabot, CodeQL neutral, the head's runs cannot be read"
 grep -q "cannot read the Actions runs on $H" "$FX/out"; check "  and it says so" $?
@@ -582,7 +595,8 @@ grep -qE "^api -X PUT repos/o/r/pulls/7/update-branch -f expected_head_sha=$H\$"
 grep -q -- "--match-head-commit $H2" "$FX/merged"; upd "the merge pins the new head, not the one before the update" $?
 grep -qx "update: head is now $H2" "$FX/out"; upd "it says the new head" $?
 [ "$(grep -c '/compare/main\.\.\.' "$FX/calls")" = 2 ] && grep -q "compare/main\.\.\.$H2 " "$FX/calls"; upd "behind is read again on the new head, before the merge" $?
-[ "$(grep -n -m1 'update-branch' "$FX/calls" | cut -d: -f1)" -lt "$(grep -n -m1 '^pr checks .*--watch' "$FX/calls" | cut -d: -f1)" ] && s=0 || s=1
+w="$(grep -n '^pr checks 7 -R o/r --json name,state,link --jq' "$FX/calls" | tail -1 | cut -d: -f1)"
+[ -n "$w" ] && [ "$(grep -n -m1 'update-branch' "$FX/calls" | cut -d: -f1)" -lt "$w" ] && s=0 || s=1
 upd "the checks are waited for after the update" $s
 
 behind_pr upd-late 3 0; echo 1 >"$FX/checks_late_n"
@@ -630,6 +644,100 @@ PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round --update
 behind_pr upd-off 3 0
 run merge "behind, no --update: merged as before, on the head it read"
 ! grep -qE 'compare/|update-branch' "$FX/calls" && ! grep -qi 'behind\|^update' "$FX/out"; upd "  without --update: no new call and no new line" $?
+
+echo "-- what is already visible stops before --update and the wait (#1264)"
+pre() { # <label> <status>: one assertion
+  if [ "$2" = 0 ]; then pass=$((pass+1)); echo "  PASS  pre   $1"; else fail=$((fail+1)); echo "  FAIL  pre   $1"; sed 's/^/        /' "$FX/out"; fi
+}
+untouched() { # nothing updated and no wait for the checks
+  ! grep -q 'update-branch' "$FX/calls" && ! grep -q '^pr checks 7 -R o/r --json name,state,link --jq' "$FX/calls"
+}
+behind_pr pre-comment 3 0
+printf '[{"id":1,"in_reply_to_id":null,"path":"a.sh","line":3,"body":"P2 x"}]' >"$FX/comments.json"
+run stop "behind, --update, an inline comment with no reply: stops" --update
+untouched && grep -qF 'before updating or waiting: inline comments with no reply' "$FX/out" && grep -qF 'a.sh:3' "$FX/out"
+pre "  before the update and the wait, naming the comment" $?
+
+behind_pr pre-red 3 0
+printf '[{"name":"ci / install","state":"FAILURE"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks.json"
+run stop "behind, --update, a check red on the head: stops" --update
+untouched && grep -qxF "STOP: FAILURE"$'\t'"ci / install" "$FX/out"; pre "  before the update and the wait, naming the check" $?
+
+behind_pr pre-cancelled 3 0
+printf '[{"name":"ci / install","state":"CANCELLED"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks.json"
+run stop "a check cancelled on the head: stops before the update" --update
+untouched; pre "  nothing updated" $?
+
+behind_pr pre-latepass 3 0
+printf '[{"name":"ci / install","state":"FAILURE","startedAt":"2026-10-01T10:00:00Z"},{"name":"ci / install","state":"SUCCESS","startedAt":"2026-10-01T10:30:00Z"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks.json"
+run merge "a check that failed and then passed on a later run: no stop, updated and merged" --update
+
+behind_pr pre-pending 3 0
+printf '[{"name":"ci / install","state":"IN_PROGRESS"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/checks.json"; printf '%s' "$green" >"$FX/checks-new.json"
+run merge "a check still running on the old head is not a stop: updated, and merged once green" --update
+
+behind_pr pre-conflict 3 0
+jq '.mergeable = "CONFLICTING"' "$FX/pr.json" >"$FX/p" && mv "$FX/p" "$FX/pr.json"
+run stop "a merge conflict with the base: stops" --update
+untouched && grep -qF 'has a merge conflict with its base branch' "$FX/out"; pre "  before the update and the wait, saying so" $?
+
+behind_pr pre-unknown 3 0
+jq '.mergeable = "UNKNOWN"' "$FX/pr.json" >"$FX/p" && mv "$FX/p" "$FX/pr.json"
+run merge "mergeable UNKNOWN: no stop" --update
+
+for r in comments checks mergeable; do
+  behind_pr "pre-unread-$r" 3 0
+  case "$r" in comments) touch "$FX/comments_fail_once" ;; checks) touch "$FX/checks_fail_once" ;; mergeable) touch "$FX/mergeable_fail" ;; esac
+  run merge "the pre-check cannot read the $r: no stop, it goes on as before" --update
+  case "$r" in
+    comments) read_pat='^api --paginate repos/o/r/pulls/7/comments'; used="$FX/comments_fail_once" ;;
+    checks) read_pat='^pr checks 7 -R o/r --json name,state,startedAt,completedAt'; used="$FX/checks_fail_once" ;;
+    mergeable) read_pat='^pr view 7 -R o/r --json mergeable'; used="" ;;
+  esac
+  first="$(grep -n -m1 "$read_pat" "$FX/calls" | cut -d: -f1)"; upd_at="$(grep -n -m1 'update-branch' "$FX/calls" | cut -d: -f1)"
+  [ -n "$first" ] && [ -n "$upd_at" ] && [ "$first" -lt "$upd_at" ] && { [ -z "$used" ] || [ ! -f "$used" ]; }
+  pre "  the failed read was the pre-check's, before the update, and the branch is still updated" $?
+done
+
+setup pre-round
+printf '[{"id":1,"in_reply_to_id":null,"path":"a.sh","line":3,"body":"P2 x"}]' >"$FX/comments.json"
+jq '.mergeable = "CONFLICTING"' "$FX/pr.json" >"$FX/p" && mv "$FX/p" "$FX/pr.json"
+PATH="$work/bin:$PATH" MERGE_POLL=0 bash "$script" 7 --repo o/r --round >"$FX/out" 2>&1; rc=$?
+[ "$rc" = 0 ] && ! grep -q 'before updating' "$FX/out" && ! grep -q 'json mergeable' "$FX/calls"
+pre "--round: no pre-check, exit 0 as before" $?
+
+echo "-- the checks wait has a bound, and names a job GitHub left hanging (#1264)"
+hung='[{"name":"ci / install","state":"IN_PROGRESS","link":"https://github.com/o/r/actions/runs/55/job/66"},{"name":"third-party / review","state":"SUCCESS"}]'
+setup stall; printf '%s' "$hung" >"$FX/checks.json"; printf '{"status":"completed"}' >"$FX/run-55.json"
+run stop "a pending job whose run has completed: stops"
+grep -qF 'ci / install (job 66) is still in progress, though its run 55 has completed' "$FX/out" \
+  && grep -qxF 'STOP:   gh run rerun 55 --job 66 --repo o/r' "$FX/out"; pre "  it names the job and the run, and prints the re-run command" $?
+! grep -qE '/rerun|run rerun' "$FX/calls"; pre "  and re-runs nothing" $?
+
+setup stall-young; printf '%s' "$hung" >"$FX/checks.json"; printf '{"status":"completed"}' >"$FX/run-55.json"
+PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_CHECKS_WAIT=0 MERGE_STALL_WAIT=600 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
+[ "$rc" = 1 ] && [ ! -f "$FX/merged" ] && ! grep -q 'run rerun' "$FX/out" && grep -qF 'still pending after 0 minute(s)' "$FX/out"
+pre "a completed run seen for less than MERGE_STALL_WAIT: not a stall yet; the overall bound stops it as not green" $?
+
+setup stall-carry; printf '%s' "$hung" >"$FX/checks.json"; printf '{"status":"completed"}' >"$FX/run-55.json"
+PATH="$work/bin:$PATH" MERGE_POLL=1 MERGE_CHECKS_WAIT=30 MERGE_STALL_WAIT=2 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
+[ "$rc" = 1 ] && grep -qxF 'STOP:   gh run rerun 55 --job 66 --repo o/r' "$FX/out" && ! grep -q 'still pending after' "$FX/out" \
+  && [ "$(grep -c '^api repos/o/r/actions/runs/55 --jq .status' "$FX/calls")" -ge 2 ]
+pre "a stall seen over several polls: its first sighting is kept, and it stops once MERGE_STALL_WAIT has passed" $?
+
+setup wait-green; printf '[{"name":"ci / install","state":"IN_PROGRESS"},{"name":"third-party / review","state":"SUCCESS"}]' >"$FX/pending.json"; echo 4 >"$FX/pending_reads"
+PATH="$work/bin:$PATH" MERGE_POLL=0 MERGE_ANALYZE_WAIT=0 MERGE_CHECKS_WAIT=30 bash "$script" 7 --repo o/r >"$FX/out" 2>&1; rc=$?
+[ "$rc" = 0 ] && [ -f "$FX/merged" ] && [ "$(grep -c '^pr checks 7 -R o/r --json name,state,link --jq' "$FX/calls")" -ge 3 ]
+pre "a check pending for a few polls, then green: waited for, read again, merged" $?
+
+setup stall-running; printf '%s' "$hung" >"$FX/checks.json"; printf '{"status":"in_progress"}' >"$FX/run-55.json"
+run stop "a pending job whose run is still in progress: not a stall, the bound stops it"
+! grep -q 'run rerun' "$FX/out" && grep -qF 'still pending after' "$FX/out" && grep -qF 'checks not green' "$FX/out"
+pre "  it says what is still pending, and not green" $?
+
+setup stall-unread; printf '%s' "$hung" >"$FX/checks.json"
+run stop "the run cannot be read: not a stall, the bound stops it"
+! grep -q 'run rerun' "$FX/out"; pre "  and no re-run line" $?
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
