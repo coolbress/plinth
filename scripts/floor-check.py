@@ -139,6 +139,7 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import datetime
 import fnmatch
 import importlib
 import ipaddress
@@ -896,11 +897,15 @@ def _wall() -> tuple[dict, ...]:
                                   "a login that administers the repository",
                         "unread": "private vulnerability reporting not verified (GitHub gave no answer this checker "
                                   "reads; a login with repository administration reads it)"}),
-        check("FC-E12", "rules govern the default branch", states=("fail", "unknown"), handoff="admin",
+        check("FC-E12", "rules govern the default branch", states=("fail", "unknown", "info"), handoff="admin",
               docs=WALL_DOCS, hosts=gh, needs=net, baseline=("OSPS-AC-03.01",), not_keepable=WALL_IS_THE_RULES,
               fix="apply the door's ruleset to the default branch",
               messages={"unread": "could not read the rules of {branch} (API error)",
-                        "none": "no rules govern {branch}: the wall is down"}),
+                        "none": "no rules govern {branch}: the wall is down",
+                        # .plinth-adoption.yml's wall_due (#1112): the adopt order puts the
+                        # ruleset after the first green run on the default branch.
+                        "later": "the wall: later, after the first green run on {branch} (until {due}, "
+                                 ".plinth-adoption.yml's wall_due)"}),
         *(check(cid, f"the default branch has a {t} rule", states=TWO_WAY, handoff="admin", docs=WALL_DOCS,
                 hosts=gh, needs=net, baseline=rule_baseline.get(t, ()), not_keepable=WALL_IS_THE_RULES,
                 fix=f"add the {t} rule of the door's ruleset to the default branch",
@@ -1132,6 +1137,7 @@ def _wall() -> tuple[dict, ...]:
 
 
 DRIFT_DOCS = f"{DOCS}#template-drift"
+ADOPTION_DOCS = f"{DOCS}#the-adoption-record"
 
 
 # The answers that rely on a file in the owner's .github repository, one
@@ -1225,6 +1231,17 @@ def _plinth() -> tuple[dict, ...]:
                         "bad": "{line}",
                         "one": "  set every {repo} uses: to the one commit the ci job should call",
                         "fix": "  {line}   (moves it to the SHA the ci job calls)"}),
+        check("FC-F09", "the adoption record is read", states=("info", "fail"), handoff="person", docs=ADOPTION_DOCS,
+              not_keepable="an adoption record that keeps itself could keep anything it names, unread",
+              fix="write .plinth-adoption.yml in the form the reference describes, or take the entry out",
+              messages={"read": "{file} read: step {step}, {kept} kept by choice{due}",
+                        "capped": "{file}: wall_due {due} is more than {days} days after started {started}; read as "
+                                  "{cap}",
+                        "unreadable": "{file} cannot be read ({why}): nothing in it is applied",
+                        "invalid": "{file} is not valid: {why}; nothing in it is applied",
+                        "unknown_id": "{file} keeps {id}, which names no check: that entry is not applied",
+                        "not_keepable": "{file} keeps {id}, which cannot be kept ({why}): it is reported as found",
+                        "expired": "{file} kept {id} until {until}, which has passed: it is reported as found"}),
         check("FC-F07", "the recorded host is one this checker reads", states=("unknown",), handoff="person",
               docs=GITLAB_DOCS, fix="pass --host github or --host gitlab",
               messages={"other": ".copier-answers.yml says host: {host}, which this checker does not read; read as "
@@ -1416,7 +1433,13 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
     assert (state == "unknown") == (reason is not None), (cid, state, reason)
     assert (state == "review") == (reader is not None), (cid, state, reader)
     msg = e["messages"][msg_key].format(**(values or {}))
-    r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader, "key": msg_key}
+    k = kept.get(cid) if state in ("fail", "warn") else None
+    # A finding the adoption record keeps (#1112) is said, as an INFO, and not counted.
+    if k is not None:
+        msg = f"kept by choice ({k['reason']}): {msg}"
+    r = {"id": cid, "state": "info" if k else state, "msg": msg, "reason": reason, "reader": reader, "key": msg_key,
+         "kept": None if k is None else {"reason": k["reason"], "why": k["why"], "path": k["path"],
+                                         "until": k.get("until"), "was": state}}
     results.append(r)
     verdicts.extend(verdict_lines(r))
     line = render_text(r)
@@ -1424,7 +1447,7 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
         print(line)
     if TRACE:
         with open(TRACE, "a", encoding="utf-8") as t:
-            t.write(f"{cid} {state}\t{line.splitlines()[0]}\n")
+            t.write(f"{cid} {'kept' if k else state}\t{line.splitlines()[0]}\n")
 
 
 def verdict(cid: str, cond: bool, values: dict | None = None, bad: str = "fail") -> bool:
@@ -1502,7 +1525,7 @@ def run_record(rs: list[dict], run: dict | None = None, crashed: dict | None = N
         results.append({"id": r["id"], "state": r["state"], "shown": SHOWN[r["state"]], "message": r["msg"],
                         "reason": r["reason"], "cannot_be_read_here": r["reason"] == HERE, "reader": r["reader"],
                         "key": r["key"], "area": AREAS[e["area"]], "name": e["name"], "handoff": e["handoff"],
-                        "fix": e["fix"], "keepable": e["keepable"],
+                        "fix": e["fix"], "keepable": e["keepable"], "kept": r["kept"],
                         "lifecycle": e["lifecycle"], "view": e["view"], "ci_visible": e["ci_visible"]})
     return {"schema": SCHEMA_ID, **(run or {}), "results": results,
             "not_evaluated": [{"id": i, "name": e["name"], "area": AREAS[e["area"]]}
@@ -2736,6 +2759,219 @@ def copier_answers(root: Path) -> dict[str, str] | None:
         if m:
             out[m.group(1)] = m.group(2).strip().strip("'\"")
     return out
+
+
+# --- The adoption record (#1112) ----------------------------------------------
+ADOPTION_FILE = ".plinth-adoption.yml"
+ADOPTION_STEPS = ("files", "ci", "wall", "done")
+KEEP_REASONS = ("not-applicable", "deliberately-different", "later")
+ADOPTION_TOP = ("schema", "plinth", "origin", "archetype", "started", "step", "wall_due", "kept")
+ADOPTION_REQUIRED = ("schema", "plinth", "origin", "archetype", "started", "step")
+KEPT_KEYS = ("id", "path", "reason", "why", "until")
+KEPT_REQUIRED = ("id", "path", "reason", "why")
+WALL_DUE_DAYS = 30   # a starting value, chosen without evidence (#1112's Decisions)
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+adoption: dict | None = None   # the record as read, when it is valid
+kept: dict[str, dict] = {}     # id -> its kept entry, the ones applied
+
+
+def today() -> datetime.date:
+    """The date the record's dates are compared with: UTC, or FLOOR_CHECK_TODAY (the tests)."""
+    given = os.environ.get("FLOOR_CHECK_TODAY")
+    return datetime.date.fromisoformat(given) if given else datetime.datetime.now(datetime.timezone.utc).date()
+
+
+# A quoted value, then nothing or a ` #` comment: the comment is taken off
+# outside the quotes, so a `#` inside them stays in the value.
+SINGLE_QUOTED = re.compile(r"'((?:[^']|'')*)'(?:\s+#.*)?")
+DOUBLE_QUOTED = re.compile(r'("(?:[^"\\]|\\.)*")(?:\s+#.*)?')
+
+
+def yaml_scalar(text: str, n: int) -> str:
+    """One value of the record's form, on line `n`: quoted ('…' or "…"), with
+    or without a ` #` comment after the closing quote, or plain up to a ` #`
+    comment. A quote that does not close, or anything but a comment after
+    it, is a ValueError naming the line, never a value with its quotes."""
+    t = text.strip()
+    if t[:1] == "'":
+        m = SINGLE_QUOTED.fullmatch(t)
+        if m:
+            return m.group(1).replace("''", "'")
+    elif t[:1] == '"':
+        m = DOUBLE_QUOTED.fullmatch(t)
+        if m:
+            return json.loads(m.group(1))
+    else:
+        # A comment is a `#` at the start or after a space: `key: # note` is empty.
+        return re.sub(r"(?:^|\s+)#.*$", "", t)
+    raise ValueError(f"line {n}: a quoted value with more than a comment after it, or not closed: {t}")
+
+
+def read_adoption(text: str) -> dict:
+    """.plinth-adoption.yml in the form the adopt pull request writes: top-level
+    `key: value` lines, and `kept:` as a list of `- key: value` mappings (or
+    `kept: []`). Not a YAML parser (standard library only): any other line is
+    a ValueError naming it, never a guess."""
+    out: dict = {}
+    item: dict | None = None
+    in_kept = False
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        top = re.match(r"^([a-z_]+):(?:\s+(.*))?$", line)
+        if top:
+            key, value = top.group(1), (top.group(2) or "").strip()
+            if key in out:
+                raise ValueError(f"line {n}: {key} given twice")
+            # The list's header is read with its comment off: `kept: # why`
+            # opens the list, `kept: [] # none` is the empty one.
+            head = yaml_scalar(value, n) if key == "kept" and not value.startswith(("'", '"')) else value
+            in_kept = key == "kept" and head in ("", "[]")
+            out[key] = [] if in_kept else yaml_scalar(value, n)
+            if in_kept and head == "[]":
+                in_kept = False
+            item = None
+            continue
+        entry = re.match(r"^  (- |  )([a-z_]+):(?:\s+(.*))?$", line)
+        if in_kept and entry and (entry.group(1) == "- " or item is not None):
+            if entry.group(1) == "- ":
+                item = {}
+                out["kept"].append(item)
+            assert item is not None
+            if entry.group(2) in item:
+                raise ValueError(f"line {n}: {entry.group(2)} given twice in one kept entry")
+            item[entry.group(2)] = yaml_scalar(entry.group(3) or "", n)
+            continue
+        raise ValueError(f"line {n} is not in the form this checker reads")
+    return out
+
+
+def adoption_errors(d: dict) -> list[str]:
+    """What makes the record invalid, in the shape of scripts/plinth-adoption.schema.json."""
+    errs = [f"unknown field {k}" for k in d if k not in ADOPTION_TOP]
+    errs += [f"no {k}" for k in ADOPTION_REQUIRED if k not in d]
+    if "schema" in d and d["schema"] != "1":
+        errs.append(f"schema {d['schema']} is not 1")
+    if "plinth" in d and not re.fullmatch(r"v\d+\.\d+\.\d+", str(d["plinth"])):
+        errs.append(f"plinth {d['plinth']} is not a release tag")
+    if "origin" in d and not (d["origin"] == "none" or re.fullmatch(r"other-template:\S+", str(d["origin"]))):
+        errs.append(f"origin {d['origin']} is neither none nor other-template:<source>")
+    if "archetype" in d and not re.fullmatch(r"[a-z][a-z-]*", str(d["archetype"])):
+        errs.append(f"archetype {d['archetype']} is not an archetype name")
+    if "step" in d and d["step"] not in ADOPTION_STEPS:
+        errs.append(f"step {d['step']} is not one of {', '.join(ADOPTION_STEPS)}")
+    for k in ("started", "wall_due"):
+        if k in d and not valid_date(d[k]):
+            errs.append(f"{k} {d[k] or '(empty)'} is not a date (YYYY-MM-DD)")
+    if not isinstance(d.get("kept", []), list):
+        errs.append("kept is not a list")
+        return errs
+    for i, e in enumerate(d.get("kept", []), 1):
+        errs += [f"kept entry {i}: unknown field {k}" for k in e if k not in KEPT_KEYS]
+        errs += [f"kept entry {i}: no {k}" for k in KEPT_REQUIRED if not e.get(k)]
+        if e.get("id") and not re.fullmatch(r"FC-[A-Z]\d\d", e["id"]):
+            errs.append(f"kept entry {i}: id {e['id']} is not a check id")
+        if e.get("reason") and e["reason"] not in KEEP_REASONS:
+            errs.append(f"kept entry {i}: reason {e['reason']} is not one of {', '.join(KEEP_REASONS)}")
+        if e.get("reason") == "later" and "until" not in e:
+            errs.append(f"kept entry {i}: reason later with no until")
+        if "until" in e and not valid_date(e["until"]):
+            errs.append(f"kept entry {i}: until {e['until'] or '(empty)'} is not a date (YYYY-MM-DD)")
+    return errs
+
+
+def valid_date(v: object) -> bool:
+    if not isinstance(v, str) or not DATE.match(v):
+        return False
+    try:
+        datetime.date.fromisoformat(v)
+    except ValueError:
+        return False
+    return True
+
+
+def adoption_json(d: dict) -> dict:
+    """The record as the schema types it: schema an integer, the rest strings."""
+    return {**d, "schema": 1} if d.get("schema") == "1" else d
+
+
+def wall_due(d: dict) -> datetime.date | None:
+    """The record's wall_due, at most WALL_DUE_DAYS after started; None without one."""
+    if "wall_due" not in d:
+        return None
+    due, started = datetime.date.fromisoformat(d["wall_due"]), datetime.date.fromisoformat(d["started"])
+    return min(due, started + datetime.timedelta(days=WALL_DUE_DAYS))
+
+
+def wall_later() -> str | None:
+    """The date the wall is due by, when the record holds it off today (#1112):
+    a valid record not at step done, on or before its (capped) wall_due.
+    check_wall asks only when the default branch has no rules: wall_due has
+    no effect on a repository that has a ruleset."""
+    if adoption is None or adoption["step"] == "done":
+        return None
+    due = wall_due(adoption)
+    return due.isoformat() if due is not None and today() <= due else None
+
+
+def check_adoption(root: Path) -> None:
+    """Reads .plinth-adoption.yml at the repository root (#1112). With no file
+    nothing is printed and nothing changes. A file that cannot be read or is
+    not valid is a FAIL naming it, and nothing in it applies. Each kept entry
+    applies unless it names no check, its check cannot be kept, or its
+    `until` has passed: then a FAIL says so and the finding stands. A `later`
+    entry with no `until` makes the file invalid, as the schema says."""
+    global adoption
+    p = root / ADOPTION_FILE
+    if not p.exists() and not p.is_symlink():
+        return
+    f = ADOPTION_FILE
+    try:
+        d = read_adoption(p.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as exc:
+        emit("FC-F09", "fail", "unreadable", {"file": f, "why": type(exc).__name__})
+        return
+    except (ValueError, json.JSONDecodeError) as exc:
+        emit("FC-F09", "fail", "invalid", {"file": f, "why": str(exc)})
+        return
+    errs = adoption_errors(d)
+    # The 30 days count from started: a started after today would move the
+    # cap as far as it is written, so it makes the record invalid.
+    if not errs and datetime.date.fromisoformat(d["started"]) > today():
+        errs.append(f"started {d['started']} is after today ({today().isoformat()})")
+    if errs:
+        emit("FC-F09", "fail", "invalid", {"file": f, "why": "; ".join(errs)})
+        return
+    adoption = d
+    aliases = {a: i for i, e in REGISTRY.items() for a in e["aliases"]}
+    now = today()
+    for e in d.get("kept", []):
+        cid = aliases.get(e["id"], e["id"])
+        if cid not in REGISTRY:
+            emit("FC-F09", "fail", "unknown_id", {"file": f, "id": e["id"]})
+        elif not REGISTRY[cid]["keepable"]:
+            emit("FC-F09", "fail", "not_keepable", {"file": f, "id": cid, "why": REGISTRY[cid]["not_keepable"]})
+        elif "until" in e and datetime.date.fromisoformat(e["until"]) < now:
+            emit("FC-F09", "fail", "expired", {"file": f, "id": cid, "until": e["until"]})
+        else:
+            kept[cid] = e
+    due = wall_due(d)
+    if due is not None and due.isoformat() != d["wall_due"]:
+        emit("FC-F09", "info", "capped", {"file": f, "due": d["wall_due"], "days": WALL_DUE_DAYS,
+                                          "started": d["started"], "cap": due.isoformat()})
+    emit("FC-F09", "info", "read", {"file": f, "step": d["step"], "kept": len(kept),
+                                    "due": f"; the wall due by {due.isoformat()}" if due and d["step"] != "done" else ""})
+
+
+def print_adoption(root: Path) -> int:
+    """--print-adoption: the record as the schema reads it, or why it is not read."""
+    try:
+        d = read_adoption((root / ADOPTION_FILE).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        print(f"{ADOPTION_FILE} not read: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(adoption_json(d), indent=2, ensure_ascii=False))
+    return 0
 
 
 def resolve_plinth_pin(root: Path) -> tuple[str | None, str | None]:
@@ -5351,7 +5587,11 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             check_merge_setup(branch, meta, "unread", actions_token)
         return
     if rules is ABSENT or not rules:
-        emit("FC-E12", "fail", "none", {"branch": branch})
+        due = wall_later()
+        if due:
+            emit("FC-E12", "info", "later", {"branch": branch, "due": due})
+        else:
+            emit("FC-E12", "fail", "none", {"branch": branch})
         if merge is not None:
             check_merge_setup(branch, meta, "no rules", actions_token)
         return
@@ -6264,6 +6504,9 @@ def main() -> int:
                          "gh accounts, git helpers, ~/.netrc; and a production database URL in the environment, "
                          ".env* files or the env of .claude/settings*.json")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--print-adoption", action="store_true",
+                    help="print .plinth-adoption.yml as JSON, in the shape of scripts/plinth-adoption.schema.json, and "
+                         "exit 0 (1, with the reason, when it is not read) (#1112)")
     ap.add_argument("--print-diff-size", action="store_true",
                     help="print what ci / diff-size counts against here, from the ci job's with: or plinth's defaults, "
                          "as max=, exclude= and root= lines, and exit 0 (1, with the reason, when not read) (#795)")
@@ -6324,6 +6567,8 @@ def main() -> int:
     root = Path(a.root).resolve()
     if a.move_archetype is not None and not a.print_update_command:
         ap.error("--move-archetype needs --print-update-command")
+    if a.print_adoption:
+        return print_adoption(root)
     if a.print_plinth_pins:
         return print_plinth_pins(root)
     if a.print_plinth_comments:
@@ -6364,6 +6609,7 @@ def main() -> int:
     if out_format == "text":
         print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
               + (" host=gitlab" if host == "gitlab" else ""))
+    check_adoption(root)
     javascript = host == "github" and javascript_project(project, root)
     if javascript:
         emit("FC-C04", "info", "info")
