@@ -40,7 +40,7 @@ page2 = [
     issue(7, [f"l{i}" for i in range(20)], "no ending\n", total=25),
     issue(8, ["task"], "See #2, `#9999` and x/y#3.\n\n```\n#8888 /Users/carol/in-a-fence\n```\n"
                        "Ran in /Users/alice/work and /home/runner/work and /home/ubuntu/x and /Users/<you>/x, on github.com/home/page.\n"
-                       "Also v1.2/x#3, #500, #9, #10, #15, x/y#4, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n"
+                       "Also v1.2/x#3, #500, #9, #10, #15, x/y#4, x/y#5, x/y#6, x/y#7, x/y#8, gone/repo#1, color &#39; and [link](https://github.com/o/r/pull/77#issuecomment-1).\n"
                        "GitHub staff say so in [community discussion #121836](https://github.com/orgs/community/discussions/121836).\n"
                        # Four spaces after a blank line is an indented code block; in a list, the item's next paragraph.
                        "\nExample:\n\n    See #66666\n\n- a list item\n\n    whose second paragraph names #600\n",
@@ -146,9 +146,8 @@ hasnt "a discussion number resolves" "#10 "
 hasnt "#N in inline code is not a reference" "9999"
 hasnt "#N in a code fence is not a reference" "8888"
 # One repository per run (#1119): another repository's numbers are not requested.
-has "another repository's owner/repo#N is a SKIP, not requested" "SKIP  x/y#3 not verified: another repository, which this run does not read, referenced in $U/issues/8"
-has "each of its numbers is named" "SKIP  x/y#4 not verified: another repository"
-has "a repository that may not exist is not requested either" "SKIP  gone/repo#1 not verified: another repository"
+has "another repository's references are one SKIP for it, not requested" "SKIP  x/y: 6 references not verified (#3, #4, #5, #6, #7 and 1 more): another repository, which this run does not read, referenced in $U/issues/8"
+has "a repository that may not exist is not requested either" "SKIP  gone/repo: 1 reference not verified (#1): another repository"
 hasnt "nothing is judged about another repository's numbers" "ref: x/y"
 hasnt "a path whose first part cannot be an owner is not a reference" "v1.2/x"
 has "a number not found at or below the repository's highest number is a SKIP" "SKIP  #15 not verified: status 404 at or below the highest number, 23, referenced in $U/issues/8"
@@ -170,7 +169,7 @@ has "a merged pull request with no trailer is an INFO, not a violation" "INFO  t
 hasnt "a closed unmerged pull request is not judged" "pull/23"
 has "unticked criteria are for a person to read, with the file" "INFO  for a person to read: 1 completed issues leave acceptance criteria unticked (heading from .github/ISSUE_TEMPLATE/task.yml)"
 has "the unticked criterion's line is listed; [X] is ticked" "INFO    $U/issues/3 line 8"
-has "the last line counts per rule and not verified" "-- ref 3, home-path 2, body-size 2, ending 3, trailer 1; for a person to read: criteria 1; 0 rules not checked; 5 not verified"
+has "the last line counts per rule and not verified" "-- ref 3, home-path 2, body-size 2, ending 3, trailer 1; for a person to read: criteria 1; 0 rules not checked; 4 not verified"
 hasnt "nothing says missing" "missing"
 
 # ---- Another ending heading: judged against it, not against plinth's.
@@ -185,7 +184,7 @@ has "the same issues with no convention files: not checked" "SKIP  ending: not c
 has "no criteria heading read: not checked" "SKIP  criteria: not checked: convention not read"
 hasnt "nothing says missing without conventions" "missing"
 hasnt "no convention item is judged without conventions" "closed completed with no ending"
-has "rules not checked are counted apart from records not verified" "; 3 rules not checked; 4 not verified"
+has "rules not checked are counted apart from records not verified" "; 3 rules not checked; 3 not verified"
 has "the facts are judged without conventions" "ref: #500 resolves to nothing"
 
 # ---- The owner's shared issue forms, when the repository has none of its own.
@@ -217,7 +216,7 @@ run --root "$plinthlike"
 [ "$rc" = 0 ] && ok "a page with one record's error still runs to the end" || bad "partial page: exit $rc: $out"
 has "the four records read are counted" "o/r: 12 issues and 4 pull requests read"
 has "the record with an error is a SKIP, named" "SKIP  pull request record 5 on page 1 not verified: GitHub answered an error for it (Something went wrong.)"
-has "and counted as not verified" "; 0 rules not checked; 6 not verified"
+has "and counted as not verified" "; 0 rules not checked; 5 not verified"
 cp "$api/pulls-whole.json" "$api/graphql/pulls-1.json"
 run --root "$plinthlike"
 [ "$rc" = 2 ] && grep -q "could not run: the pulls of o/r could not be read (page 1: Something went wrong.)" <<<"$out" \

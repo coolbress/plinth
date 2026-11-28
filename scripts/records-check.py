@@ -36,8 +36,8 @@ with URLs and line numbers, never judged.
 A GitLab checkout (--host gitlab, or `host: gitlab` in .copier-answers.yml)
 prints `GitLab: not read` and judges nothing.
 
-One repository per run (#1119): every request goes through `gh()`'s guard,
-which allows the audited repository and its owner's `.github` and stops the
+One repository per run (#1119): every request, through `gh` or the urllib
+fallback, is guarded first by `guard()`, which allows the audited repository and its owner's `.github` and stops the
 run (exit 2) on any other.
 
 Standard library only. RECORDS_CHECK_API_DIR serves fixtures: a REST path
@@ -575,9 +575,11 @@ def resolve(own: str, refs_by_repo: dict[str, dict[int, list[str]]], known: set[
         if repo.lower() != own.lower():
             # One repository per run (#1119): another repository's numbers are
             # not requested, so no reference planted in a record aims a read.
-            for x in nums:
-                line("SKIP", f"{repo}#{x} not verified: another repository, which this run does not read, "
-                             f"referenced in {where_read(refs_by_repo[repo][x])}")
+            # One line for the repository, not one per number.
+            urls = list(dict.fromkeys(u for x in nums for u in refs_by_repo[repo][x]))
+            shown = ", ".join(f"#{x}" for x in nums[:5]) + (f" and {len(nums) - 5} more" if len(nums) > 5 else "")
+            line("SKIP", f"{repo}: {len(nums)} reference{'s' if len(nums) != 1 else ''} not verified ({shown}): "
+                         f"another repository, which this run does not read, referenced in {where_read(urls)}")
             continue
         o, n = repo.split("/", 1)
         seen = refs_by_repo[repo]
