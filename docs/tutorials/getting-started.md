@@ -23,7 +23,7 @@ own, run from a terminal. Some projects fit another kind of tool better
   free, deployed from a GitHub repository.
 - A mobile or desktop app: outside plinth's scope.
 
-What plinth gives that those do not: checks on a GitHub repository you own,
+What plinth gives that those do not: checks on a repository you own,
 template updates through copier, a project you can leave with everything in
 it, and a record of what was decided.
 
