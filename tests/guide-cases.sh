@@ -1197,23 +1197,39 @@ out="$(MOCK_DIR="$d" "$work/plugin/scripts/guide-state.sh" "$d" 2>&1)"; rc=$?
   ok "a row missing from the arsenal's table: exit 1, named" || bad "missing row: exit $rc: $out"
 
 # The reasons (#834): copied from the table and the list, never the script's.
-# The moments' are on every path, a repository being read or not.
+# The moments' are on every path, a repository being read or not. Said once,
+# then faded (#1147): the row's whole tool cell (its class left out) while
+# fewer than three pull requests by a person have merged, or nothing was
+# read; the single clause from the reason's words after that. Bots' merges
+# do not count.
+why_rows=("A merged change to put out" "The project in use" "Looking back on a piece of work" "Ending the project")
+full_whys() { local r c; for r in "${why_rows[@]}"; do
+  c="$(awk -F ' \\| ' -v p="| $r" 'index($0, p) == 1 { sub(/^\| /, "", $1); print $1; exit }' "$joined")"
+  printf 'why: %s: %s\n' "$c" "$(row_tool "$r" | sed 's/; class: .*//')"; done; }
+short_whys='why: A merged change to put out (release and deploy, after step 6): plinth does not deploy a `web` app that runs anywhere else
+why: The project in use (operate): an uptime monitor (UptimeRobot or Better Stack) and an error tracker with a free plan each, one copy of the data off the host and the bill to expect. None is installed: the person sets each up in the service'"'"'s own account
+why: Looking back on a piece of work (retrospective): it reads the session and suggests rules and checks, most serious first, and changes nothing
+why: Ending the project, or handing it over (end): the table gives no reason'
+whys_of() { grep '^why: ' <<<"$1"; }
 d="$work/plain"
 out="$("$script" "$d" 2>&1)"
-missing=""
-for line in \
-  'why: A merged change to put out (release and deploy, after step 6): plinth does not deploy a `web` app that runs anywhere else' \
-  "why: The project in use (operate): an uptime monitor (UptimeRobot or Better Stack) and an error tracker with a free plan each, one copy of the data off the host and the bill to expect. None is installed: the person sets each up in the service's own account" \
-  'why: Looking back on a piece of work (retrospective): it reads the session and suggests rules and checks, most serious first, and changes nothing' \
-  'why: Ending the project, or handing it over (end): the table gives no reason'; do
-  grep -qxF -- "$line" <<<"$out" || missing="$missing
-$line"
-done
-if [ -z "$missing" ]; then ok "a why: line for each moment, each the table's words"
-else bad "why: lines missing:$missing"; fi
+[ "$(whys_of "$out")" = "$(full_whys)" ] && ok "no repository: a why: line for each moment, the row's whole tool cell" ||
+  { bad "no repository: the full why: lines"; diff <(full_whys) <(whys_of "$out") | head -8; }
 d="$work/idle"
 out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
-grep -qF "why: The project in use (operate): an uptime monitor" <<<"$out" && ok "the moments' why: lines on a repository that is read too" || bad "no moments' why: line on a read repository"
+[ "$(whys_of "$out")" = "$(full_whys)" ] && ok "a read repository, nothing merged: the full why: lines" || bad "idle: $(whys_of "$out" | head -2)"
+d="$(repo why-fade)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 3 'feat: a' false SUCCESS)" \
+  "$(pr 4 'chore(deps): bump a' true SUCCESS)" "$(pr 5 'chore(deps): bump b' true SUCCESS)" "$(pr 6 'chore(deps): bump c' true SUCCESS)"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+[ "$(whys_of "$out")" = "$(full_whys)" ] && ok "two merges by a person and three by Dependabot: still the full why: lines" ||
+  bad "two people's merges, three bots': $(whys_of "$out" | head -2)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 3 'feat: a' false SUCCESS)" "$(pr 4 'feat: b' false SUCCESS)"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+[ "$(whys_of "$out")" = "$short_whys" ] && ok "three merges by a person: one clause each, the table's words" ||
+  { bad "three merges: the faded why: lines"; diff <(printf '%s\n' "$short_whys") <(whys_of "$out") | head -8; }
+d="$work/idle"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
 # Off by default: the sorting rule, flattened, its links reduced to their words.
 rule="$(grep -E '^  why: ' <<<"$out")"
 if grep -qF 'A choice they cannot judge yet starts off and is told, in the list below, with when it is worth turning on and how (progressive disclosure).' <<<"$rule" &&
@@ -2037,7 +2053,7 @@ has "map, past the first merge: the title, the legend, the three groups, the ret
   "  next command:" "    /grilling" \
   "  /plinth:guide map <step>: " "  /plinth:guide features: "
 has "map: create and the first merge done, read from the lines the script prints" "$out" \
-  "  ✓ done 1 Create it with the wall: /plinth:new-project <owner>/<name>" \
+  "  ✓ done 1 Create it with its checks and rules: /plinth:new-project <owner>/<name>" \
   "  ✓ done 1 Merge its first pull request on green: merge #N"
 has "map: the step the project is at, marked, with one line on why now" "$out" \
   "  ▶ 2 An idea in your own words: /grilling (you are here)" "      why now: "
@@ -2061,12 +2077,12 @@ n="$(map_of "$out" | grep -c .)"
 
 out="$(MOCK_DIR="$work/created" "$script" "$work/created" map 2>&1)"
 has "map, before the first merge: created done, the first merge here, the token not yet" "$out" \
-  "  ✓ done 1 Create it with the wall: " "  ▶ 1 Merge its first pull request on green: merge #2 (you are here)" \
+  "  ✓ done 1 Create it with its checks and rules: " "  ▶ 1 Merge its first pull request on green: merge #2 (you are here)" \
   "  · not yet 1 A token that cannot change the checks: " "  /plinth:guide map <step>: " "!  ▶ 2"
 has "map, before the first merge: the next command is the ▶ row's" "$out" "  next command:" "    merge #2"
 out="$(MOCK_DIR="$work/plain" "$script" "$work/plain" map 2>&1)"
 has "map, no repository: create is here, nothing done" "$out" \
-  "  ▶ 1 Create it with the wall: /plinth:new-project <owner>/<name> (you are here)" "  · not yet 1 Merge its first pull request on green: " "!  ✓" \
+  "  ▶ 1 Create it with its checks and rules: /plinth:new-project <owner>/<name> (you are here)" "  · not yet 1 Merge its first pull request on green: " "!  ✓" \
   "  · not yet 1 A token that cannot change the checks: " "    7 Something broke: " "    8 Stopping, or coming back: " "      A \`web\` project to put online: "
 # A git checkout plinth did not make: nothing read, so the token has no mark.
 d="$(repo map-foreign none)"
@@ -2173,6 +2189,62 @@ grep -q '^features: ' <<<"$out" && grep -qE '^  off: ' <<<"$out" && ok "features
 for w in '`/plinth:guide map <step>`' '`/plinth:guide features`' 'from the printed `map:` lines' 'no drawn cycle'; do
   grep -qF -- "$w" "$guide_md" && ok "the skill says: $w" || bad "the skill does not say: $w"
 done
+
+# ── ask first, at three milestones (#1147) ──────────────────────────────
+# The first merge, the first release due and a look back due: an `ask first:`
+# line, the person names the next step before the command is shown. Every
+# other state: none.
+ask_tail="before the command, ask the person what they think the next step is; show the command once they answer, or at once if they ask for it"
+d="$(repo ask-first-merge)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+MOCK_ADMIN=true state "ask first: the first merge, the token step not done" "$d" \
+  "where: First pull request merged (step 1)" "ask first: the first merge: $ask_tail"
+MOCK_ADMIN=false state "ask first: the first merge, the token step done: step 2's command, asked first" "$d" \
+  "command: /grilling" "ask first: the first merge: $ask_tail"
+put "$d/open.json" "$(pr 3 'chore(deps): bump x' true SUCCESS)"
+MOCK_ADMIN=false state "no ask: the first merge with Dependabot open, its route" "$d" "command: /plinth:floor-check" "!ask first:"
+state "ask first: the first release due (no tag yet)" "$work/release-no-tag" \
+  "command: $rel_cmd" "ask first: the first release due: $ask_tail"
+state "no ask: a release due after a tag" "$work/release-feat" "where: $rel_where" "!ask first:"
+d="$(repo ask-look-back 'archetype: web')"
+cp "$work/lookback-feats/merged.json" "$work/lookback-feats/history.json" "$d/"
+state "ask first: a look back due" "$d" \
+  "where: $lb_where" "command: $lb_cmd" "ask first: a look back due: $ask_tail"
+state "no ask: three merges, nothing open" "$work/why-fade" "command: /grilling" "!ask first:"
+state "no ask: the first pull request open" "$work/created" "command: merge #2" "!ask first:"
+state "no ask: a ticket ready" "$work/release-ticket" "command: /implement #11" "!ask first:"
+out="$(MOCK_DIR="$work/ask-look-back" "$script" "$work/ask-look-back" map 2>&1)"
+grep -qx '    /plinth:floor-check' <<<"$out" && ! grep -q '^ask first:' <<<"$out" && ok "no ask on map, at a milestone: its next command is the answer's code block" ||
+  bad "map at a milestone: $(grep -E '^ask first:|next command' <<<"$out")"
+for w in 'With an `ask first:` line (the first merge, the first release due, a' \
+         'show the command once they answer' 'show it anyway if they ask for it' \
+         'whole tool cell while fewer than three pull' 'and one clause after that'; do
+  grep -qF -- "$w" "$guide_md" && ok "the skill says: $w" || bad "the skill does not say: $w"
+done
+
+# ── plain words in printed rows (#1147) ───────────────────────────────────
+# A beginner word in a row the guide or the arsenal prints, outside a
+# command or path in backticks, is either replaced or glossed in the term
+# table (docs/reference/terms.md). The case that must fail first.
+terms="$root/docs/reference/terms.md"
+unglossed() { # <table file>: each beginner word left in a row without a gloss
+  local w
+  local w forms
+  # Each word with the forms it takes: walls, pinned, boundaries, re-rendered.
+  for w in wall floor pin boundary re-render listed; do
+    grep -q "^| \*\*$w\*\* |" "$terms" && continue
+    case "$w" in pin) forms='pin(s|ned|ning)?' ;; boundary) forms='boundar(y|ies)' ;; listed) forms='listed' ;; *) forms="$w(s|ed|ing)?" ;; esac
+    grep '^| ' "$1" | sed 's/`[^`]*`//g' | grep -qiE "(^|[^a-z-])$forms([^a-z-]|$)" && echo "$w"
+  done; return 0
+}
+sed 's/| Create it with its checks and rules;/| Create it behind the wall;/' "$joined" > "$work/joined-wall"
+[ "$(unglossed "$work/joined-wall")" = wall ] && ok "plain words: a row saying \"the wall\" fails" || bad "plain words: the wall passed: $(unglossed "$work/joined-wall")"
+sed 's/| Create it with its checks and rules;/| Create it with `\/plinth:floor-check` and a pin;/' "$joined" > "$work/joined-pin"
+sed 's/| Create it with its checks and rules;/| Create it behind its walls, at its boundaries, re-rendered;/' "$joined" > "$work/joined-forms"
+[ "$(unglossed "$work/joined-forms" | paste -sd ' ' -)" = "wall boundary re-render" ] && ok "plain words: walls, boundaries and re-rendered fail too" ||
+  bad "plain words: other forms: $(unglossed "$work/joined-forms" | paste -sd ' ' -)"
+[ -z "$(unglossed "$work/joined-pin")" ] && ok "plain words: a command in backticks and a glossed word pass" || bad "plain words: $(unglossed "$work/joined-pin")"
+[ -z "$(unglossed "$joined")" ] && ok "plain words: every printed row is plain or glossed" || bad "plain words unglossed in the table: $(unglossed "$joined" | paste -sd ' ' -)"
 
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"

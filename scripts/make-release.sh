@@ -287,6 +287,7 @@ if [ -n "$prev_tag" ]; then
   # its commit's date could be older than the release, so it stops.
   [ "$(git cat-file -t FETCH_HEAD)" = tag ] \
     || stop "$prev_tag on origin is not an annotated tag, so its release date cannot be read; nothing changed"
+  prev_commit="$(git rev-parse --verify -q 'FETCH_HEAD^{commit}')" || stop "cannot read the commit $prev_tag names; nothing changed"
   born="$(git cat-file tag FETCH_HEAD | sed -nE 's/^tagger .* ([0-9]+) [-+][0-9]{4}$/\1/p')"
   [[ "$born" =~ ^[0-9]+$ ]] || stop "cannot read the date of $prev_tag; nothing changed"
   age=$(( $(date +%s) - born ))
@@ -351,6 +352,60 @@ if [ "$prev_ref" != "$template_ref" ]; then
     esac
     echo "template $prev_ref -> $template_ref changes what the agent reads; the why says: $suite_line"
   fi
+fi
+# Retired entries (#1229): an entry removed, a dependency dropped or added since
+# the release before reaches every installed user, who needs one command or a
+# note. Compared from the two manifests at that release's commit and here; the
+# table is docs/reference/dependency-entries.md's, read by
+# scripts/retired-entries.py. Checked against the section this run writes: the
+# why and the fragments, read with line breaks as spaces.
+if [ -n "${prev_commit:-}" ]; then
+  old_market="$(git show "$prev_commit:.claude-plugin/marketplace.json")" \
+    && old_plugin="$(git show "$prev_commit:.claude-plugin/plugin.json")" \
+    || stop "cannot read $prev_tag's manifests to compare its entries and dependencies; nothing changed"
+  retired="$(python3 "$root/scripts/retired-entries.py" "$root")" \
+    || stop "the Retired entries table in docs/reference/dependency-entries.md does not read (above); nothing changed"
+  moved="$(python3 - "$old_market" "$old_plugin" "$market" "$plugin" "$retired" "$(cat "$why_file"; printf '\n'; printf '%s\n' "$entries")" <<'PY'
+import json, re, sys
+old_m, old_p = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+new_m, new_p = (json.loads(open(f).read()) for f in sys.argv[3:5])
+rows = {r[0]: r for r in (l.split("\t") for l in sys.argv[5].splitlines() if l)}
+section = " ".join(sys.argv[6].split())
+names = lambda m: {p["name"] for p in m.get("plugins", [])}
+# A dependency is a name, `name@plinth`, or an object with a name; compared as the bare name.
+deps = lambda p: {(d["name"] if isinstance(d, dict) else d).removesuffix("@plinth") for d in p.get("dependencies", [])}
+removed = sorted(names(old_m) - names(new_m))
+dropped = sorted(deps(old_p) - deps(new_p) - set(removed))
+added = sorted(deps(new_p) - deps(old_p))
+renames = new_m.get("renames") or {}
+miss = []
+for n in removed:
+    row = rows.get(n)
+    cmd = f"claude plugin uninstall {n}@plinth"
+    if not row or row[1] != "removed":
+        miss.append(f"entry {n} was removed, and the Retired entries table has no 'entry removed' row for it")
+    if n not in renames or renames[n] is not None:
+        miss.append(f"entry {n} was removed, and marketplace.json's renames does not map it to null")
+    if cmd not in section:
+        miss.append(f"entry {n} was removed, and the release section does not name `{cmd}`")
+for n in dropped:
+    row = rows.get(n)
+    if not row or row[1] != "dropped":
+        miss.append(f"dependency {n} was dropped, and the Retired entries table has no 'dependency dropped' row for it")
+    if "claude plugin prune" not in section:
+        miss.append(f"dependency {n} was dropped, and the release section does not name `claude plugin prune`")
+for n in added:
+    if not re.search(r"(?<![\w-])" + re.escape(n) + r"(?![\w-])", section):
+        miss.append(f"dependency {n} was added, and the release section does not name it")
+for m in miss:
+    print("  " + m)
+changed = [x for x in (removed and "removed " + ", ".join(removed), dropped and "dropped " + ", ".join(dropped),
+                       added and "added " + ", ".join(added)) if x]
+if changed and not miss:
+    print("entries and dependencies since the release before: " + "; ".join(changed) + "; the release says how", file=sys.stderr)
+sys.exit(1 if miss else 0)
+PY
+)" || stop "since $prev_tag, an installed user's plugins change, and the release does not say how (docs/reference/dependency-entries.md, Retired entries):" "$moved"
 fi
 # The branch first: a leftover release/vX.Y.Z from an abandoned attempt stops
 # here, before any file changes. On origin too: a local `switch -c` would
