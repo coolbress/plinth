@@ -7,4 +7,6 @@
   repository it committed nothing and asked for a commit on a branch first.
   Its watch, which is `/steward`'s, met a failing test by changing what the
   test expects, and pushed that with no review and an AI `Co-Authored-By`
-  line instead of `Assisted-by`. Both stay on the list.
+  line instead of `Assisted-by`. Both stay on the list. What the trial did
+  not test (secrets found by file name only, the review-comment path) is
+  kept from Claude Code's own pages.
