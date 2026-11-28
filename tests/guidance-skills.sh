@@ -13,8 +13,9 @@
 # words: `/security-review` at step 5, `/resume` and `/recap` (same machine
 # only) at step 8, `/insights` on the retrospective row, `/doctor` and
 # `/rewind` under "Something broke", `/design` on the idea row, `/simplify`
-# on the build and check rows; `/debug`, which debugs Claude Code, is in no
-# row. The template's end-or-hand-over form is read against
+# on the build and check rows; `/run-skill-generator` is a built-in name the
+# table may use (#1084, the first merge's Also), not one it must keep;
+# `/debug`, which debugs Claude Code, is in no row. The template's end-or-hand-over form is read against
 # the installed skills by tests/install-smoke.sh, which has them.
 # The arsenal's not-used.md (#1086): each entry is "- `/<name>` (<class>).
 # Breaks: <rule>.", its class "built in" or "installed by plinth" (a tool that
@@ -32,7 +33,7 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 BUILT_IN = {"clear", "design", "run", "context", "security-review", "resume", "recap", "insights", "doctor", "debug", "rewind",
-            "simplify", "verify", "usage"}
+            "simplify", "verify", "usage", "run-skill-generator"}
 plugin = json.loads((root / ".claude-plugin/plugin.json").read_text())
 entries = {e["name"]: e for e in json.loads((root / ".claude-plugin/marketplace.json").read_text())["plugins"]}
 default = {"plinth:" + d.name for d in (root / "skills").iterdir() if d.is_dir()}

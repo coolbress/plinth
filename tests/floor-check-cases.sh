@@ -1339,11 +1339,28 @@ plugins_run
 for want in 'INFO  plugins from another marketplace, outside what plinth compares: codex@openai-codex' \
             'SKIP  last30days@plinth (project in /p) not checked: its entry pins no full commit' \
             'SKIP  frontend-design@plinth (user) not checked: its install records no full commit' \
-            'SKIP  gone@plinth (user) not checked: the plinth marketplace has no entry for it'; do
+            'WARN  gone@plinth (user) is not in the plinth marketplace; Claude Code reports it "not found in marketplace" until it is uninstalled. fix: claude plugin uninstall gone@plinth --scope user'; do
   grep -qF -- "$want" <<<"$out" || { bad "--plugins: expected '$want'"; grep -E 'plugin|@' <<<"$out" | sed 's/^/        /'; }
 done
 grep -qE 'at the plinth.*(codex|last30days|frontend-design|gone)' <<<"$out" && bad "--plugins: a plugin not compared was reported at the pin" \
-  || ok "--plugins: another marketplace, no pinned commit, no installed commit and no entry are not checked, never at the pin"
+  || ok "--plugins: another marketplace, no pinned commit, no installed commit are not checked and an entry the marketplace no longer has is FC-G12, never at the pin"
+# An entry the marketplace no longer lists (#1229): a retired one names the
+# release it left in and its replacement, from the marketplace copy's Retired
+# entries table, and its uninstall command with the install's scope; one not in
+# the table is named all the same; another marketplace's plugin has no line.
+plugins_fixture "$pin" ',"taste-skill@plinth":[{"scope":"user","gitCommitSha":"'"$pin"'"},{"scope":"project","projectPath":"/w/my app","gitCommitSha":"'"$pin"'"}],"taste-skill@other":[{"scope":"user","gitCommitSha":"'"$pin"'"}],"gone@plinth":[{"scope":"local","gitCommitSha":"'"$pin"'"}]'
+mkdir -p "$pm/docs/reference"
+printf '## Retired entries\n\n| Name | Kind | Left in | Replaced by | Issue | An installed user runs |\n| --- | --- | --- | --- | --- | --- |\n| `taste-skill` | entry removed | v2.46.0 | `frontend-design` | #1082 | `claude plugin uninstall taste-skill@plinth` |\n' > "$pm/docs/reference/dependency-entries.md"
+plugins_run
+for want in 'WARN  taste-skill@plinth (user) left the plinth marketplace in v2.46.0, replaced by frontend-design; Claude Code reports it "not found in marketplace" until it is uninstalled. fix: claude plugin uninstall taste-skill@plinth --scope user' \
+            "WARN  taste-skill@plinth (project in /w/my app) left the plinth marketplace in v2.46.0, replaced by frontend-design; Claude Code reports it \"not found in marketplace\" until it is uninstalled. fix: cd '/w/my app' && claude plugin uninstall taste-skill@plinth --scope project" \
+            'WARN  gone@plinth (local) is not in the plinth marketplace; Claude Code reports it "not found in marketplace" until it is uninstalled. fix: claude plugin uninstall gone@plinth --scope local, run from the project folder it was installed for'; do
+  grep -qF -- "$want" <<<"$out" || { bad "--plugins: expected '$want'"; grep -E '@' <<<"$out" | sed 's/^/        /'; }
+done
+if [ "$rc" = 0 ] && is "$out" FC-G12 warn && ! grep -qE '(WARN|SKIP).*taste-skill@other' <<<"$out" \
+   && grep -qF 'outside what plinth compares: taste-skill@other' <<<"$out" && ! grep -qE 'SKIP .*(taste-skill|gone)@plinth' <<<"$out"
+then ok "--plugins: a retired entry names its release, its replacement and its scoped uninstall; one not in the table is named too; another marketplace's has no FC-G12 line"
+else bad "--plugins retired"; grep -E '@' <<<"$out" | sed 's/^/        /'; fi
 # Another marketplace's plugin is outside what floor-check compares, not a read
 # that failed (#1002): an INFO, out of the not-verified count.
 plugins_fixture "$pin"; plugins_run; without="$(grep -- '^-- ' <<<"$out")"
@@ -1885,6 +1902,51 @@ printf 'services: []\n' > "$dash/render.yaml"; git -C "$dash" add -A
 out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
 if is "$out" FC-C12 pass && grep -q -- '-- 0 failed' <<<"$out"; then ok "a dashboard on Render with render.yaml passes, and no image is asked"
 else bad "a dashboard on Render with render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
+# A cli that runs on GitHub on a schedule (#1070, coolbress/plinth-template#363)
+# is a cli: its answer, its workflow and its data/ folder change nothing in
+# the report, which is the same, line for line, as the cli's without them,
+# but for the counts of files read; the new workflow's actions are read as
+# pinned.
+sched="$work/sched"; rm -rf "$sched"; cp -R "$web.empty" "$sched"
+printf 'scheduled_run: true\n' >> "$sched/.copier-answers.yml"
+mkdir -p "$sched/data"; printf '*\n!.gitignore\n!README.md\n' > "$sched/data/.gitignore"; printf '# Data\n' > "$sched/data/README.md"
+cat > "$sched/.github/workflows/schedule.yml" <<'YAML'
+name: Scheduled run
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: scheduled-run
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: uv sync --locked --no-dev
+      - run: |
+          mkdir -p data/processed
+          uv run --no-sync python -m app > data/processed/result.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: results
+          path: data/processed/
+          if-no-files-found: error
+YAML
+git -C "$sched" add -A
+plain_out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"; sched_out="$(python3 "$checker" --root "$sched" --no-network 2>&1)"
+uncount() { sed -E 's/[0-9]+/N/g'; }
+if [ "$(printf '%s\n' "${sched_out//$sched/<root>}" | uncount)" = "$(printf '%s\n' "${plain_out//$web.empty/<root>}" | uncount)" ] \
+   && grep -q -- '-- 0 failed' <<<"$sched_out" && grep -qF 'PASS  every action in 3 workflow files is pinned to a commit (3 uses)' <<<"$sched_out"
+then ok "a cli with the scheduled run gets the same report as one without, its workflow's actions read as pinned"
+else bad "a cli with the scheduled run is reported differently"; diff <(printf '%s\n' "${plain_out//$web.empty/<root>}") <(printf '%s\n' "${sched_out//$sched/<root>}") | sed 's/^/        /'; fi
 # What render.yaml says (#811), read when the file is there: each web
 # service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
 # other than free, and secret-named envVars set without a literal value. Each

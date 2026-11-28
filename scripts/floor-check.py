@@ -1389,6 +1389,17 @@ def _machine() -> tuple[dict, ...]:
                                   "files or the env of .claude/settings*.json (the repository's and the user's); best "
                                   "effort: shell profile files, other files and schemes other than postgres:// and "
                                   "postgresql:// are not read"}),
+        machine("FC-G12", "no plugin from the plinth marketplace is one it no longer lists",
+                states=("warn",), handoff="person",
+                view_why="--plugins runs it; it reads this machine's installed Claude Code plugins, not the repository",
+                fix="run the claude plugin uninstall line the WARN names",
+                messages={"replaced": "{pid} ({where}) left the plinth marketplace in {left}, replaced by {replaced}; "
+                                      "Claude Code reports it \"not found in marketplace\" until it is uninstalled. "
+                                      "fix: {fix}",
+                          "retired": "{pid} ({where}) left the plinth marketplace in {left}; Claude Code reports it "
+                                     "\"not found in marketplace\" until it is uninstalled. fix: {fix}",
+                          "gone": "{pid} ({where}) is not in the plinth marketplace; Claude Code reports it \"not "
+                                  "found in marketplace\" until it is uninstalled. fix: {fix}"}),
     )
 
 
@@ -5812,6 +5823,20 @@ def check_plugins() -> None:
              reason="the marketplace's pins not read")
         return
 
+    # The Retired entries table of the marketplace copy's
+    # docs/reference/dependency-entries.md (#1229), for the release a removed
+    # entry left in and what replaced it. Best effort: unread, the WARN names
+    # neither.
+    retired: dict[str, tuple[str, str]] = {}
+    try:
+        for line in read(loc / "docs" / "reference" / "dependency-entries.md").splitlines():
+            m = re.match(r"^\| `([^`]+)` \| entry removed \| (v[0-9.]+) \| ([^|]*?) \|", line)
+            if m:
+                rep = re.fullmatch(r"`([^`]+)`", m.group(3).strip())
+                retired[m.group(1)] = (m.group(2), rep.group(1) if rep else "")
+    except OSError:
+        pass
+
     def pinned(name: str) -> tuple[str | None, str]:
         """What the entry pins and how an install is compared with it: a full
         commit, or plinth's version; (None, why) when it pins neither."""
@@ -5833,6 +5858,26 @@ def check_plugins() -> None:
         name, _, mkt = pid.rpartition("@")
         if mkt != "plinth" or not name:
             other.append(pid)
+            continue
+        if name not in entries and isinstance(installs, list) and installs:
+            # An entry the marketplace no longer lists (#1229): Claude Code
+            # keeps the install and reports it "not found in marketplace";
+            # with forceRemoveDeletedPlugins it uninstalls it at the next
+            # session start, and this names the command for one not yet.
+            left, replaced = retired.get(name, ("", ""))
+            for rec in installs:
+                rec = rec if isinstance(rec, dict) else {}
+                where = rec.get("scope") or "unknown scope"
+                if rec.get("projectPath"):
+                    where += f" in {rec['projectPath']}"
+                scope = rec.get("scope")
+                fix = f"claude plugin uninstall {pid}" + (f" --scope {scope}" if scope in ("user", "project", "local") else "")
+                if scope in ("project", "local"):
+                    path = rec.get("projectPath")
+                    fix = f"cd {shlex.quote(path)} && {fix}" if isinstance(path, str) and path else \
+                        f"{fix}, run from the project folder it was installed for"
+                key = "replaced" if left and replaced else "retired" if left else "gone"
+                emit("FC-G12", "warn", key, {"pid": pid, "where": where, "left": left, "replaced": replaced, "fix": fix})
             continue
         want, how = pinned(name)
         if not isinstance(installs, list) or not installs:

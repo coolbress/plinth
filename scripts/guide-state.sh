@@ -123,7 +123,10 @@ row() {
 
 # why_line <row start> <words>: "why:", the row's name and its tool cell from
 # those words up to the next "; ", so that the reason is the table's. Words the
-# table no longer has are an error, as a missing row is.
+# table no longer has are an error, as a missing row is. why_full <row start>:
+# the row's whole tool cell, without its class (#1147). The full lines are
+# said while fewer than three pull requests by a person have merged, the
+# single clause after that: the help fades as the person gets used to it.
 why_line() {
   local cells tool reason
   cells="$(row "$1")" || return 1
@@ -132,16 +135,27 @@ why_line() {
   reason="$2${tool#*"$2"}"
   echo "why: $(sed -n 1p <<<"$cells"): ${reason%%; *}"
 }
+why_full() {
+  local cells tool
+  cells="$(row "$1")" || return 1
+  tool="$(sed -n 3p <<<"$cells")"
+  echo "why: $(sed -n 1p <<<"$cells"): ${tool%; class: *}"
+}
 whys="$(why_line "A merged change to put out" "plinth does not deploy" &&
   why_line "The project in use" "an uptime monitor" &&
   why_line "Looking back on a piece of work" "it reads the session" &&
   cells="$(row "Ending the project")" && echo "why: $(sed -n 1p <<<"$cells"): the table gives no reason")" || exit 1
+whys_full="$(why_full "A merged change to put out" && why_full "The project in use" &&
+  why_full "Looking back on a piece of work" && why_full "Ending the project")" || exit 1
 
 # say <row start> <command> [<then: row start>]: the verdict block. The
 # command is typed as printed; $before (typed first) and $note go with it.
 # `then:` is the step after this one (#908): the row the table's Then cell
 # names (`-` there is none), unless the state names another.
-before=""; note=""; said_cmd=""; shown=""; where_cell=""
+# $milestone (#1147): at the first merge, the first release due and a look
+# back due, the person is asked to name the next step before the command is
+# shown; at every other state, and on map, nothing is asked.
+before=""; note=""; said_cmd=""; shown=""; where_cell=""; milestone=""
 # show <row start>: that row goes in the table printed without map (#1060).
 show() { shown="$shown$(printf '%s\n' "$table" | awk -v p="| $1" 'index($0, p) == 1' | head -1)"$'\n'; }
 say() {
@@ -156,6 +170,8 @@ say() {
   echo "command: $2"
   said_cmd="$2"
   [ -z "$note" ] || echo "note: $note"
+  # Not on map: its next command is the whole answer's one code block.
+  [ -z "$milestone" ] || [ -n "$map" ] || echo "ask first: $milestone: before the command, ask the person what they think the next step is; show the command once they answer, or at once if they ask for it"
   after="${3:-$(sed -n 6p <<<"$cells")}"
   if [ "$after" != - ]; then
     after="$(row "$after")" || exit 1
@@ -330,7 +346,9 @@ print_depth() {
 finish() {
   echo "mode: $mode ($mode_why)"
   echo
-  printf '%s\n' "$whys"
+  # Fewer than three merges by a person, or not read: the full rows (#1147).
+  if [ -z "${past_first:-}" ] && [ "${people_merged:-0}" -lt 3 ]; then printf '%s\n' "$whys_full"
+  else printf '%s\n' "$whys"; fi
   echo
   if [ -n "$step" ]; then
     print_depth
@@ -1249,6 +1267,7 @@ elif n="$(awk -F '\t' '$4 == "reminder"' <<<"$issues" | head -1 | field 1)" && [
   note="issue #$n is the monthly template reminder"; say "Between pieces of work" "/plinth:template-update"
 elif [ "$people_merged" -eq 1 ] && [ -z "$past_first" ] && [ "$reach" != none ]; then
   # Only the token blocks step 2 (#1078); the other two pages are recommended.
+  milestone="the first merge"
   say "First pull request merged" "none: the token page first (the tool cell's first page); the other two pages are recommended next"; pages_named=yes
 elif [ -n "$bot_prs" ]; then
   note="then Dependabot's pull requests ($(field 1 <<<"$bot_prs" | sed 's/^/#/' | paste -sd ' ' -)), one at a time, each merged on green on the person's word"
@@ -1262,14 +1281,18 @@ elif [ -n "$release_due" ] && [ -z "$main_red" ]; then
   # for a project that is not a web app; what goes out for this archetype.
   how="$(row "A merged change to put out" | sed -n 4p)"
   note="$(sed -n 's/^release due: yes: //p' <<<"$release_line"); $(release_said)"
+  [ -n "$tag" ] || milestone="the first release due"
   say "A merged change to put out" "none: ${how#*for the others, }"
 elif [ -n "$lookback_due" ] && [ -z "$main_red" ]; then
   # Nothing else open (#1145): the look back, opened by floor-check (question
   # 6). Until the template's Look back issue form ships, the note carries the
   # title and the seven questions itself.
   note="a look back is due ($lb_why); after /plinth:floor-check, open an issue titled Look back YYYY-MM-DD (today's date) with a short answer to each of seven questions, and at most three tickets linked to it as sub-issues, each one to finish within two days: (1) is shipping easy: the last tag, and the feat: and fix: merges since; (2) the mix of work since the last look back (feat, fix, refactor, chore); (3) what the last look back promised and what is still open, incident notes' follow-ups included; (4) what can be removed, each with a date; (5) where the README, AGENTS.md and docs/how-to disagree with what the code does; (6) is the floor intact: the template and plinth pins, the checks and the ruleset (this floor-check); when a restore was last tried and whether it checked the data (a row count before and after); whether the last bills match what was expected, with the spend limits still set: /usage (built in), w for the last 7 days, and its recommendations, which say which skills, plugins and MCP servers used it, and, on a private repository, the month's Actions usage on GitHub's billing page against the plan's included amount; (7) did the agent repeat a mistake, and if so move its fix one rung up (a written rule, then a check that fails). /insights (built in) helps with 2 and 7; only if the person wants, /improve-codebase-architecture and, if installed, /ponytail-audit with 4"
+  milestone="a look back due"
   say "Between pieces of work" "/plinth:floor-check"
 else
+  # One merge with the token step done (#1078): the first merge's next step.
+  [ "$people_merged" != 1 ] || [ -n "$past_first" ] || milestone="the first merge"
   say "An idea in your own words" "/grilling"
 fi
 # The token step (#922), from the reach read above: past the first merge, a
