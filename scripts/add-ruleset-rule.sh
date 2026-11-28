@@ -3,7 +3,13 @@
 # administration.
 #
 #   add-ruleset-rule.sh [--dry-run] <owner/name> <preset> ...
-#   presets: linear-history, code-scanning, signed-commits
+#   presets: linear-history, code-scanning, signed-commits, two-people, one-person
+#
+# two-people and one-person change three fields of the pull_request rule and
+# nothing else (docs/how-to/add-a-second-person.md): the approval count (1 or
+# 0), code owners' review and conversation resolution (on or off). Every
+# other field, require_extra_approval_for_unattributed_changes included,
+# stays as it is, and the merge ruleset is never edited.
 #
 # Why a tool: `upgrade-ruleset.sh` adds required checks only. Adding a rule
 # kind means editing the ruleset JSON, and JSON pasted by hand drops other
@@ -15,10 +21,30 @@
 set -euo pipefail
 
 usage="usage: add-ruleset-rule.sh [--dry-run] <owner/name> <preset> ..."
+presets="linear-history, code-scanning, signed-commits, two-people, one-person"
 dry=0
 [ "${1:-}" = "--dry-run" ] && { dry=1; shift; }
 repo="${1:?$usage}"; shift
-[ $# -gt 0 ] || { echo "name at least one preset: linear-history, code-scanning, signed-commits" >&2; exit 2; }
+[ $# -gt 0 ] || { echo "name at least one preset: $presets" >&2; exit 2; }
+
+# The pull_request rule's three fields each people preset sets; the
+# two presets set the same fields, so naming both is refused.
+people_json() {
+  case "$1" in
+    two-people) echo '{"required_approving_review_count":1,"require_code_owner_review":true,"required_review_thread_resolution":true}' ;;
+    one-person) echo '{"required_approving_review_count":0,"require_code_owner_review":false,"required_review_thread_resolution":false}' ;;
+  esac
+}
+people=""
+for p in "$@"; do
+  case "$p" in
+    two-people|one-person)
+      [ -z "$people" ] || [ "$people" = "$p" ] || { echo "two-people and one-person set the same three fields: name one" >&2; exit 2; }
+      people="$p" ;;
+    linear-history|code-scanning|signed-commits) ;;
+    *) echo "unknown preset: $p (one of: $presets)" >&2; exit 2 ;;
+  esac
+done
 
 # Preset to rule JSON. Nothing else is accepted: free-form JSON would void
 # the reason this tool exists.
@@ -61,20 +87,31 @@ cur="$(gh api "repos/$repo/rulesets/$id")"
 
 add="["
 for p in "$@"; do
+  case "$p" in two-people|one-person) continue ;; esac
   j="$(rule_json "$p")"
   [ "$add" = "[" ] || add="$add,"
   add="$add$j"
 done
 add="$add]"
 
-new="$(printf '%s' "$cur" | jq --argjson add "$add" '
+set_to="$(if [ -n "$people" ]; then people_json "$people"; else echo null; fi)"
+new="$(printf '%s' "$cur" | jq --argjson add "$add" --argjson set "$set_to" '
   # Only the fields PUT accepts. Server-side fields (id, created_at, _links) are rejected if sent back.
   {name, target, enforcement, bypass_actors, conditions, rules}
   # Add only. A kind that already exists keeps its existing rule (unique_by keeps the first).
   | .rules = ((.rules + $add) | unique_by(.type))
+  # A people preset: the three fields of the pull_request rule, the rest of it as it was.
+  | if $set == null then . else .rules |= map(if .type == "pull_request" then .parameters = ((.parameters // {}) + $set) else . end) end
 ')"
 
 echo "-- $repo (ruleset $id)"
+if [ -n "$people" ]; then
+  # Before and after, the three fields only: what the preset changes.
+  three='.rules[] | select(.type == "pull_request") | .parameters // {}
+    | "required_approving_review_count=\(.required_approving_review_count) require_code_owner_review=\(.require_code_owner_review) required_review_thread_resolution=\(.required_review_thread_resolution)"'
+  printf '%s' "$cur" | jq -r '"   before: " + ('"$three"')'
+  printf '%s' "$new" | jq -r '"   after:  " + ('"$three"')'
+fi
 printf '%s' "$new" | jq -r '"   rules: " + ([.rules[].type] | sort | join(" "))'
 printf '%s' "$new" | jq -r '"   bypass actors: \(.bypass_actors|length), enforcement: \(.enforcement)"'
 

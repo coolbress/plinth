@@ -1129,6 +1129,25 @@ def _wall() -> tuple[dict, ...]:
                         "unlisted": "the tag ruleset not verified: this repository's rulesets could not be listed",
                         "members": "the tag ruleset for members released on their own tags not verified: "
                                    "[tool.plinth.release] own-tags in pyproject.toml could not be read here"}),
+        check("FC-E35", "the approvals required match who can merge", states=("pass", "warn", "review", "info"),
+              handoff="admin", docs=WALL_DOCS, hosts=gh, needs=net, lifecycle="experimental",
+              fix="the two-person rules, or back to one: scripts/add-ruleset-rule.sh <repo> two-people or one-person",
+              messages={"good": "{branch}: {required} required, and {people} can merge ({who})",
+                        "none": "{branch}: {people} can merge ({who}) and no approval is required: nothing makes one "
+                                "of them look at the other's change",
+                        "alone": "{branch}: {required} required, and only {approvers} can give one that counts{how}: "
+                                 "a pull request of theirs cannot merge, as an author cannot approve their own",
+                        "teams": "{branch}: {required} required, with code owners' review on, and CODEOWNERS names "
+                                 "{teams}, whose members are not read here: who can give an approval that counts is "
+                                 "not counted",
+                        "hint": "  scripts/with-admin-token.sh scripts/add-ruleset-rule.sh {repo} {preset}   (from a "
+                                "plinth checkout; its docs/how-to/add-a-second-person.md says when)",
+                        "review": "who can merge is not read here: /plinth:floor-check reads the collaborators with a "
+                                  "login that administers the repository",
+                        "unread": "{branch}: the approvals required are not compared with who can merge: the "
+                                  "collaborators could not be read (that needs push access)",
+                        "nobody": "{branch}: the approvals required are not compared with who can merge: no person "
+                                  "with {role} access is among the collaborators read"}),
         check("FC-E30", "the repository has a description", states=("pass", "info"), handoff="admin",
               docs=BESIDE_DOCS, hosts=gh, needs=net, fix="set one with gh repo edit <repo> --description '<one line>'",
               messages={"good": "the repository has a description",
@@ -6112,6 +6131,92 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             emit("FC-E24", "unknown", "unread", {"rid": rid}, reason="bypass actors not read")
         else:
             verdict("FC-E24", actors == [], {"rid": rid, "actors": actors})
+    if "pull_request" in by_type:
+        check_approvals(repo, branch, pr, reserved, network, actions_token, root)
+
+
+def codeowner_logins(root: Path | None) -> tuple[set[str], set[str]] | None:
+    """The user logins and the teams (org/team) the CODEOWNERS file GitHub
+    reads names (.github/, the root, docs/, the first found), lowercased;
+    emails left out. None when there is no such file. A team's members are
+    not read here (#1235 review)."""
+    for rel in (".github/CODEOWNERS", "CODEOWNERS", "docs/CODEOWNERS"):
+        f = (root or Path(".")) / rel
+        if f.is_file():
+            names: set[str] = set()
+            teams: set[str] = set()
+            for line in read(f).splitlines():
+                for tok in line.split("#", 1)[0].split()[1:]:
+                    if tok.startswith("@"):
+                        (teams if "/" in tok else names).add(tok[1:].lower())
+            return names, teams
+    return None
+
+
+def check_approvals(repo: str, branch: str, pr: dict, reserved: str | None, network: bool,
+                    actions_token: bool, root: Path | None = None) -> None:
+    """The approvals the pull-request rule requires against the people
+    (#1150), a WARN either way it does not fit. Two or more people can merge
+    and no approval is required, so neither has to look at the other's
+    change: who can merge is the admins where the merge ruleset stands (an
+    agent's own account is a collaborator with write, never the admin), and
+    everyone with write where it does not. Or an approval is required and
+    one person at most can give one that counts, so their own pull requests
+    cannot merge: GitHub counts an approval from anyone with write, and with
+    code owners' review on, only from a code owner, so there it is those
+    with write whom this checkout's CODEOWNERS names. Bots are not people."""
+    required = pr.get("required_approving_review_count")
+    if not isinstance(required, int):
+        return
+    got = api(f"repos/{repo}/collaborators?per_page=100", network, paginate=True)
+    if not isinstance(got, list) and actions_token:
+        emit("FC-E35", "review", "review", reader=ADMIN_READER)
+        return
+    if not isinstance(got, list):
+        emit("FC-E35", "info", "unread", {"branch": branch})
+        return
+    role = "admin" if reserved in ("stands", "never") else "push"
+    who = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
+                 and (c.get("permissions") or {}).get(role) is True)
+    writers = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
+                     and (c.get("permissions") or {}).get("push") is True)
+    # GitHub counts the approvals required from anyone with write, and with
+    # code owners' review on requires, besides, one from a code owner (#1235
+    # review): the two are counted apart. An author cannot approve their own
+    # pull request, so one of theirs needs `required` from the other writers,
+    # and a code owner's needs another code owner. A team in CODEOWNERS may
+    # hold code owners that are not read: then that count is not made.
+    owners_w: list[str] = []
+    teams: set[str] = set()
+    how = ""
+    co = pr.get("require_code_owner_review") is True
+    if co:
+        read_owners = codeowner_logins(root)
+        owners, teams = read_owners if read_owners is not None else (None, set())
+        owners_w = [w for w in writers if w.lower() in (owners or set())]
+        how = (" (code owners' review is on, and no CODEOWNERS file is here)" if owners is None else
+               " (code owners' review is on, and CODEOWNERS names no one else with write)")
+    count_short = required >= 1 and len(writers) <= required
+    owner_short = co and required >= 1 and len(owners_w) <= 1
+    values = {"branch": branch, "who": ", ".join(who) or "nobody", "how": "" if count_short else how,
+              "approvers": ", ".join(writers if count_short else owners_w) or "nobody",
+              "people": f"{len(who)} {'person' if len(who) == 1 else 'people'}",
+              "required": f"{required} approval{'' if required == 1 else 's'}", "repo": repo}
+    if count_short:
+        emit("FC-E35", "warn", "alone", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="one-person" if len(writers) <= 1 else "two-people"))
+    elif owner_short and teams:
+        emit("FC-E35", "info", "teams", dict(values, teams=", ".join(f"@{t}" for t in sorted(teams))))
+    elif owner_short:
+        emit("FC-E35", "warn", "alone", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="one-person"))
+    elif not who:
+        emit("FC-E35", "info", "nobody", dict(values, role="admin" if role == "admin" else "write"))
+    elif len(who) >= 2 and required == 0:
+        emit("FC-E35", "warn", "none", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="two-people"))
+    else:
+        emit("FC-E35", "pass", "good", values)
 
 
 def bypass_key(actor: dict) -> tuple[str, str, str]:
