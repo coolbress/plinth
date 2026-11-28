@@ -29,7 +29,10 @@ AGENTS_MAX_BYTES = 7500
 READS_ARSENAL_MAX_BYTES = 12000
 READS_FLOOR_CHECK_MAX_BYTES = 10500
 READS_GUIDE_MAX_BYTES = 19500
-READS_NEW_PROJECT_MAX_BYTES = 53500
+# new-project raised for --calls-claude (#1071): the recommendation from a
+# chatbot description and never asking for the key are what the agent says
+# at ask time, which no check in the door can hold.
+READS_NEW_PROJECT_MAX_BYTES = 54500
 READS_RECORDS_CHECK_MAX_BYTES = 5500
 READS_TEMPLATE_UPDATE_MAX_BYTES = 26500
 

@@ -143,8 +143,6 @@ it before the first question. In order:
 4. **The archetype recommendation**: the person always picks. For `cli`
    on GitHub, whether it also runs on GitHub on a schedule is part of it:
    a schedule word with the computer off recommends `--scheduled-run`.
-   A chatbot, an assistant or AI answers recommends the kind its interface
-   fits with `--calls-claude`.
 5. **Where a web app runs**, for `web` on GitHub with no `--hosting=`; the
    person can read `${CLAUDE_PLUGIN_ROOT}/docs/how-to/choose-where-a-web-app-runs.md`
    first. **Where a dashboard runs**, for `dashboard` on GitHub with no
@@ -229,11 +227,8 @@ GitHub's own actions only. With `--host gitlab` the script refuses it before
 it reads anything on GitLab: a pipeline schedule was not tried.
 
 `--calls-claude` (cli, dashboard or backend, GitHub only) adds the Anthropic
-SDK, `src/<package>/claude.py` (the one place that calls it), tests that use
-a fake Claude and need no key, and README steps for the key and its spend
-limits. The key is never asked and never typed into the chat: the person
-makes it later and puts it in `.env`. With `--host gitlab` the script refuses
-it before it reads anything on GitLab.
+SDK and the one module that calls it; the key is never asked. With
+`--host gitlab` the script refuses it before it reads anything on GitLab.
 
 With `--host gitlab` the target is a GitLab.com project. It checks `glab`
 (installed, recent enough, logged in to gitlab.com, with the api scope where

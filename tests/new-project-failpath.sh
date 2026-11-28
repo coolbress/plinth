@@ -2375,13 +2375,13 @@ else bad skill-schedule "the makes table has no row for a cli on a schedule"; fi
 # Calling Claude (#1071): a chatbot or assistant recommends the kind its
 # interface fits with --calls-claude, the key is never asked, and the
 # prerequisites line says it comes later with a spend limit.
-for phrase in 'A description about a chatbot, an assistant or AI answers ("a chatbot that answers questions about my shop") calls Claude, and its interface names the kind: in a terminal, `cli`; a page, `dashboard`; a service or a bot, `backend`; each with `--calls-claude`.' \
-              'Never ask for the API key: the person makes it later.' \
-              'On GitLab.com it is not offered: say calling Claude is GitHub only for now.' \
-              'When the table'"'"'s check stops with "does not ask calls_claude", the plinth installed renders a template from before it' \
-              'With `--calls-claude`: also an Anthropic API key later, with a spend limit; never typed into this chat.' \
-              '"I recommend `ARCHETYPE`, calling Claude (`--calls-claude`): `REASON`"' \
-              '`--calls-claude` or `--no-calls-claude` for `cli`, `dashboard` or `backend` on GitHub |'; do
+for phrase in 'A chatbot, an assistant or AI answers calls Claude: in a terminal, `cli`; a page, `dashboard`; a service or a bot, `backend`; each with `--calls-claude`.' \
+              'Never ask for the API key.' \
+              'Not on GitLab.com.' \
+              'A check stopping with "does not ask calls_claude" means an older template: say so, offer `--no-calls-claude`.' \
+              'With `--calls-claude`: an Anthropic API key later, billed per use up to its spend limits; never typed into this chat.' \
+              '"I recommend `ARCHETYPE`, calling Claude: `REASON`"' \
+              ', and `--calls-claude` or `--no-calls-claude` |'; do
   if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-claude "the skill says \"$phrase\""
   else bad skill-claude "the skill does not say \"$phrase\""; fi
 done
