@@ -714,14 +714,14 @@ check "  and the invented row also calls LICENSE missing and breaks the verdict"
 check "floor-clean: a Korean relay in bullets, \"직접 입력하세요\" for typing the next command, passes" \
   '[ "$(kg fc floor-clean 5 "r[\"pass\"]")" = True ]' "$(kg fc floor-clean 5 'r["task_record"]')"
 check "the summary holds the regression tasks to pass^k and names floor-clean below it" \
-  'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run started passes): floor-clean 2/5; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"
+  'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run asked for passes): floor-clean 2/5; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"
 check "floor-clean runs with GitHub reachable: no proxy in its session" \
   'grep -q "run=floor-clean-plinth-1 https_proxy=unset " "$log"' "$(grep 'run=floor-clean' "$log")"
 check "the kind table names the floor-clean rules broken and the present files" \
   'grep -qF "| floor-clean · plinth | Skill calls: \`plinth:floor-check\` ×1; report rules broken: \`no_action_row\` 1/5, \`no_fail_word\` 1/5, \`nothing_present_called_missing\` 1/5, \`verdict_clean\` 2/5; present files called missing:" "$tmp/out.txt"' "$(grep 'floor-clean' "$tmp/out.txt")"
 EVAL_STUB_ACTIONS=clean-pass,limit,limit suite --config-dir "$tmp/cfg" --task floor-clean --arm plinth --runs 3 --out "$tmp/fci"
-check "an incomplete regression set is below pass^k: one graded pass, two not run" \
-  'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run started passes): floor-clean 1/3; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"
+check "an incomplete regression set is below pass^k: one graded pass, then the usage limit, of three asked for" \
+  'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run asked for passes): floor-clean 1/3; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"
 
 : > "$log"
 EVAL_STUB_ACTIONS=unread-pass,unread-silent,unread-row,unread-bullet,unread-claimed suite --config-dir "$tmp/cfg" --task floor-unreadable --arm plinth --runs 5 --out "$tmp/fu"

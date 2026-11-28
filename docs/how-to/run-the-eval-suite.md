@@ -252,9 +252,9 @@ session called the skill its `trigger.json` names, or did not, as that file
 says. These four and `floor-gaps` are regression tasks (a `tier` file says
 so): each needs pass^3, 3 of 3 runs, in the plinth arm on every release that
 touches floor-check, or the release note names the miss. The summary prints
-one line for them, each with its plinth-arm count out of every run started
-(one not run, not graded or set aside counts as not passed), and names any
-below it.
+one line for them, each with its plinth-arm count out of the runs asked for
+(one not run, not graded, set aside or never started counts as not passed),
+and names any below it.
 
 Naming a gap or the open item is not enough (#961). Each entry of
 `floor-gaps`' `gaps.json` and `next-day`'s `open.json` has three patterns:
