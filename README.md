@@ -1,31 +1,80 @@
-# plinth
+<!-- markdownlint-disable-next-line MD041 -->
+<p align="center"><img src="docs/assets/plinth-mark.svg" alt="plinth" width="294"></p>
 
-For a beginner engineer or a non-engineer who runs a software project
-through an AI agent: in a repository plinth makes, the agent explains each
-change in plain words and recommends one option at each decision it asks of
-you, and the checks tell you what was confirmed. The guidance is designed for
-that reader, and not yet tried by anyone but its author.
+# Build software with an AI agent, on a base that holds
+
+plinth sets up your repository so that an AI agent's work has to pass real
+checks before it lands, and so that the agent explains each step in plain
+words. It is for a beginner engineer or a non-engineer who runs a software
+project through an agent. Today the agent it supports is Claude Code: plinth
+installs as a Claude Code plugin.
 
 Gated where a check can. Guided where it can't.
 The path comes from how experienced engineers run projects; whether the
 result is what you wanted stays yours to judge ([why](docs/explanation/concepts.md#about-the-process)).
 
-**What makes a project professional when you are new to code?**
-Not the code alone: the setup around it, the checks the code has to pass and
-a record another person can read.
+## The problem
 
-**How do I get better code out of an agent?**
-Small steps the checks can answer, each with something you can see that
-proves it done.
+You can ask an agent for a feature and get one. What you cannot easily see is
+whether it is safe to keep: did the tests run, did anything break, would
+another person understand the change next month? An agent told "always run
+the tests" follows that rule only while it remembers it.
 
-**Why not just tell the agent the rules?**
-A rule the agent is told holds only while the agent follows it. plinth
-configures the host (today GitHub) to require checks before a merge, most of
-them established tools and a few plinth's own, and the host refuses the merge
-while one is red. In 2026's terms, plinth is a harness template: guides for
-the agent, and checks the host requires, not the agent.
+## What plinth does
+
+plinth moves the rules out of the agent's instructions and into the host. It
+configures GitHub to **refuse a merge while a required check is red**, so the
+rule holds when the agent forgets it. Most of the checks run established
+tools (ruff, pytest, gitleaks, CodeQL and others), a few are plinth's own; the
+host, not plinth, refuses the merge. In 2026's terms, plinth is a harness
+template: guides for the agent, and checks the host requires, not the agent.
+
+```mermaid
+flowchart LR
+  you([You decide]) --> agent[The agent works<br/>in small steps]
+  agent --> pr[A pull request]
+  pr --> checks{Required checks<br/>the host enforces}
+  checks -- red --> agent
+  checks -- green --> record[(Merged, with a record<br/>another person can read)]
+```
 
 You decide. The checks answer. The record remembers.
+
+## What it looks like
+
+Shortened from a real run: `/plinth:floor-check` on
+[nexusbt](https://github.com/coolbress/nexusbt), a project made with plinth,
+on 2026-11-28. The check only reads. Lines and paragraphs are cut, never reworded;
+`[…]` marks a cut inside a line.
+
+```text
+You:     /plinth:floor-check
+
+Claude:  No check failed in what was read; 2 things to look at.
+         Nothing was changed.
+
+         1. Do it yourself: the agent's gh login […] holds `workflow`:
+            it can push a change to `.github/workflows/`, the checks
+            included.
+            - Once the first pull request is merged, give the agent a
+              token (a key that says what a program may do on GitHub)
+              without it: `docs/how-to/give-the-agent-a-token.md`
+         2. Do it yourself: template: `v1.50.3` is behind `v1.52.0`,
+            the tag (a named version) plinth is tested with.
+            - Changed in the template: […]
+
+         The merge: guidance. This login is the repository's admin, and
+         GitHub lets the admin merge (put a change into the main line),
+         so an agent working under it can merge too; it is asked to wait
+         for your word, not stopped.
+
+         Passed: 77 checks (say "show everything" to see each).
+
+         Next: type `/plinth:guide`; it names in plain words the one
+         command to type next.
+```
+
+## Start in two commands
 
 <!-- install-block:start -->
 ```bash
@@ -34,14 +83,27 @@ claude plugin install plinth@plinth
 ```
 <!-- install-block:end -->
 
-Then, in Claude Code, type `/plinth:new-project <owner>/<name>`: it asks
-where it lives, what kind of project it is, its name and who may see it,
-shows every answer (licence, third-party reviewer, code of conduct,
-description and directory included) in one table where you change only the
-rows you pick, then creates a repository with the checks already required,
-or says why it could not. Each answer is also a flag, and a flag given is not asked
-([the tutorial](docs/tutorials/getting-started.md#create-the-repository)). From there,
-[run a project](docs/how-to/run-a-project.md) is the loop, stage by stage.
+Then, in Claude Code:
+
+1. `/plinth:new-project <owner>/<name>` asks where it lives, what kind of
+   project it is, its name and who may see it, shows every answer in one
+   table where you change only the rows you pick, then creates a repository
+   with the checks already required, or says why it could not
+   ([the tutorial](docs/tutorials/getting-started.md#create-the-repository)).
+2. `/plinth:floor-check` on a repository you already have lists what is
+   missing, with one fix for each. It changes nothing.
+3. [Run a project](docs/how-to/run-a-project.md) is the loop from there,
+   stage by stage, and `/plinth:guide` names the next command at any point.
+
+## What you get
+
+| Part | What it gives you |
+| --- | --- |
+| A plugin for the agent | Six skills that start a project, check one, check its records, apply a template update, list the tools, and name the next step ([the skills](#skills-and-dependencies)) |
+| A project template | A Python project managed with uv, its checks, its docs and the agent's settings already in place |
+| Reusable CI | The checks the host requires before a merge, the same in every project, run from one pinned commit of this repository |
+
+## Honest limits
 
 **The limits.** A green check means the properties it asserts hold, not that
 the code is right, and a pull request can rewrite its own CI file so that
@@ -63,16 +125,7 @@ offered template updates as a draft pull request. A private repository needs a p
 GitHub plan, and some protections need more ([about private repositories](docs/explanation/concepts.md#about-private-repositories));
 GitLab.com Free protects a private project.
 
-## What plinth is
-
-The base a project run through an AI agent stands on: required checks that
-no change merges past while they are red, a curated set of agent skills, and a
-generator that starts a new repository with both already in place. Most of
-the checks run established tools (ruff, pytest, gitleaks, CodeQL and others),
-a few are plinth's own, and plinth configures the host (GitHub, or GitLab.com)
-to require them before a merge, so the host, not plinth, refuses a merge while
-they are red. On GitLab Free the host requires the pipeline as a whole, not
-each check by name.
+## Supported, and outside
 
 > **Supported:** GitHub.com public repositories · personal or org owner with
 > admin · Python (uv) · new repositories via `/plinth:new-project`; existing
@@ -162,7 +215,7 @@ What was measured: [coolbress/plinth-template#208](https://github.com/coolbress/
 
 Tutorial: [Getting started](docs/tutorials/getting-started.md).
 
-## What you get
+## Skills and dependencies
 
 Six skills, prefixed `/plinth:`:
 
