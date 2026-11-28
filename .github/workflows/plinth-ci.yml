@@ -192,6 +192,11 @@ jobs:
       - name: Floor checker reads one repository per run, and its git calls run no repository program
         run: ./tests/audit-guard.sh
 
+      # Every public write goes through one gate (#1119): no image, HTML, outside
+      # link, home path, token prefix or machine value; the approved plan's bytes.
+      - name: A public write holds only the checker's own values, as the person approved them
+        run: ./tests/public-write-cases.sh
+
       - name: Every uv pin is one release and its checksum, the template's too
         run: ./tests/uv-pin.sh
 
