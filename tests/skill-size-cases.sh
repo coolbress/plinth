@@ -124,6 +124,12 @@ expect fail "a description as a block scalar is its text (121 bytes over 100)" "
 d="$(fixture 50 2000 desc-block-blank)"
 printf -- '---\nname: one\ndescription: >-\n  Short paragraph.\n\n  %s\n---\nbody\n' "$(printf 'w%.0s' $(seq 1 200))" > "$d/skills/one/SKILL.md"
 expect fail "a block description with a blank line between paragraphs counts both (217 bytes over 100)" "$d" "one: description 217 bytes; the cap is 100"
+# And a header with a comment after it, or an indentation digit.
+for header in '>- # folded' '|2' '>+1 # kept'; do
+  d="$(fixture 50 2000 "desc-header-$(printf '%s' "$header" | tr -c 'a-z0-9' '-')")"
+  printf -- '---\nname: one\ndescription: %s\n  %s\n---\nbody\n' "$header" "$(printf 'w%.0s' $(seq 1 150))" > "$d/skills/one/SKILL.md"
+  expect fail "a block description under the header $header is its text (150 bytes over 100)" "$d" "one: description 150 bytes; the cap is 100"
+done
 d="$(fixture 50 2000 desc-none)"
 printf -- '---\nname: one\n---\nbody\n' > "$d/skills/one/SKILL.md"
 expect fail "no description: not passed as 0 bytes" "$d" "one: no description in its frontmatter"

@@ -36,6 +36,9 @@ BEFORE = re.compile(
     re.IGNORECASE,
 )
 ONLY_WHEN = re.compile(r"\bonly when\b", re.IGNORECASE)
+# A YAML block scalar's header: | or >, a chomping indicator and an
+# indentation digit in either order, and a comment after a space.
+BLOCK_HEADER = re.compile(r"^[|>](?:[+-]?[1-9]?|[1-9][+-])(?:\s+#.*)?$")
 ITEM = re.compile(r"^\s*(?:[-*]|[0-9]+\.)\s")
 
 
@@ -51,8 +54,9 @@ def split(text):
                 break
             if lines[i].startswith("description:"):
                 description = lines[i][len("description:") :].strip()
-                # A block scalar (>-, |): its indented lines are the text.
-                if description in ("", ">", ">-", ">+", "|", "|-", "|+"):
+                # A block scalar (>-, |, |2, >+1, each maybe with a trailing
+                # # comment): its indented lines are the text.
+                if description == "" or BLOCK_HEADER.match(description):
                     more = []
                     # A blank line inside the block is part of it: the
                     # block ends at the next line that is neither blank nor
