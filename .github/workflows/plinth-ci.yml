@@ -134,7 +134,11 @@ jobs:
 
   install-2:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # 20, not 12 (#1220): floor-check-golden.sh runs the whole floor-check
+    # cases test again to record each run, so this job grows with every case.
+    # It took 524 to 691 s of its 720 on main's last four runs (2026-11-28),
+    # and was cut off twice at 12 minutes; the limit is for a hang.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
