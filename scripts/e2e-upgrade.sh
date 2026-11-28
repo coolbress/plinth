@@ -83,12 +83,19 @@ while read -r tag; do
   [ -n "$pin" ] || fail "could not read the plinth_sha default of $template_repo@$ref ($tag's template tag)"
   if [ "$pin" != "$want" ]; then
     start="$tag"; from_ref="$ref"; from_pin="$pin"
+    # A start before #1220 named copier and its date in the door; one after
+    # names copier in tools/copier, its dependencies in that lock.
     from_copier="$(pin_of copier_version <<<"$old")"; from_newer="$(pin_of copier_newer <<<"$old")"
+    if [ -z "$from_copier" ]; then
+      from_copier="$(git -C "$here" show "$tag:tools/copier/pyproject.toml" 2>/dev/null | sed -n 's/^ *"copier==\([^"]*\)",\{0,1\}$/\1/p')"
+      git -C "$here" cat-file -e "$tag:tools/copier/uv.lock" 2>/dev/null && from_lock="$tag" || from_lock=""
+    fi
     break
   fi
 done < <(git -C "$here" tag --merged HEAD --sort=-v:refname --list 'v*')
 [ -n "$start" ] || fail "no release tag before this commit pinned a template tag tested with another plinth commit than $want ($template_ref's); nothing to start from (is the history fetched? the checkout needs fetch-depth: 0)"
-[ -n "$from_copier" ] && [ -n "$from_newer" ] || fail "$start's scripts/new-project.sh has no copier_version or copier_newer"
+[ -n "$from_copier" ] && { [ -n "$from_newer" ] || [ -n "${from_lock:-}" ]; } \
+  || fail "$start's copier pin is not read: no copier_version and copier_newer in scripts/new-project.sh, nor tools/copier/pyproject.toml and uv.lock"
 say "upgrade: from $start's template $from_ref (plinth $from_pin) to $template_ref (tested with plinth $want)"
 
 # ── the token's user ─────────────────────────────────────────────────────
@@ -111,7 +118,19 @@ git -C "$work" config user.email >/dev/null 2>&1 || {
   export GIT_AUTHOR_NAME="$login" GIT_AUTHOR_EMAIL="$id+$login@users.noreply.github.com"
   export GIT_COMMITTER_NAME="$login" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
 }
-env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$from_copier" --exclude-newer "$from_newer" \
+if [ -n "$from_newer" ]; then
+  from_run=(env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$from_copier" --exclude-newer "$from_newer")
+else
+  # The start's own lock, as its door ran it (scripts/lib/copier-pin.sh).
+  # shellcheck source=scripts/lib/copier-pin.sh
+  . "$here/lib/copier-pin.sh"
+  mkdir -p "$work/from-pins/tools/copier"
+  for f in pyproject.toml uv.lock; do
+    git -C "$here" show "$from_lock:tools/copier/$f" > "$work/from-pins/tools/copier/$f" || fail "could not read $from_lock:tools/copier/$f"
+  done
+  from_run=(copier_pinned "$work/from-pins" env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$from_copier")
+fi
+"${from_run[@]}" \
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=MIT" --data "archetype=cli" \
   --vcs-ref "$from_ref" "gh:$template_repo" "$dir" < /dev/null

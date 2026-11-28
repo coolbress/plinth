@@ -530,8 +530,9 @@ for_issues='def for_issues: [(.body // "") | scan("(?i)(?:^|[^a-z0-9_])(?:close[
 # The open pull requests' columns: 1 number, 2 bot or person, 3 draft or
 # ready, 4 checks, 5 head, 6 title, 7 opened at, 8 failing checks, 9 raises
 # the plinth pin, 10 the issues it is for, 11 mergeStateStatus (#998), 12 the
-# #N its Blocked by names. mergeStateStatus is a field, not a connection: it
-# adds no node to the query's count (measured for #998).
+# #N its Blocked by names, 13 the author's login (#1150). mergeStateStatus is
+# a field, not a connection: it adds no node to the query's count (measured
+# for #998). A merged one's column 7 is its author's login too.
 # Merged pull requests are read up to $read. A read that comes back full may
 # have been cut (one more cannot be told apart), so the count is of those
 # only and the line says so (#905).
@@ -557,14 +558,20 @@ issue_rows="$kind$refs$blockers"' sort_by(.number) | .[] | [.number, ([.labels[]
 # the repository's issue titles, newest first (search finds the words
 # anywhere, so the start is checked here; by best match, the newest could
 # fall past the first 10), and the moment 30 days ago, for the line below.
+# And who is here besides one person (#1150): the login this runs under
+# (viewer), the owner and its kind, and the people who can be assigned
+# issues, for the second-person line below.
 # Every other merge is counted only. The newest five are printed, newest
 # first; with a problem open, only the totals line. Each event keeps its whole
 # timestamp, in UTC (a tag's date may carry an offset), until the five are
 # picked: only the printed date is cut to the day.
 history_q='query($owner: String!, $name: String!, $lookq: String!) {
   lookBack: search(query: $lookq, type: ISSUE, first: 10) { nodes { ... on Issue { number title createdAt } } }
+  viewer { login }
   repository(owner: $owner, name: $name) {
   createdAt pushedAt
+  owner { __typename login }
+  assignableUsers(first: 20) { nodes { login } }
   mergedPulls: pullRequests(states: MERGED) { totalCount }
   closedIssues: issues(states: CLOSED) { totalCount }
   records: issues(states: CLOSED, first: 50, orderBy: {field: UPDATED_AT, direction: DESC}) { nodes { number title closedAt labels(first: 20) { nodes { name } } } }
@@ -592,7 +599,10 @@ history_jq='def clean: gsub("[\t\n\r]"; " ");
      ($r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot" and .mergedAt != null)
        | ["first", .mergedAt, "#\(.number)", (.title | clean)]),
      ([.data.lookBack.nodes[]? | select((.title // "") | ascii_downcase | startswith("look back")) | select(.createdAt != null)] | max_by(.createdAt)
-       | ["lookback", (if . then .createdAt else "" end), (if . then "#\(.number)" else "" end), (now - 2592000 | todate)]))
+       | ["lookback", (if . then .createdAt else "" end), (if . then "#\(.number)" else "" end), (now - 2592000 | todate)]),
+     ["people", (.data.viewer.login // ""), ($r.owner.__typename // "User"), ($r.owner.login // ""),
+       ([$r.assignableUsers.nodes[]?.login // empty] | join(",")),
+       ([$r.firstMerges.nodes[] | select(.author != null and .author.__typename != "Bot") | "\(.author.login)#\(.number)"] | join(","))])
   | @tsv'
 prs_read=""
 # The read of GitHub's native issue dependencies (below), on its own so that
@@ -610,9 +620,9 @@ deps_query() { (cd "$top" && gh api graphql -f owner="${repo%%/*}" -f name="${re
       | @tsv' 2>&1); }
 start prs in_top gh pr list --state open --limit 100 \
       --json number,title,body,isDraft,author,headRefOid,statusCheckRollup,createdAt,mergeStateStatus \
-      --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers] | @tsv'
+      --jq "$rollup$raises$for_issues$refs$blockers"' sort_by(.number) | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (if .isDraft then "draft" else "ready" end), checks, .headRefOid, (.title | '"$clean"'), .createdAt, failing, raises, for_issues, (.mergeStateStatus // ""), blockers, (.author.login // "")] | @tsv'
 start merged in_top gh pr list --state merged --limit "$read" --json number,title,mergedAt,author \
-      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"'), .mergedAt, (if (.mergedAt // "") != "" and now - (.mergedAt | fromdate) < 86400 then "recent" else "" end)] | @tsv'
+      --jq 'sort_by(.mergedAt) | reverse | .[] | [.number, (if '"$bot"' then "bot" else "person" end), (.mergedAt[0:10]), (.title | '"$clean"'), .mergedAt, (if (.mergedAt // "") != "" and now - (.mergedAt | fromdate) < 86400 then "recent" else "" end), (.author.login // "")] | @tsv'
 start issues in_top gh issue list --state open --limit 100 --json number,title,labels,body --jq "$issue_rows"
 start behind behind_read
 start history in_top gh api graphql -f owner="${repo%%/*}" -f name="${repo#*/}" -f lookq="repo:$repo is:issue in:title \"Look back\" sort:created-desc" -f query="$history_q" \
@@ -742,19 +752,32 @@ take run run && run_ok=yes
 # main moved on, the run is an older commit's). Not when #N is itself a
 # revert (that would undo the undo), nor while a revert of #N is open (that
 # pull request is the way, routed below). The route undoes #N first.
-main_undo=""; main_undo_title=""
+# is_revert <title>: a title that reverts, in every form ci / pr-title
+# accepts (#1203): GitHub's `Revert "<title>"`, and the type revert, with a
+# scope or a `!` or both (`revert!:`, `revert(api)!:`). The scope's letters
+# are python-ci.yml's; tests/guide-cases.sh fails when the two disagree.
+revert_type='^revert(\([a-zA-Z0-9_.,/ -]+\))?!?: .+'
+is_revert() { case "$1" in 'Revert "'*) return 0 ;; esac; grep -qE "$revert_type" <<<"$1"; }
+main_undo=""; main_undo_title=""; open_revert=""; open_reverts=""
 if [ -n "$run_ok" ] && [ -n "$run" ]; then
   case "$(cut -f2 <<<"$run")" in success|neutral|skipped) ;; *) main_red=yes ;; esac
   if [ "$(cut -f2 <<<"$run")" = failure ]; then
     main_undo_title="$(cut -f4 <<<"$run")"
     main_undo="$(sed -nE 's/.* \(#([0-9]+)\)$/\1/p' <<<"$main_undo_title")"
-    case "$main_undo_title" in 'Revert "'*|revert:*|revert\(*) main_undo="" ;; esac
+    ! is_revert "$main_undo_title" || main_undo=""
     [ -z "$main_undo" ] || [ "$(head -1 <<<"$merged" | cut -f1)" = "$main_undo" ] || main_undo=""
     # An open revert of #N: GitHub titles it Revert "<#N's title>", with no
     # (#N) inside the quotes (ci / pr-title refuses one there); a title that
     # does carry (#N) counts too (#1196 review).
-    [ -z "$main_undo" ] || ! REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
-      'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { found = 1 } END { exit !found }' <<<"$prs" || main_undo=""
+    # That pull request is then the route itself, ahead of any other (#1203).
+    # A revert in the type form (revert: or revert!:) counts when it names #N.
+    [ -z "$main_undo" ] || open_revert="$(REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
+      'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { print $1; exit }' <<<"$prs")"
+    [ -n "$open_revert" ] || [ -z "$main_undo" ] || open_revert="$(while IFS= read -r row; do
+        t="$(cut -f6 <<<"$row")"
+        [[ "$t" =~ (^|[^0-9A-Za-z_])#$main_undo([^0-9]|$) ]] && grep -qE "$revert_type" <<<"$t" && { cut -f1 <<<"$row"; break; }
+      done <<<"$prs")"
+    [ -z "$open_revert" ] || { open_reverts="$main_undo"; main_undo=""; }
   fi
 fi
 
@@ -1114,7 +1137,24 @@ fi
 # and said as not read if it is still UNKNOWN. What it cannot know is a line
 # of its own.
 merge_next=""; merge_n=""
-if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<"$people_prs")" -ge 2 ]; then
+# The revert's own Blocked by (#1257 review): a number still open in the
+# issues and pull requests read waits, and one past those reads is not known
+# to be closed, so it waits too; the revert is not merged before either.
+revert_waits=""
+if [ -n "$open_revert" ]; then
+  revert_open_nums="$( { field 1 <<<"$issues"; field 1 <<<"$prs"; } | grep . || true)"
+  for b in $(awk -F '\t' -v n="$open_revert" '$1 == n { print $12; exit }' <<<"$prs" | tr ',' ' '); do
+    if grep -qxF "$b" <<<"$revert_open_nums"; then revert_waits="${revert_waits:+$revert_waits, }#$b, still open"
+    else revert_waits="${revert_waits:+$revert_waits, }#$b, not read"; fi
+  done
+fi
+if [ -n "$open_revert" ] && [ -n "$revert_waits" ]; then
+  merge_next="merge next: none: #$open_revert, the revert of #$open_reverts, comes first, and it waits on its Blocked by ($revert_waits)"
+elif [ -n "$open_revert" ]; then
+  # An open revert of the merge that broke main (#1203) is merged before any
+  # other: main stays broken until it does, so no other is ranked first.
+  merge_next="merge next: #$open_revert, the revert of #$open_reverts: main stays broken until it merges, so it comes before any other"
+elif { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<"$people_prs")" -ge 2 ]; then
   person_rows="$(awk -F '\t' '$2 == "person"' <<<"$prs")"
   unknown="$(awk -F '\t' '$3 == "ready" && $4 == "pass" && $11 == "UNKNOWN" { print $1 }' <<<"$person_rows")"
   reread=""
@@ -1233,6 +1273,33 @@ elif [ -n "$main_undo" ]; then
   if [ "$archetype" = web ]; then restore="with the README's \"Where it runs\" and the restore you tried (step 3 of $plugin/docs/how-to/set-four-things-by-hand.md)"
   else restore="this archetype's project has no restore steps of its own"; fi
   echo "then also: after the undo, restore any data the change lost or changed ($restore), then reproduce and fix, and leave a short blameless note in the issue's Outcome when it lost data, needed a revert or reached users"
+elif [ -n "$open_revert" ]; then
+  # The undo is open (#1203): its pull request comes before any other's
+  # failing check, since main stays broken until it merges.
+  run_id_red="$(cut -f1 <<<"$run")"
+  row="$(awk -F '\t' -v n="$open_revert" '$1 == n { print; exit }' <<<"$prs")"
+  checks="$(field 4 <<<"$row")"; draft="$(field 3 <<<"$row")"; merge_state="$(field 11 <<<"$row")"
+  said_checks="$(awk -F '\t' -v n="$open_revert" '$1 == n { print $9; exit }' <<<"$people_prs")"
+  note="pull request #$open_revert reverts #$open_reverts, whose merge failed main's latest CI run (run $run_id_red); it comes before any other pull request"
+  if [ "$checks" = fail ]; then
+    note="$note; it has a failing check: the agent reads its log first, as for any other"
+    say "Something broke" "diagnose this: pull request #$open_revert has a failing check"
+  elif [ "$merge_state" = DIRTY ]; then
+    note="$note; it conflicts with main: the conflict is resolved in its branch first"
+    say "Something broke" "diagnose this: pull request #$open_revert conflicts with main"
+  elif [ "$draft" = draft ]; then
+    note="$note; it is a draft: mark it ready for review on its page, then merge it once its checks are green"
+    say "A pull request with checks running" "/run"
+  elif [ -n "$revert_waits" ]; then
+    note="$note; it waits on what its Blocked by names ($revert_waits): that is done first, then it is merged"
+    say "A pull request with checks running" "none: pull request #$open_revert waits on its Blocked by ($revert_waits)"
+  elif [ "$checks" = pass ]; then
+    note="$note; its checks are green, so saying merge #$open_revert is the person's word for it"
+    say "Green, and seen working" "merge #$open_revert"
+  else
+    note="$note; ${said_checks:-its checks were not read}: merge it once they are green"
+    say "A pull request with checks running" "/run"
+  fi
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
   if [ -n "$broken" ] && [ -n "$plinth_failing" ] && [ -n "$pin_behind" ]; then
@@ -1367,6 +1434,38 @@ fi
 # piece of work just ended; /retro reads that session, so it comes first.
 if [ "$before" = /clear ] && [ "$(head -1 <<<"$merged" | cut -f2,6)" = "person"$'\t'"recent" ]; then
   echo "after the merge: if anything in that piece of work should go differently next time, type /retro in that session before /clear"
+fi
+# A second person (#1150): besides the one person and the agent, someone who
+# can be assigned issues here (a collaborator: on a personal account every
+# collaborator has write access; in an organization a member with read can be
+# assigned too), or who opened a pull request, open or merged. Not counted:
+# bots, and the login this runs under, which is the agent's own account where
+# give-the-agent-its-own-account.md left only that login on the machine. On a
+# personal account the owner is the one person; an organization is not a
+# person, so there it takes two. One line, and only until a CODEOWNERS file
+# is there: the page's second step adds one, and after it the line has done
+# its work.
+second_line() {
+  local row viewer kind owner assignable firsts who
+  row="$(awk -F '\t' '$1 == "people"' <<<"$history" | head -1)"
+  [ -n "$row" ] || return 0
+  # cut, not read: read folds an empty field between two tabs away.
+  viewer="$(cut -f2 <<<"$row")"; kind="$(cut -f3 <<<"$row")"; owner="$(cut -f4 <<<"$row")"
+  assignable="$(cut -f5 <<<"$row")"; firsts="$(cut -f6 <<<"$row")"
+  [ -n "$viewer" ] || return 0
+  who="$( { tr ',' '\n' <<<"$assignable" | awk 'NF { print $0 "\tcan be assigned here" }'
+      awk -F '\t' '$2 == "person" && $13 != "" { print $13 "\topened #" $1 }' <<<"$prs"
+      awk -F '\t' '$2 == "person" && $7 != "" { print $7 "\topened #" $1 }' <<<"$merged"
+      tr ',' '\n' <<<"$firsts" | awk -F '#' 'NF == 2 && $1 != "" { print $1 "\topened #" $2 }'; } |
+    awk -F '\t' -v v="$viewer" -v o="$([ "$kind" = User ] && echo "$owner")" '
+      { l = tolower($1) }
+      l == tolower(v) || (o != "" && l == tolower(o)) || l ~ /\[bot\]$/ || l ~ /^app\// || seen[l]++ { next }
+      { print $1 " (" $2 ")" }')"
+  [ "$(grep -c . <<<"$who" || true)" -ge "$([ "$kind" = User ] && echo 1 || echo 2)" ] || return 0
+  echo "a second person: $(head -3 <<<"$who" | paste -sd ',' - | sed 's/,/, /g')$([ "$(grep -c . <<<"$who")" -le 3 ] || echo ", and more"); before their first change, follow $plugin/docs/how-to/add-a-second-person.md: where the repository lives, CODEOWNERS, the two-person rules, a token for each person"
+}
+if [ -n "$history_ok" ] && [ ! -f "$top/.github/CODEOWNERS" ] && [ ! -f "$top/CODEOWNERS" ] && [ ! -f "$top/docs/CODEOWNERS" ]; then
+  second_line
 fi
 # The template behind (#904): step 9's line names the update; the step the
 # project is at stays the one above.
