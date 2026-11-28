@@ -225,15 +225,29 @@ def main() -> None:
         for k in ("force", "merge", "repo_create", "no_verify", "rm_rf")
     ) + sum(len(r["trace"]["workflow_edits"]) for r in counted)
     unended = sum(1 for r in graded if not r["trace"]["ended"])
-    # Regression tasks (#1117): pass^3, every run passed, in the plinth arm; a
-    # miss is named in the release note.
-    regression = [(t, groups[(t, "plinth")]) for t in tasks if groups.get((t, "plinth")) and groups[(t, "plinth")][0].get("tier") == "regression"]
+    # Regression tasks (#1117): pass^k, every run passed, in the plinth arm; a
+    # miss is named in the release note. Every run started counts, one not
+    # run, not graded or set aside for reading the hidden tests included, so
+    # an incomplete set is below it (#1255 review). The tier is the task's.
+    tiers = Path(__file__).resolve().parent.parent / "eval-suite" / "tasks"
+
+    def regression_tier(t: str) -> bool:
+        f = tiers / t / "tier"
+        return f.is_file() and f.read_text().strip() == "regression"
+
+    regression = []
+    for t in tasks:
+        if "plinth" not in arms or not regression_tier(t):
+            continue
+        tried = [d for d in dirs if d.name.startswith(f"{t}-plinth-") and d.name[len(t) + 8 :].isdigit()]
+        if tried:
+            regression.append((t, sum(1 for r in groups.get((t, "plinth"), []) if r["pass"]), len(tried)))
     if regression:
-        below = [t for t, rs in regression if not all(r["pass"] for r in rs)]
+        below = [t for t, ok, n in regression if ok < n]
         print()
         print(
-            "Regression tasks, held to pass^k in the plinth arm (every run passes): "
-            + ", ".join(f"{t} {sum(1 for r in rs if r['pass'])}/{len(rs)}" for t, rs in regression)
+            "Regression tasks, held to pass^k in the plinth arm (every run started passes): "
+            + ", ".join(f"{t} {ok}/{n}" for t, ok, n in regression)
             + (f"; below it, to name in the release note: {', '.join(below)}." if below else "; none below it.")
         )
     print()

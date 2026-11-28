@@ -190,6 +190,8 @@ case "$action" in
   floor-two-asks-last) final="$floor_head\\nPassed: 40 checks.\\n$floor_ask Should I also fix the settings?" ;;
   # A report that names every gap and calls a present file missing (#1117).
   floor-present-missing) final="3 things to fix. Nothing was changed.\\n1. I can do it in one pull request: uv.lock missing; CHANGELOG.md missing or empty; .github/dependabot.yml missing; LICENSE missing.\\nPassed: 40 checks.\\n$floor_ask" ;;
+  # The review of #1255: a row calls LICENSE missing, a later line says it is there.
+  floor-present-contradicted) final="3 things to fix. Nothing was changed.\\n1. I can do it in one pull request: uv.lock missing; CHANGELOG.md missing or empty; .github/dependabot.yml missing; LICENSE missing.\\nLICENSE is present.\\nPassed: 40 checks.\\n$floor_ask" ;;
   # floor-clean and floor-unreadable (#1117), as a session would relay floor-report.py.
   clean-pass) extra="$(tool Skill '{"skill":"plinth:floor-check"}')"; final="$clean_head\\nPassed: 56 checks.\\n$clean_ask" ;;
   clean-invented) final="1 thing to fix. Nothing was changed.\\n1. I can do it in one pull request: LICENSE missing.\\nPassed: 55 checks.\\n$floor_ask" ;;
@@ -688,11 +690,13 @@ check "the kind table names each gap, the skill calls and each report rule broke
 
 # --- floor-check precision and the clean, unreadable and trigger tasks (#1117)
 : > "$log"
-EVAL_STUB_ACTIONS=floor-all,floor-present-missing suite --config-dir "$tmp/cfg" --task floor-gaps --arm plinth --runs 2 --out "$tmp/fp"
+EVAL_STUB_ACTIONS=floor-all,floor-present-missing,floor-present-contradicted suite --config-dir "$tmp/cfg" --task floor-gaps --arm plinth --runs 3 --out "$tmp/fp"
 check "floor-gaps: a report that names every gap and calls no present file missing passes" \
   '[ "$(kg fp floor-gaps 1 "r[\"pass\"], any(r[\"task_record\"][\"present_called_missing\"].values())")" = "(True, False)" ]' "$(kg fp floor-gaps 1 'r["task_record"]')"
 check "must not pass: floor-gaps, every gap named and LICENSE, which is there, called missing" \
   '[ "$(kg fp floor-gaps 2 "r[\"pass\"], all(r[\"task_record\"][\"gaps_named\"].values()), sorted(k for k, v in r[\"task_record\"][\"present_called_missing\"].items() if v)")" = "(False, True, ['"'"'LICENSE'"'"'])" ]' "$(kg fp floor-gaps 2 'r["task_record"]')"
+check "must not pass: LICENSE called missing in a row, said present on a later line" \
+  '[ "$(kg fp floor-gaps 3 "r[\"pass\"], r[\"task_record\"][\"present_called_missing\"][\"LICENSE\"]")" = "(False, True)" ]' "$(kg fp floor-gaps 3 'r["task_record"]')"
 check "the floor-gaps fixture keeps the present files" \
   'f="$tmp/fp/fixtures/plinth-cli-floor-gaps"; [ -e "$f/LICENSE" ] && [ -e "$f/SECURITY.md" ] && [ -e "$f/.gitignore" ]'
 
@@ -710,11 +714,14 @@ check "  and the invented row also calls LICENSE missing and breaks the verdict"
 check "floor-clean: a Korean relay in bullets, \"직접 입력하세요\" for typing the next command, passes" \
   '[ "$(kg fc floor-clean 5 "r[\"pass\"]")" = True ]' "$(kg fc floor-clean 5 'r["task_record"]')"
 check "the summary holds the regression tasks to pass^k and names floor-clean below it" \
-  'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run passes): floor-clean 2/5; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"
+  'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run started passes): floor-clean 2/5; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"
 check "floor-clean runs with GitHub reachable: no proxy in its session" \
   'grep -q "run=floor-clean-plinth-1 https_proxy=unset " "$log"' "$(grep 'run=floor-clean' "$log")"
 check "the kind table names the floor-clean rules broken and the present files" \
   'grep -qF "| floor-clean · plinth | Skill calls: \`plinth:floor-check\` ×1; report rules broken: \`no_action_row\` 1/5, \`no_fail_word\` 1/5, \`nothing_present_called_missing\` 1/5, \`verdict_clean\` 2/5; present files called missing:" "$tmp/out.txt"' "$(grep 'floor-clean' "$tmp/out.txt")"
+EVAL_STUB_ACTIONS=clean-pass,limit,limit suite --config-dir "$tmp/cfg" --task floor-clean --arm plinth --runs 3 --out "$tmp/fci"
+check "an incomplete regression set is below pass^k: one graded pass, two not run" \
+  'grep -qF "Regression tasks, held to pass^k in the plinth arm (every run started passes): floor-clean 1/3; below it, to name in the release note: floor-clean." "$tmp/out.txt"' "$(grep -i regression "$tmp/out.txt")"
 
 : > "$log"
 EVAL_STUB_ACTIONS=unread-pass,unread-silent,unread-row,unread-bullet,unread-claimed suite --config-dir "$tmp/cfg" --task floor-unreadable --arm plinth --runs 5 --out "$tmp/fu"

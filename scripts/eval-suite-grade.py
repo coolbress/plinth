@@ -737,7 +737,38 @@ def present_called_missing(task: Path, final: str) -> dict[str, bool]:
     spec = task / "present.json"
     if not spec.exists():
         return {}
-    return {p["path"]: entry_met(p, final) for p in json.loads(spec.read_text())}
+    return {p["path"]: called_missing(p, final) for p in json.loads(spec.read_text())}
+
+
+def called_missing(entry: dict[str, str], final: str) -> bool:
+    """Whether some sentence of the report says the entry is missing (#1255 review).
+
+    Unlike `entry_met`, which proves a gap and so is undone by any sentence
+    that says the file is there, one claim is enough here: a report that says
+    "LICENSE missing" in a row and "LICENSE is present" below still told the
+    person to repair a file that exists. Each sentence that names the entry
+    is read as `opposite_said` reads one, its clauses that name it first and
+    its negations turned (`readings`); a list item with no state word of its
+    own is read as its lead-in says (`lead_said`).
+    """
+    all_lines = final.splitlines()
+    for at, raw in enumerate(all_lines):
+        if not re.search(entry["named"], raw, re.IGNORECASE):
+            continue
+        line = item_text(all_lines, at)
+        lead = lead_in(all_lines, at)
+        if lead is not None and not readings(entry, line) and lead_said(entry, lead)[0]:
+            return True
+        for part in re.split(r"(?<=[.;!?])\s+", line):
+            if not re.search(entry["named"], part, re.IGNORECASE):
+                continue
+            cuts = [0] + [q for m in CLAUSE.finditer(part) for q in (m.start(), m.end())] + [len(part)]
+            naming = [(x, y) for x, y in zip(cuts[::2], cuts[1::2]) if re.search(entry["named"], part[x:y], re.IGNORECASE)]
+            rs = readings(entry, part)
+            inside = [st for start, st in rs if any(x <= start < y for x, y in naming)]
+            if any(inside) if inside else any(st for _, st in rs):
+                return True
+    return False
 
 
 def floor_clean(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
@@ -816,8 +847,8 @@ def task_record(
     if kind == "trigger":
         spec = json.loads((task / "trigger.json").read_text())
         # The plugin's name may be left off: `floor-check` is the same skill.
-        called = any(s in (spec["skill"], spec["skill"].split(":")[-1]) for s in tr["skills"])
-        return called == bool(spec["called"]), {"skill": spec["skill"], "called": called, "skills": tr["skills"]}
+        did = any(s in (spec["skill"], spec["skill"].split(":")[-1]) for s in tr["skills"])
+        return did == bool(spec["called"]), {"skill": spec["skill"], "called": did, "skills": tr["skills"]}
     if kind == "resume":
         items = json.loads((task / "open.json").read_text())
         named = {i["item"]: entry_met(i, final) for i in items}
