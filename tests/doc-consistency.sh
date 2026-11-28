@@ -479,6 +479,36 @@ if on("delete"):
     if fails == before and need:
         ok(",".join(need))
 
+# 10. What plinth does not cover (#1148): before the first /plinth:new-project
+# step, the tutorial says what the person's own account, the agent's mode and
+# the costs need, read with line breaks as one space; "When plinth is not the
+# right tool" comes before "Before you start".
+if on("uncovered"):
+    gs_rel = "docs/tutorials/getting-started.md"
+    gs = (docs / gs_rel).read_text(encoding="utf-8")
+    sec = re.search(r"^## What plinth does not cover\n(.*?)(?=^## )", gs, re.M | re.S)
+    first = gs.find("/plinth:new-project")
+    before = fails
+    if not sec:
+        fail(f"{gs_rel} has no '## What plinth does not cover' section")
+    else:
+        at = gs.count("\n", 0, sec.start()) + 1
+        if first >= 0 and first < sec.start():
+            fail(f"{gs_rel}:{at} 'What plinth does not cover' comes after the first /plinth:new-project")
+        flat = " ".join(sec.group(1).split())
+        for want in ("phishing page", "recovery codes", "not SMS", "security log", "OAuth apps",
+                     "Auto mode is Claude Code's default and not a boundary",
+                     "Never use bypass mode (`--dangerously-skip-permissions`) on your own computer",
+                     "usage credits", "`/usage`"):
+            if want.lower() not in flat.lower():
+                fail(f"{gs_rel}:{at} 'What plinth does not cover' does not say: {want}")
+    fit = re.search(r"^## When plinth is not the right tool$", gs, re.M)
+    bys = gs.find("## Before you start")
+    if not fit or fit.start() > bys:
+        fail(f"{gs_rel}:{gs.count(chr(10), 0, max(bys, 0)) + 1} has no '## When plinth is not the right tool' before '## Before you start'")
+    if fails == before:
+        ok()
+
 if sel and not matched:
     fail(f"nothing is checked as {' '.join(sel)}: no such section or item")
 sys.exit(1 if fails else 0)
@@ -1102,6 +1132,7 @@ fact ¦ the three questions: listed in step 5, said on all {} line(s) that name 
 fact ¦ docs/tutorials/getting-started.md: the first login asks for {}, after saying what it can administer ¦ login
 fact ¦ no login or refresh that asks for {} carries delete_repo ¦ delete
 fact ¦ {} stated check count(s) read; expected {} ¦ counts
+fact ¦ docs/tutorials/getting-started.md: what plinth does not cover, and when it is not the tool ¦ uncovered
 -- ¦ doc-pinned-facts: copies with one wrong line
 planted ¦ a copy with a README template tag other than template_ref fails: {} ¦ README.md ¦ append ¦ Rendered from coolbress/plinth-template@v0.0.1. ¦ end
 planted ¦ a copy with a tutorial template tag other than template_ref fails: {} ¦ docs/tutorials/getting-started.md ¦ append ¦ [old](https://github.com/coolbress/plinth-template/releases/tag/v0.0.1) ¦ end
@@ -1124,6 +1155,9 @@ planted ¦ a copy with an arsenal cell that names the three questions and says t
 planted ¦ a copy with a line that names the three questions and says none fails: {} ¦ skills/guide/SKILL.md ¦ append ¦ Then ask the three questions. ¦ end
 planted ¦ a copy with a first login that asks for delete_repo fails: {} ¦ docs/tutorials/getting-started.md ¦ sed ¦ 1,/gh auth login -s repo,workflow`/s/gh auth login -s repo,workflow`/gh auth login -s repo,workflow,delete_repo`/ ¦ grep:gh auth login -s repo,workflow,delete_repo
 planted ¦ a copy with a refresh that asks for delete_repo with the needed scopes fails: {} ¦ skills/new-project/SKILL.md ¦ append ¦ fix: `! gh auth refresh -h github.com -s repo,workflow,delete_repo` ¦ end
+planted ¦ a copy whose account item no longer says phishing fails: {} ¦ docs/tutorials/getting-started.md ¦ sed ¦ s/recognise a phishing page/recognise a fake page/ ¦ grep:^## What plinth does not cover
+planted ¦ a copy whose mode item drops the bypass sentence fails: {} ¦ docs/tutorials/getting-started.md ¦ sed ¦ s/  Never use bypass mode/  Avoid bypass mode/ ¦ grep:^## What plinth does not cover
+planted ¦ a copy without the not-the-right-tool heading fails: {} ¦ docs/tutorials/getting-started.md ¦ sed ¦ s/^## When plinth is not the right tool$/## Other tools/ ¦ grep:^## Before you start
 
 # ---- From tests/readme-install-block.sh: the README install block.
 -- ¦ readme-install-block

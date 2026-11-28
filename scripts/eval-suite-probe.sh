@@ -61,10 +61,14 @@ claude auth status >/dev/null 2>&1 || die "not logged in in $cfg; run: CLAUDE_CO
 
 pin() { sed -nE "s/^$1=\"([^\"]+)\"$/\1/p" "$root/scripts/new-project.sh"; }
 template_repo="$(pin template_repo)" template_sha="$(pin template_sha)"
-copier_version="$(pin copier_version)" copier_newer="$(pin copier_newer)"
-for v in template_repo template_sha copier_version copier_newer; do
+for v in template_repo template_sha; do
   [ -n "${!v}" ] || die "no $v in scripts/new-project.sh"
 done
+# copier and its dependencies from tools/copier, their one source (#1220).
+# shellcheck source=scripts/lib/copier-pin.sh
+. "$root/scripts/lib/copier-pin.sh"
+copier_version="$(copier_pin_version "$root")"
+[ -n "$copier_version" ] || die "no copier==<version> in tools/copier/pyproject.toml"
 
 if [ -n "$out" ]; then
   [ ! -e "$out" ] || die "--out $out already exists; name a new directory"
@@ -111,7 +115,7 @@ printf 'claude=%s model=%s plinth=%s template=%s\n' "$(claude --version 2>/dev/n
 # The workspace: the template's cli render, as eval-suite.sh renders it, with a
 # marker line no session can guess added to AGENTS.md (CLAUDE.md links to it).
 echo "== render $template_repo ($template_sha) as cli"
-env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+copier_pinned "$root" env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" \
   copier copy --defaults --quiet \
   --data "project_name=probe" --data "license=MIT" --data "archetype=cli" \
   --vcs-ref "$template_sha" "gh:$template_repo" "$work/fixture" < /dev/null

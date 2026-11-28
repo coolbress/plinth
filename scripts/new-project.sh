@@ -87,16 +87,19 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The box, at the one tag this version of plinth is tested with and the
 # commit that tag named then (checked before anything is created, #519), and
 # the workflow file it ships (the first pull request's run is looked up by it).
-# Then the renderer, at one version, with its dependencies as they were on
-# one date: copier runs as you, with your git configuration in reach, and
-# an unpinned resolution would let any package published later run there.
-# Raising the tag with its commit, the version or the date is the only edit here.
+# Then the renderer, at one version with every dependency at one version:
+# copier runs as you, with your git configuration in reach, and an unpinned
+# resolution would let any package published later run there. Both come from
+# tools/copier, their one source (#1220): its uv.lock goes to uv as
+# constraints (scripts/lib/copier-pin.sh), and Dependabot raises it. Raising
+# the tag with its commit is the only edit here.
 template_repo="coolbress/plinth-template"
 template_ref="v1.52.0"
 template_sha="8442a9661c170171230bf8c25f1c5fe8f89d83e5"
 template_ci=".github/workflows/ci.yml"
-copier_version="9.18.2"
-copier_newer="2026-09-09"
+# shellcheck source=scripts/lib/copier-pin.sh
+. "$here/lib/copier-pin.sh"
+copier_version="$(copier_pin_version "$here/..")"
 claude_floor="2.1.274"
 # Installing the plugin needs git 2.37 (tests/install-smoke.sh, #171), which
 # reads this line; the door itself needs 2.28 (init -b, switch). One floor, the
@@ -196,7 +199,7 @@ case "$host" in
   gitlab) [ "$check" = 0 ] || rest+=(--check)
           PLINTH_DOOR_TEMPLATE_REPO="$template_repo" PLINTH_DOOR_TEMPLATE_REF="$template_ref" \
             PLINTH_DOOR_TEMPLATE_SHA="$template_sha" \
-            PLINTH_DOOR_COPIER_VERSION="$copier_version" PLINTH_DOOR_COPIER_NEWER="$copier_newer" \
+            PLINTH_DOOR_COPIER_VERSION="$copier_version" \
             PLINTH_DOOR_CLAUDE_FLOOR="$claude_floor" PLINTH_DOOR_GIT_FLOOR="$git_floor" \
             exec "$here/new-project-gitlab.sh" ${rest[@]+"${rest[@]}"} ;;
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
@@ -291,6 +294,7 @@ fi
 # the other two usually end within a minute. Tests shorten it; a typo must
 # stop here, not after the repository exists.
 first_pr_wait="${PLINTH_FIRST_PR_WAIT:-300}"
+[ -n "$copier_version" ] || stop "tools/copier/pyproject.toml names no copier==<version>: the plinth install is incomplete" "  fix: claude plugin update plinth@plinth"
 case "$first_pr_wait" in ''|*[!0-9]*) stop "PLINTH_FIRST_PR_WAIT must be a whole number of seconds (got: $first_pr_wait)" "  fix: unset PLINTH_FIRST_PR_WAIT" ;; esac
 # Read as base 10: bash arithmetic takes a leading zero as octal, so 08 would
 # abort with "value too great for base" after the repository exists (#539).
@@ -794,14 +798,14 @@ trap cleanup EXIT
 # that makes no Python package before writing a file. The door's own name
 # check above is GitHub's alphabet only; the template stays the one judge of a
 # name, and its refusal stops before anything exists on GitHub, as on GitLab.
-# Copier at its pinned version with nothing published after the pinned date,
+# Copier at its pinned version with each dependency at its pinned version,
 # without the token, and before the repository exists on disk: nothing it
 # writes may be a hook or a config line that a git command below, run with the
 # token, would execute. Rendering into a plain directory
 # and removing whatever `.git` it left, then initialising, leaves it nothing
 # but content (Codex review on #118).
 rendered=1
-if ! env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" --exclude-newer "$copier_newer" \
+if ! copier_pinned "$here/.." env -u GH_TOKEN -u GITHUB_TOKEN uvx --quiet --from "copier==$copier_version" \
   copier copy --defaults --quiet \
   --data "project_name=$name" --data "owner=$owner" --data "license=$spdx" --data "archetype=$arch" \
   --data "owner_has_pr_template=$([ "$has_pr" = yes ] && echo true || echo false)" \

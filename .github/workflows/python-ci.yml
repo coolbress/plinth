@@ -228,7 +228,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           rc=0
-          uvx zizmor@1.29.0 --no-progress --min-severity medium --format json .github/workflows/ > "$RUNNER_TEMP/zizmor.json" || rc=$?
+          uvx zizmor@1.33.1 --no-progress --min-severity medium --format json .github/workflows/ > "$RUNNER_TEMP/zizmor.json" || rc=$?
           case "$rc" in 0|1[1-4]) ;; *) echo "zizmor exited $rc: an error, not a finding"; exit 1 ;; esac
           jq -e 'type == "array"' "$RUNNER_TEMP/zizmor.json" > /dev/null || { echo "zizmor's output is not a JSON list of findings"; exit 1; }
           # Each finding's primary location as file:line; newlines are
@@ -354,7 +354,7 @@ jobs:
           tool "$CHECK" ruff-check.rc "ruff check" "uv run ruff check ." "run uv run ruff check . here, fix what it names, and push" ruff ruff-check.json "the ruff check step's log"
           tool "$FORMAT" ruff-format.rc "ruff format --check" "uv run ruff format --check ." "run uv run ruff format here, commit what it changes, and push" format ruff-format.log "the ruff format --check step's log"
           v "$ZIZMOR" "zizmor's audits at medium and above, offline and online, except known-vulnerable-actions"
-          [ "$ZIZMOR" != failure ] || nx "run uvx zizmor@1.29.0 --min-severity medium .github/workflows/ here, fix what it names, and push"
+          [ "$ZIZMOR" != failure ] || nx "run uvx zizmor@1.33.1 --min-severity medium .github/workflows/ here, fix what it names, and push"
           kva="$RUNNER_TEMP/zizmor.kva"
           if [ ! -f "$kva" ]; then say "not yet confirmed: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions). Why: zizmor did not finish. What confirms it: a run where it does."
           elif [ ! -s "$kva" ]; then say "pass: no published advisory at medium or above for an action pinned here (zizmor known-vulnerable-actions)"
@@ -2758,6 +2758,11 @@ jobs:
           # beside the checker as in the plugin: scripts/lib/.
           curl -fsSL --retry 3 -o "$d/lib/shared-github.sh" \
             "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/scripts/lib/shared-github.sh"
+          # copier's version, for the update line: tools/ one level above the
+          # checker, as in the plugin (#1220).
+          mkdir -p "$d/../tools/copier"
+          curl -fsSL --retry 3 -o "$d/../tools/copier/pyproject.toml" \
+            "https://raw.githubusercontent.com/coolbress/plinth/${PLINTH_SHA}/tools/copier/pyproject.toml"
           echo "plinth ${PLINTH_SHA}"
 
       - name: Floor check
@@ -3058,9 +3063,10 @@ jobs:
   # disposable Postgres behind it, then `/` as a logged-in person and the
   # log-in page as a visitor. No account anywhere: the person is made for this
   # run in the throwaway database, and the reports stay in this run (nothing
-  # is uploaded). Reported, never failing (#702's Decisions): every step
-  # continues on error, and whether a score or a violation ever turns it red
-  # is decided later. Not a required check. Another archetype reports a pass
+  # is uploaded). It fails on a critical or serious axe-core violation of the
+  # WCAG 2.2 A and AA rules (#1149, the gate step), never on a score; every
+  # other step continues on error, so a step that could not run is a `not
+  # yet confirmed`, not a red. Not a required check. Another archetype reports a pass
   # that does not apply. Node, Chrome for Testing and the tools are pinned:
   # the two downloads by SHA256, the npm packages by the lockfile in
   # scripts/web-audit/, fetched from the same plinth commit as this workflow.
@@ -3258,8 +3264,13 @@ jobs:
               await page.setExtraHTTPHeaders(p.headers);
               const res = await page.goto(p.url, { waitUntil: "networkidle0", timeout: 60000 });
               await page.evaluate(axe.source);
-              const result = await page.evaluate(() => window.axe.run(document));
-              write(`${i}.axe.json`, { status: res ? res.status() : null, url: page.url(), version: result.testEngine.version,
+              // The WCAG 2.0, 2.1 and 2.2 A and AA rules, named (#1149): axe-core
+              // 4.14.0's default run leaves out target-size, its one wcag22aa rule
+              // (off by default), and runs best-practice rules that are no WCAG
+              // criterion; those are left out here.
+              const tags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+              const result = await page.evaluate((values) => window.axe.run(document, { runOnly: { type: "tag", values } }), tags);
+              write(`${i}.axe.json`, { status: res ? res.status() : null, url: page.url(), version: result.testEngine.version, tags,
                 violations: result.violations.map((v) => ({ id: v.id, impact: v.impact, help: v.help, helpUrl: v.helpUrl,
                   nodes: v.nodes.length, target: v.nodes.slice(0, 3).map((n) => n.target.join(" ")) })),
                 incomplete: result.incomplete.map((v) => ({ id: v.id, help: v.help, nodes: v.nodes.length })),
@@ -3275,11 +3286,50 @@ jobs:
           }
           JS
 
+      # The gate (#1149): a `critical` or `serious` violation of the WCAG A and
+      # AA rules above, on a page that answered, fails the job here; the
+      # Verdict below names each. `moderate` and `minor` ones are listed and
+      # fail nothing, and no Lighthouse score fails anything: the
+      # Accessibility score is a weighted average of the same axe audits, and
+      # Performance moves with the shared CI machine. A page whose audit did
+      # not finish is the Verdict's `not yet confirmed`, not a failure here.
+      - name: Critical or serious accessibility violations (axe-core, WCAG 2.2 A and AA)
+        id: gate
+        # After an audit that failed too: a report it wrote before failing is
+        # judged, and a page without one fails nothing (review on #1256).
+        if: inputs.web && (steps.audit.outcome == 'success' || steps.audit.outcome == 'failure')
+        working-directory: .
+        env:
+          OUT: ${{ runner.temp }}/web-audit
+        run: |
+          python3 - "$OUT" <<'PY'
+          import glob, json, os, sys
+          found = 0
+          for f in sorted(glob.glob(os.path.join(sys.argv[1], "*.axe.json"))):
+              try:
+                  with open(f, encoding="utf-8") as h:
+                      d = json.load(h)
+              except (OSError, ValueError):
+                  continue
+              status = d.get("status")
+              if isinstance(status, int) and status >= 400:
+                  continue
+              for v in d.get("violations") or []:
+                  if v.get("impact") in ("critical", "serious"):
+                      found += 1
+                      print(f"{d.get('url') or os.path.basename(f)}: {v.get('id')} ({v.get('impact')}) on {v.get('nodes')} element(s): {v.get('help')}")
+          if found:
+              print(f"{found} critical or serious violation(s) of the WCAG A and AA rules; the Verdict step names each")
+          sys.exit(1 if found else 0)
+          PY
+
       - name: Verdict
         if: ${{ !cancelled() }}
         working-directory: .
         env:
           WEB: ${{ inputs.web }}
+          GATE: ${{ steps.gate.outcome }}
+          PLINTH_SHA: ${{ job.workflow_sha }}   # links name the plinth commit this workflow runs
           CHECKOUT: ${{ steps.checkout.outcome }}
           APP: ${{ steps.app.outcome }}
           NODE: ${{ steps.node.outcome }}
@@ -3287,6 +3337,7 @@ jobs:
           TOOLS: ${{ steps.tools.outcome }}
           AUDIT: ${{ steps.audit.outcome }}
         run: |
+          at="${PLINTH_SHA:-main}"; at="${at:0:12}"   # the plinth commit the links name (job.workflow_sha), short enough for a 300-character annotation
           nw=0; fail_what=""; fail_next=""; fail_more=""; fail_check=""; trap ends EXIT
           # shellcheck disable=SC2329 # ends runs from the EXIT trap
           ends() { [ "$nw" -le 9 ] || echo "::warning::$((nw - 9)) more not yet confirmed lines are in the job summary"; [ -n "$fail_what" ] && [ -n "$fail_next" ] || return 0; local w="${fail_what//[$'\r\n']/ }" x="${fail_next//[$'\r\n']/ }" e; e="$w"; [ "${#e}" -le $((297 - ${#x})) ] || e="${e:0:$((294 - ${#x}))}..."; e="$e — $x"; echo "::error title=$fail_check::${e//'%'/%25}"; printf 'failed: %s\nnext: %s\nmore: %s\n' "$w" "$x" "$fail_more"; }
@@ -3295,7 +3346,7 @@ jobs:
             say "pass: web-audit, does not apply (the web input is false: not a web project)"
             exit 0
           fi
-          r="$RUNNER_TEMP/web-audit"; mkdir -p "$r"; rm -f "$r/verdict" "$r/summary.md"
+          r="$RUNNER_TEMP/web-audit"; mkdir -p "$r"; rm -f "$r/verdict" "$r/summary.md" "$r/next"
           python3 - "$r" <<'PY' || echo "not yet confirmed: the pages' audit. Why: its report could not be written (the error is in this step's log). What confirms it: a run where it is." > "$r/verdict"
           import json, os, re, sys
           from urllib.parse import urlsplit
@@ -3312,6 +3363,17 @@ jobs:
               return (f"{what} " + ("did not finish (its log says why)" if outcome == "failure"
                                     else "did not run because an earlier step failed"))
           STD = "the pages' audit"
+          # What no machine judges (#1149), each with its WCAG 2.2 success criterion.
+          CHECKLIST = (
+              "Everything works with the keyboard alone, and nothing traps focus (2.1.1, 2.1.2).",
+              "Focus is visible, and not hidden under a sticky header or banner (2.4.7, 2.4.11).",
+              "Log-in and sign-up allow pasting and password managers (3.3.8).",
+              "A form error names the field and the fix (3.3.1, 3.3.3).",
+              "The pages work at 200% zoom and 320 CSS pixels wide (1.4.4, 1.4.10).",
+              "`<html lang>` matches the page's language (3.1.1).",
+              "Help sits in the same place on every page (3.2.6).",
+              "Nothing already entered is asked for again in one flow (3.3.7).",
+          )
           why = (open(os.path.join(r, "app.why"), encoding="utf-8").read().strip()
                  if os.path.exists(os.path.join(r, "app.why")) else "")
           stop = None
@@ -3324,6 +3386,11 @@ jobs:
                                       ("Lighthouse CI and axe-core", "TOOLS")) if env[k] != "success"]
               if broke:
                   stop = " and ".join(broke) + " did not install (the step's log says why)"
+              elif env["AUDIT"] == "failure" and isinstance(load("pages.json"), list):
+                  # The reports it wrote before it failed are judged below, as
+                  # the gate judged them; a page without one is not confirmed.
+                  lines.append(f"not yet confirmed: {STD}. Why: the audit did not finish (its log says why); "
+                               "the pages it reported on are judged below. What confirms it: a run that gets past it.")
               elif env["AUDIT"] != "success":
                   stop = ran("the audit", env["AUDIT"])
           pages = load("pages.json") if not stop else None
@@ -3336,7 +3403,12 @@ jobs:
                   ("seo", "SEO"), ("performance", "Performance"))
           def tag(s):   # `<html>` in a rule's help is text, not markup for the summary
               return re.sub(r"<(/?[\w-]+)>", r"`<\1>`", str(s))
-          rows, found = [], []
+          GATE_STD = "no critical or serious violation of the WCAG 2.2 A and AA rules"
+          def listed(xs):
+              said = "; ".join(f"{x['id']} on {x['nodes']} element{'s' if x['nodes'] != 1 else ''} "
+                               f"({x['impact']}: {tag(x['help'])})" for x in xs[:5])
+              return said + (f"; and {len(xs) - 5} more in the table below" if len(xs) > 5 else "")
+          rows, found, blocked = [], [], []
           for i, p in enumerate(pages):
               label = f"{p['page']} ({p['who']})"
               # A session that did not hold sends the logged-in page to the log-in
@@ -3359,7 +3431,7 @@ jobs:
                                    for k, n in CATS)
                   moved = "" if landed.rstrip("/") == p["url"].rstrip("/") else f", after a redirect to {landed}"
                   out_at.add(urlsplit(landed).path)
-                  lines.append(f"pass: Lighthouse scored {label}{moved}: {said}, out of 100; no score is judged yet")
+                  lines.append(f"pass: Lighthouse scored {label}{moved}: {said}, out of 100; no score fails this job")
               else:
                   err = (lhr or {}).get("runtimeError") or load(f"{i}.lhr.error.json") or {}
                   msg = (err.get("message") or err.get("error")
@@ -3376,16 +3448,27 @@ jobs:
                   v = None
               elif isinstance(ax, dict):
                   v = ax.get("violations") or []
-                  if v:
-                      listed = "; ".join(f"{x['id']} on {x['nodes']} element{'s' if x['nodes'] != 1 else ''} "
-                                         f"({x['impact']}: {tag(x['help'])})" for x in v[:5])
-                      more = f"; and {len(v) - 5} more in the table below" if len(v) > 5 else ""
-                      lines.append(f"not yet confirmed: no accessibility violation axe-core's automated rules find on "
-                                   f"{label}. Why: it found {len(v)}, {listed}{more}. What confirms it: fixing them.")
-                      found.append((label, v))
+                  # The gate (#1149): critical and serious fail the job; moderate and minor are listed.
+                  hard = [x for x in v if x.get("impact") in ("critical", "serious")]
+                  soft = [x for x in v if x not in hard]
+                  # A logged-in page whose session did not hold read the log-in page, whose
+                  # own row carries what it found: said below, not failed here under this label.
+                  gate_at = urlsplit(p.get("login") or "").path
+                  sent_to_login = (p["who"] == "logged in" and gate_at and gate_at != urlsplit(p["url"]).path
+                                   and urlsplit(ax.get("url") or p["url"]).path == gate_at)
+                  if hard and sent_to_login:
+                      lines.append(f"not yet confirmed: {GATE_STD} on {label}. Why: the page read was {p['login']}, "
+                                   f"whose own row fails on what axe-core found there, {listed(hard)}. "
+                                   "What confirms it: a run where the session holds.")
+                  elif hard:
+                      lines.append(f"fail: {GATE_STD} on {label}: axe-core found {len(hard)}, {listed(hard)}")
+                      blocked.append(label)
                   else:
-                      lines.append(f"pass: axe-core's automated rules found no accessibility violation on {label} "
-                                   f"({ax.get('rules', '?')} rules applied); they catch only part of accessibility")
+                      lines.append(f"pass: {GATE_STD} on {label}: axe-core found none ({ax.get('rules', '?')} rules applied)"
+                                   + (f"; {len(soft)} moderate or minor, which fail nothing: {listed(soft)}" if soft else "")
+                                   + "; automated rules catch only part of accessibility")
+                  if v:
+                      found.append((label, v))
               if isinstance(ax, dict):
                   axe_cell = "?" if v is None else str(len(v))
                   out_at.add(urlsplit(ax.get("url") or p["url"]).path)
@@ -3414,15 +3497,25 @@ jobs:
                   first = (x.get("target") or ["?"])[0].replace("|", "\\|").replace("`", "'")
                   md.append(f"| [{x['id']}]({x['helpUrl']}) | {x['impact']} | {x['nodes']} | "
                             f"{tag(x['help']).replace('|', '/')} | `{first}` |")
+          if env.get("GATE") == "failure" and not blocked:
+              # The gate step failed, and no violation it fails on is in the results read here.
+              lines.append("fail: " + GATE_STD + ": the gate step failed on results this step could not read")
+              next_step = "read the gate step's log, fix what it names, and push"
+          elif blocked:
+              next_step = (f"fix what axe-core names on {' and '.join(blocked)} (each rule's link in the job summary "
+                           "says how), and push")
+          else:
+              next_step = ""
           if pages:
-              md += ["", "Automated checks catch only part of accessibility. axe-core and Lighthouse find what a "
+              md += ["", "Automated checks catch only part of accessibility: axe-core and Lighthouse find what a "
                      "machine can see in a page's code, such as a field without a label or text without enough "
-                     "contrast. They cannot tell whether a label makes sense, whether every action works with "
-                     "the keyboard alone, or whether a screen reader reads the page in a sensible order. Before "
-                     "calling a page accessible, use it with the keyboard only (Tab, Enter, Esc) and with a "
-                     "screen reader (VoiceOver on a Mac, NVDA on Windows).", "",
-                     "This job reports and never fails; whether a score or a violation ever turns it red is "
-                     "decided later (plinth #709)."]
+                     "contrast. This job fails on a critical or serious violation of the WCAG 2.2 A and AA rules "
+                     "axe-core runs (plinth #1149), and on no score. Before calling a page accessible, check by "
+                     "hand what no machine judges:", "",
+                     *(f"- {item}" for item in CHECKLIST)]
+          if next_step:
+              with open(os.path.join(r, "next"), "w", encoding="utf-8") as f:
+                  f.write(next_step + "\n")
           with open(os.path.join(r, "verdict"), "w", encoding="utf-8") as f:
               f.writelines(l + "\n" for l in lines)
           with open(os.path.join(r, "summary.md"), "w", encoding="utf-8") as f:
@@ -3433,3 +3526,8 @@ jobs:
           # The same text in this step's log, for whoever reads the run through
           # the API (`gh run view --log`), where job summaries are not served.
           sed 's/^/- /' "$r/verdict" 2>/dev/null; cat "$r/summary.md" 2>/dev/null || true
+          # The block the job's log ends with on a failure (#1098): the red is the gate step's.
+          if [ -s "$r/next" ]; then
+            fail_check="ci / web-audit"; fail_more="https://github.com/coolbress/plinth/blob/$at/docs/reference/required-checks.md#ci--web-audit"
+            fail_next="$(cat "$r/next")"
+          fi
