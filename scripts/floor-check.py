@@ -1631,6 +1631,42 @@ def read(path: Path) -> str:
 # ── network ──────────────────────────────────────────────────────────────
 
 
+# One repository per run (#1119): every API call names the audited
+# repository, its owner's `.github` (what GitHub inherits), plinth or the
+# template plinth pins, and nothing else. The checker reads text other people
+# can write; a call to any other repository is a defect or an injection, and
+# it stops the run before it is made.
+audited: str | None = None
+
+
+class ForeignRepository(Exception):
+    """An API call naming a repository this run does not audit."""
+
+
+def allowed_repositories() -> set[str]:
+    allowed = {PLINTH_REPO.lower()}
+    pin = new_project_pin()
+    if pin:
+        allowed.add(pin[0].lower())
+    if audited:
+        allowed |= {audited.lower(), f"{audited.split('/')[0]}/.github".lower()}
+    return allowed
+
+
+def guard_repository(path: str, prefix: str = "repos/") -> None:
+    """Stop the run when `path` names a repository other than the allowed
+    ones: `repos/<owner>/<name>` on GitHub, `projects/<owner%2Fname>` on GitLab."""
+    if prefix == "repos/":
+        m = re.match(r"repos/([^/?#]+)/([^/?#]+)", path)
+        slug = f"{m.group(1)}/{m.group(2)}" if m else None
+    else:
+        m = re.match(r"projects/([^/?#]+)", path)
+        slug = urllib.parse.unquote(m.group(1)) if m else None
+    if slug is not None and slug.lower() not in allowed_repositories():
+        raise ForeignRepository(f"a request for {slug} ({path.split('?')[0]}), which this run does not audit "
+                                f"(--repo {audited or 'not given'})")
+
+
 ABSENT = object()   # 404: the resource does not exist
 ERROR = object()    # anything else went wrong: do not conclude
 
@@ -1666,7 +1702,9 @@ def api(path: str, network: bool, paginate: bool = False):
     Through `gh api` when gh is installed: the skill runs on the owner's
     machine, where the token lives in gh's keychain and never in the
     environment, and bypass actors are visible only to that token. Anything
-    but a 404 from gh (not logged in, offline) falls back to a plain request."""
+    but a 404 from gh (not logged in, offline) falls back to a plain request.
+    A path naming a repository the run does not audit stops it first."""
+    guard_repository(path)
     fixture_dir = os.environ.get("FLOOR_CHECK_API_DIR")
     if fixture_dir:
         f = Path(fixture_dir) / (path + ".json")
@@ -2056,6 +2094,20 @@ def check_force_push_deny(deny: list) -> None:
 # a WARN, and promoting one to FAIL is a compatibility decision taken later.
 
 # Placeholder dotenv names: committed on purpose, values not real.
+# Every git call (#1119): no fsmonitor program, no hook and no system config,
+# so reading a repository someone else wrote runs none of its programs.
+GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
+
+
+def git(root: Path, *args: str, system_config: bool = False, **kw) -> subprocess.CompletedProcess:
+    """`git -C <root> <args>` with GIT_SAFE and GIT_CONFIG_NOSYSTEM=1.
+    `system_config` keeps the system level for a read whose subject is every
+    level git reads (FC-G07's credential helpers): the system file is the
+    machine's, not the repository's, and a `config` read runs no program."""
+    env = {**os.environ} if system_config else {**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}
+    return subprocess.run(["git", *GIT_SAFE, "-C", str(root), *args], env=env, check=False, **kw)
+
+
 DOTENV_PLACEHOLDERS = {".env.example", ".env.sample", ".env.template"}
 
 
@@ -2065,8 +2117,8 @@ def check_tracked_dotenv(root: Path) -> None:
     only; the contents are not read, and this is not a secret scanner (history,
     other file names and `.envrc` are outside it)."""
     try:
-        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, timeout=30, check=False,
-                           encoding="utf-8", errors="replace")  # a file name is any bytes; never a traceback
+        r = git(root, "ls-files", "-z", capture_output=True, timeout=30,
+                encoding="utf-8", errors="replace")  # a file name is any bytes; never a traceback
     except (OSError, subprocess.TimeoutExpired):
         r = None
     if r is None or r.returncode != 0:
@@ -4756,7 +4808,9 @@ def gl_api(path: str, network: bool, raw: bool = False, paginate: bool = False):
     login (#544). JSON, or the text with raw; ABSENT on a 404; ERROR when
     offline, not logged in, or on any other failure. FLOOR_CHECK_GITLAB_API_DIR
     serves fixtures: <path>.json, or <path> as is with raw; a missing file is
-    a 404 and `<path>.error` an error."""
+    a 404 and `<path>.error` an error. A project the run does not audit
+    stops it first."""
+    guard_repository(path, "projects/")
     fixture_dir = os.environ.get("FLOOR_CHECK_GITLAB_API_DIR")
     if fixture_dir:
         f = Path(fixture_dir) / (path if raw else path + ".json")
@@ -6702,9 +6756,8 @@ def check_credentials(root: Path, host: str = "github") -> None:
 
     g: subprocess.CompletedProcess[str] | None
     try:
-        g = subprocess.run(["git", "-C", str(root), "config", "--null", "--get-regexp",
-                            r"^(credential\..*helper|http\..*extraheader)$"],
-                           capture_output=True, text=True, timeout=30, check=False)
+        g = git(root, "config", "--null", "--get-regexp", r"^(credential\..*helper|http\..*extraheader)$",
+                system_config=True, capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         g = None
     if g is None or g.returncode not in (0, 1):   # 1: no such key
@@ -6994,6 +7047,8 @@ def main() -> int:
                     help="with --print-ruleset: leave the code_scanning rule out, as the door does for a private "
                          "repository without GitHub Code Security")
     a = ap.parse_args()
+    global audited
+    audited = a.repo
     if a.format == "json" and any(v for k, v in vars(a).items() if k.startswith("print_")):
         ap.error("--format json reports a run; a --print-* flag prints something else")
     global out_format
@@ -7162,6 +7217,11 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except ForeignRepository as exc:
+        if out_format == "json":
+            print_json(results, {"after": results[-1]["id"] if results else None, "error": type(exc).__name__})
+        print(f"floor-check: stopped: {exc}. Nothing after it was read.", file=sys.stderr)
+        sys.exit(2)
     except Exception as exc:
         if out_format == "json":
             # The skill reads a document either way: one that says where the run stopped.

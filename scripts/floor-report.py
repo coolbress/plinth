@@ -155,7 +155,10 @@ def note_path(doc: dict) -> Path | None:
 
 
 def git(root: str, *args: str) -> str | None:
-    p = subprocess.run(["git", "-C", root, *args], capture_output=True, text=True, check=False)
+    """A git read that runs no program of the repository it reads (#1119): no
+    fsmonitor, no hook, no system config, as floor-check.py's git()."""
+    p = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C", root, *args],
+                       env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}, capture_output=True, text=True, check=False)
     return p.stdout.strip() if p.returncode == 0 else None
 
 
