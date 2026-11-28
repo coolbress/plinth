@@ -952,9 +952,7 @@ run answers ok yes no "(public, MIT, cli, records in Korean, as owner)" -- probe
 if grep -qF -- '--data description=매일 아침 날씨를 모으는 도구 --data records_language=Korean --vcs-ref' "$work/home-answers/calls.log"
 then ok answers "the description and the records language are passed to copier as given"
 else bad answers "copier did not get them as given"; grep '^uvx' "$work/home-answers/calls.log" | cut -c1-400 | sed 's/^/        /'; fi
-if ! grep -qE -- '--data (description|records_language|custom_user_model)=' "$work/home-none/calls.log"
-then ok answers-none "a run that gives neither passes no description, records language or user model"
-else bad answers-none "an answer was passed that was not given"; fi
+# answers-none and cum-not-web-none read the plain run, `none`, below, once it has run.
 run lang-english ok yes no "(public, MIT, cli, as owner)" -- probe --records-language=English
 grep -qF -- '--data records_language=English' "$work/home-lang-english/calls.log" \
   && ok lang-english "English said out loud is passed, and the summary says nothing more" || bad lang-english "--records-language=English did not reach copier"
@@ -982,10 +980,8 @@ run cum-said ok yes no "its own user model" -- probe --archetype=web --custom-us
 run cum-no ok yes no "(public, MIT, web on Render, as owner)" -- probe --archetype=web --no-custom-user-model
 if ! grep -qF -- 'custom_user_model' "$work/home-cum-no/calls.log"
 then ok cum-no "--no-custom-user-model passes no answer: Django's auth.User, as before"; else bad cum-no "an answer was passed"; fi
-for c in none answers; do
-  if ! grep -qF -- 'custom_user_model' "$work/home-$c/calls.log"; then ok "cum-not-web-$c" "a cli run passes no custom_user_model answer"
-  else bad "cum-not-web-$c" "a cli run passed custom_user_model"; fi
-done
+if ! grep -qF -- 'custom_user_model' "$work/home-answers/calls.log"; then ok "cum-not-web-answers" "a cli run passes no custom_user_model answer"
+else bad "cum-not-web-answers" "a cli run passed custom_user_model"; fi
 run cum-cli err no no "--custom-user-model and --no-custom-user-model are for --archetype=web only" -- probe --custom-user-model
 run cum-both err no no "--custom-user-model and --no-custom-user-model: choose one" -- probe --archetype=web --custom-user-model --no-custom-user-model
 E="MOCK_CUM_NORECORD=1" run cum-dropped err no no "did not record custom_user_model: true" -- probe --archetype=web
@@ -1266,6 +1262,15 @@ E="FAIL_AT=ruleset MOCK_DELETE_FAILS=1" run delete-fails err yes yes "ROLLBACK F
 echo "success: nothing is deleted, and the order is baseline, wall, first pull request"
 run none ok yes no "first pull request: https://github.com/tester/probe/pull/1" -- probe
 log="$work/home-none/calls.log"; proj="$work/home-none/probe"
+# What a run that gives no answer passes (#1068, #1092). Read here, after the
+# run: read before it, the negated greps passed on a file that did not exist.
+if [ ! -s "$log" ]; then bad answers-none "the none run left no calls log to read"
+elif ! grep -qE -- '--data (description|records_language|custom_user_model)=' "$log"
+then ok answers-none "a run that gives neither passes no description, records language or user model"
+else bad answers-none "an answer was passed that was not given"; fi
+if [ ! -s "$log" ]; then bad cum-not-web-none "the none run left no calls log to read"
+elif ! grep -qF -- 'custom_user_model' "$log"; then ok cum-not-web-none "a cli run passes no custom_user_model answer"
+else bad cum-not-web-none "a cli run passed custom_user_model"; fi
 check() { if eval "$2"; then ok none "$1"; else bad none "$1"; fi; }
 check "main is pushed before the rulesets, the first ruleset before the merge one, then the tag one (cli), the pull request after them" \
   '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | grep -v "/rulesets/[0-9]" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*ruleset-merge.json.*/merge/; s/.*rulesets.*ruleset-tags.json.*/tags/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset merge tags pr " ]'
