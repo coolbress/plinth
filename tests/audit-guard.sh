@@ -259,6 +259,47 @@ PY
 then ok "without --repo, a request for any other repository stops the run"
 else bad "without --repo, the guard"; fi
 
+# records-check.py: one function makes every gh call, and it guards first.
+rc_py="$root/scripts/records-check.py"
+if [ "$(grep -c 'subprocess\.run(' "$rc_py")" = 1 ] && [ "$(grep -cE "[[(][[:space:]]*['\"]gh['\"]" "$rc_py")" = 1 ] \
+   && grep -A2 '^def gh(' "$rc_py" | grep -q 'guard(repo)'; then ok "records-check.py: every gh call is made by gh(), which guards the repository first"
+else bad "records-check.py: a gh or subprocess call outside gh(), or gh() does not guard"; grep -nE "subprocess\.run\(|[[(][[:space:]]*['\"]gh['\"]" "$rc_py" | sed 's/^/        /'; fi
+mkdir -p "$work/rc-api/repos/o/r/issues" "$work/rc-root"
+printf '{}' > "$work/rc-api/repos/o/r/issues/1.json"
+if RECORDS_CHECK_API_DIR="$work/rc-api" python3 - "$rc_py" "$work/rc-root" <<'PY'
+import importlib.util, io, contextlib, sys
+spec = importlib.util.spec_from_file_location("rc", sys.argv[1]); rc = importlib.util.module_from_spec(spec)
+root = sys.argv[2]; sys.argv = ["rc"]; spec.loader.exec_module(rc)
+rc.audited = "o/r"
+assert rc.rest("repos/o/r/issues/1")[0] == 200
+assert rc.rest("repos/O/R/issues/2")[0] == 404          # allowed, any case; no fixture
+assert rc.rest("repos/o/.github/contents/AGENTS.md")[0] == 404
+for call in (lambda: rc.rest("repos/x/y/issues/1"), lambda: rc.rest("repos/o/other/issues/1"),
+             lambda: rc.rest("repos/x/.github/contents/AGENTS.md"),
+             lambda: rc.graphql("refs-x-y-1", "query{}", {"owner": "x", "name": "y"}),
+             lambda: rc.gh(["api", "repos/x/y"], "x/y", 1)):
+    try:
+        call()
+    except rc.ForeignRepository:
+        continue
+    sys.exit(f"not stopped: {call}")
+rc.audited = None
+try:
+    rc.rest("repos/o/r/issues/1")
+except rc.ForeignRepository:
+    pass
+else:
+    sys.exit("not stopped without --repo")
+# Through main: a request for another repository stops the run, exit 2.
+rc.check = lambda root, repo: rc.rest("repos/x/y/issues/1")
+err = io.StringIO()
+with contextlib.redirect_stderr(err):
+    code = rc.main(["--root", root, "--repo", "o/r"])
+assert code == 2 and "records-check: stopped: a request for x/y, which this run does not audit" in err.getvalue(), (code, err.getvalue())
+PY
+then ok "records-check.py: a request for another repository (REST, GraphQL or gh) stops the run, exit 2; the audited one and its owner's .github pass"
+else bad "records-check.py's repository guard"; fi
+
 echo "-- a secret finding never prints the value"
 for f in "$root/.github/workflows/python-ci.yml" "$root/gitlab/python-ci.yml"; do
   calls="$(sed 's/[[:space:]]#.*//' "$f" | grep -E 'gitleaks (git|dir|detect) ')"
