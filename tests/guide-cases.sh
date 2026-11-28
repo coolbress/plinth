@@ -1946,12 +1946,22 @@ redrun 'feat: totals (#9)' > "$d/runs.json"
 put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false run)" "$(pr 14 'feat: export' false FAILURE)"
 state "an open revert and another failing pull request: the revert first" "$d" \
   "where: A pull request with checks running (step 5)" "command: /run" \
-  "note: pull request #12 reverts #9, whose merge failed main's latest CI run (run 31); it comes before any other pull request; its checks are pending: merge it once they are green" \
+  "note: pull request #12 reverts #9, whose merge failed main's latest CI run (run 31); it comes before any other pull request; checks pending: merge it once they are green" \
   "!command: diagnose this: pull request #14" "!undo pull request"
 put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)" "$(pr 14 'feat: export' false FAILURE)"
 state "  and once its checks are green: merge the revert" "$d" "where: Green, and seen working (step 6)" "command: merge #12" "!diagnose this: pull request #14"
 put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false FAILURE)" "$(pr 14 'feat: export' false FAILURE)"
 state "  and with its own check failing: the revert is diagnosed, not the other" "$d" "command: diagnose this: pull request #12 has a failing check"
+# Review of this change: merge next names the revert too; a draft revert is
+# not merged; a revert in the type form that names #9 counts.
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)" "$(pr 14 'feat: export' false SUCCESS)"
+state "  with another green pull request: merge next is the revert, not it" "$d" "command: merge #12" \
+  "merge next: #12, the revert of #9: main stays broken until it merges, so it comes before any other" "!merge next: #14"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS | sed 's/"isDraft":false/"isDraft":true/')"
+state "  a draft revert, green: marked ready first, not merged" "$d" "command: /run" "!command: merge #12" \
+  "note: pull request #12 reverts #9, whose merge failed main's latest CI run (run 31); it comes before any other pull request; it is a draft: mark it ready for review on its page, then merge it once its checks are green"
+put "$d/open.json" "$(pr 12 'revert: take back the totals of #9' false run)"
+state "  a revert in the type form that names #9: the route, no second undo" "$d" "command: /run" "!undo pull request"
 # One list (#1203): the revert forms the guide reads are ci / pr-title's.
 # The title check's pattern is read from python-ci.yml with its types as the
 # one type revert; the guide's from guide-state.sh. Each title is read by
@@ -1960,7 +1970,9 @@ ci_yml="$root/.github/workflows/python-ci.yml"
 ci_pat="$(sed -nE 's/.*grep -qE "\^\(\$types\)(.*)"; then$/\1/p' "$ci_yml" | head -1)"
 guide_pat="$(sed -nE "s/^revert_type='(.*)'\$/\\1/p" "$root/scripts/guide-state.sh")"
 ci_revert() { [[ "$1" != 'Revert "'*'"' ]] || return 0; grep -qE "^(revert)$ci_pat" <<<"$1"; }
-guide_revert() { case "$1" in 'Revert "'*'"'*) return 0 ;; esac; grep -qE "$guide_pat" <<<"$1"; }
+# The guide's own is_revert, read from the script, its quoted form with it.
+eval "$(grep -E '^(revert_type=|is_revert\(\))' "$root/scripts/guide-state.sh")"
+guide_revert() { is_revert "$1"; }
 disagree=""
 if [ -n "$ci_pat" ] && [ -n "$guide_pat" ]; then
   for t in 'revert: x' 'revert!: x' 'revert(api): x' 'revert(api)!: x' 'revert(a b,c/d.e_f-g)!: x' 'Revert "feat: x"' 'revert : x' 'reverts: x' 'revert:x' 'revert(): x' 'feat: revert x' 'revert!!: x'; do

@@ -710,8 +710,13 @@ if [ -n "$run_ok" ] && [ -n "$run" ]; then
     # (#N) inside the quotes (ci / pr-title refuses one there); a title that
     # does carry (#N) counts too (#1196 review).
     # That pull request is then the route itself, ahead of any other (#1203).
+    # A revert in the type form (revert: or revert!:) counts when it names #N.
     [ -z "$main_undo" ] || open_revert="$(REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
       'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { print $1; exit }' <<<"$prs")"
+    [ -n "$open_revert" ] || [ -z "$main_undo" ] || open_revert="$(while IFS= read -r row; do
+        t="$(cut -f6 <<<"$row")"
+        [[ "$t" =~ (^|[^0-9A-Za-z_])#$main_undo([^0-9]|$) ]] && grep -qE "$revert_type" <<<"$t" && { cut -f1 <<<"$row"; break; }
+      done <<<"$prs")"
     [ -z "$open_revert" ] || { open_reverts="$main_undo"; main_undo=""; }
   fi
 fi
@@ -1082,7 +1087,11 @@ fi
 # and said as not read if it is still UNKNOWN. What it cannot know is a line
 # of its own.
 merge_next=""; merge_n=""
-if { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<"$people_prs")" -ge 2 ]; then
+if [ -n "$open_revert" ]; then
+  # An open revert of the merge that broke main (#1203) is merged before any
+  # other: main stays broken until it does, so no other is ranked first.
+  merge_next="merge next: #$open_revert, the revert of #$open_reverts: main stays broken until it merges, so it comes before any other"
+elif { [ "$people_merged" -gt 0 ] || [ -n "$past_first" ]; } && [ "$(grep -c . <<<"$people_prs")" -ge 2 ]; then
   person_rows="$(awk -F '\t' '$2 == "person"' <<<"$prs")"
   unknown="$(awk -F '\t' '$3 == "ready" && $4 == "pass" && $11 == "UNKNOWN" { print $1 }' <<<"$person_rows")"
   reread=""
@@ -1205,16 +1214,26 @@ elif [ -n "$open_revert" ]; then
   # The undo is open (#1203): its pull request comes before any other's
   # failing check, since main stays broken until it merges.
   run_id_red="$(cut -f1 <<<"$run")"
-  checks="$(awk -F '\t' -v n="$open_revert" '$1 == n { print $4; exit }' <<<"$prs")"
+  row="$(awk -F '\t' -v n="$open_revert" '$1 == n { print; exit }' <<<"$prs")"
+  checks="$(field 4 <<<"$row")"; draft="$(field 3 <<<"$row")"; merge_state="$(field 11 <<<"$row")"
+  said_checks="$(awk -F '\t' -v n="$open_revert" '$1 == n { print $9; exit }' <<<"$people_prs")"
   note="pull request #$open_revert reverts #$open_reverts, whose merge failed main's latest CI run (run $run_id_red); it comes before any other pull request"
-  case "$checks" in
-    pass) note="$note; its checks are green, so saying merge #$open_revert is the person's word for it"
-          say "Green, and seen working" "merge #$open_revert" ;;
-    fail) note="$note; it has a failing check: the agent reads its log first, as for any other"
-          say "Something broke" "diagnose this: pull request #$open_revert has a failing check" ;;
-    *) note="$note; its checks are ${checks:-not read}: merge it once they are green"
-       say "A pull request with checks running" "/run" ;;
-  esac
+  if [ "$checks" = fail ]; then
+    note="$note; it has a failing check: the agent reads its log first, as for any other"
+    say "Something broke" "diagnose this: pull request #$open_revert has a failing check"
+  elif [ "$merge_state" = DIRTY ]; then
+    note="$note; it conflicts with main: the conflict is resolved in its branch first"
+    say "Something broke" "diagnose this: pull request #$open_revert conflicts with main"
+  elif [ "$draft" = draft ]; then
+    note="$note; it is a draft: mark it ready for review on its page, then merge it once its checks are green"
+    say "A pull request with checks running" "/run"
+  elif [ "$checks" = pass ]; then
+    note="$note; its checks are green, so saying merge #$open_revert is the person's word for it"
+    say "Green, and seen working" "merge #$open_revert"
+  else
+    note="$note; ${said_checks:-its checks were not read}: merge it once they are green"
+    say "A pull request with checks running" "/run"
+  fi
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
   if [ -n "$broken" ] && [ -n "$plinth_failing" ] && [ -n "$pin_behind" ]; then
