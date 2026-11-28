@@ -15530,6 +15530,9 @@ floor check: root=$WORK/good project=.
   PASS  main: 0 approvals required, and 1 person can merge (o)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -15626,6 +15629,9 @@ floor check: root=$WORK/good project=.
   PASS  main: 0 approvals required, and 1 person can merge (o)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -15723,6 +15729,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r two-people   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -15820,6 +15829,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r two-people   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -15917,6 +15929,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r two-people   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16014,6 +16029,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r two-people   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16110,6 +16128,9 @@ floor check: root=$WORK/good project=.
   PASS  main: 1 approval required, and 1 person can merge (o)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16207,6 +16228,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r one-person   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16304,6 +16328,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r one-person   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16401,6 +16428,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r one-person   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16498,6 +16528,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r one-person   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16595,6 +16628,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r one-person   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16691,6 +16727,9 @@ floor check: root=$WORK/good project=.
   PASS  main: 1 approval required, and 1 person can merge (o)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16788,6 +16827,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r one-person   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16884,6 +16926,9 @@ floor check: root=$WORK/good project=.
   PASS  main: 1 approval required, and 2 people can merge (b, o)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -16980,6 +17025,9 @@ floor check: root=$WORK/good project=.
   PASS  main: 0 approvals required, and 1 person can merge (o)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17077,6 +17125,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r two-people   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17174,6 +17225,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r two-people   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17270,6 +17324,9 @@ floor check: root=$WORK/good project=.
   PASS  main: 2 approvals required, and 2 people can merge (b, o)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17366,6 +17423,9 @@ floor check: root=$WORK/good project=.
   INFO  main: 1 approval required, with code owners' review on, and CODEOWNERS names @acme/maintainers, whose members are not read here: who can give an approval that counts is not counted
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17462,6 +17522,9 @@ floor check: root=$WORK/good project=.
   INFO  main: 1 approval required, with code owners' review on, and CODEOWNERS names @acme/maintainers, whose members are not read here: who can give an approval that counts is not counted
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17558,6 +17621,9 @@ floor check: root=$WORK/good project=.
   INFO  main: 1 approval required, with code owners' review on, and CODEOWNERS names @acme/maintainers, whose members are not read here: who can give an approval that counts is not counted
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17656,6 +17722,9 @@ floor check: root=$WORK/good project=.
   INFO    scripts/with-admin-token.sh scripts/add-ruleset-rule.sh o/r two-people   (from a plinth checkout; its docs/how-to/add-a-second-person.md says when)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17752,6 +17821,9 @@ floor check: root=$WORK/good project=.
   INFO  main: the approvals required are not compared with who can merge: the collaborators could not be read (that needs push access)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17848,6 +17920,9 @@ floor check: root=$WORK/good project=.
   INFO  main: the approvals required are not compared with who can merge: the collaborators could not be read (that needs push access)
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -17943,6 +18018,9 @@ floor check: root=$WORK/good project=.
   INFO  who can merge is not read here: /plinth:floor-check reads the collaborators with a login that administers the repository
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -18041,6 +18119,9 @@ floor check: root=$WORK/good project=.
   INFO  main: the approvals required are not compared with who can merge: no person with admin access is among the collaborators read
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -18136,6 +18217,9 @@ floor check: root=$WORK/good project=.
   PASS  ruleset 1: no bypass actors
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -18231,6 +18315,9 @@ floor check: root=$WORK/good project=.
   PASS  ruleset 1: no bypass actors
   PASS  the Actions allowlist lets every action the workflows use start (1 uses)
   PASS  the Actions token reads only by default and cannot approve a pull request
+  PASS  Dependabot alerts are on, and none is open
+  PASS  Dependabot security updates are on: Dependabot opens a pull request that moves a vulnerable dependency to a fixed version
+  PASS  secret scanning is on, and no alert is open
   WARN  no tag ruleset: for a backend, which releases from a v* tag, anyone with write access can move or delete a released tag
   INFO    gh api -X POST repos/o/r/rulesets --input - <<<'{"name": "tags: v* and *-v* not moved or deleted", "target": "tag", "enforcement": "active", "bypass_actors": [], "conditions": {"ref_name": {"include": ["refs/tags/v*", "refs/tags/*-v*"], "exclude": []}}, "rules": [{"type": "deletion"}, {"type": "update"}]}'   (needs repository administration)
   SKIP  labels not verified (offline, not logged in, or API error)
@@ -30060,6 +30147,11 @@ not yet confirmed: labels not verified (offline, not logged in, or API error); r
     {
       "id": "FC-E26",
       "name": "the merge is a boundary for this login",
+      "area": "wall"
+    },
+    {
+      "id": "FC-E35",
+      "name": "the approvals required match who can merge",
       "area": "wall"
     },
     {
@@ -82720,7 +82812,7 @@ not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it
       "area": "wall"
     },
     {
-      "id": "FC-E31",
+      "id": "FC-E35",
       "name": "the approvals required match who can merge",
       "area": "wall"
     },
@@ -84828,7 +84920,7 @@ not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it
       "area": "wall"
     },
     {
-      "id": "FC-E31",
+      "id": "FC-E35",
       "name": "the approvals required match who can merge",
       "area": "wall"
     },

@@ -679,9 +679,9 @@ count() { # <approvals> [owners]: the pull_request rule requires that many, with
   jq -c --argjson n "$1" --argjson o "$([ "${2:-}" = owners ] && echo true || echo false)" "map(if .type == \"pull_request\" then .parameters.required_approving_review_count = \$n | .parameters.require_code_owner_review = \$o else . end) + [$b_rule]" \
     <<<"$good_rules" > "$mapi/repos/o/r/rules/branches/main.json"
 }
-merge_wall "one person and the agent's account, no approval: a PASS" "FC-E31 pass" "count 0; collab o:admin agent:write" "${M[@]}"
+merge_wall "one person and the agent's account, no approval: a PASS" "FC-E35 pass" "count 0; collab o:admin agent:write" "${M[@]}"
 merge_wall "  and the agent's account is not counted as a person" "and 1 person can merge \(o\)" "count 0; collab o:admin agent:write" "${M[@]}"
-merge_wall "two admins and no approval required: a WARN" "FC-E31 warn" "count 0; collab o:admin b:admin agent:write" "${M[@]}"
+merge_wall "two admins and no approval required: a WARN" "FC-E35 warn" "count 0; collab o:admin b:admin agent:write" "${M[@]}"
 merge_wall "  naming both" "2 people can merge \(b, o\) and no approval is required" "count 0; collab o:admin b:admin agent:write" "${M[@]}"
 merge_wall "  with the two-people command" "add-ruleset-rule.sh o/r two-people" "count 0; collab o:admin b:admin agent:write" "${M[@]}"
 merge_wall "  and fails nothing" '^-- 0 failed' "count 0; collab o:admin b:admin agent:write" "${M[@]}"
@@ -690,38 +690,38 @@ merge_wall "  and fails nothing" '^-- 0 failed' "count 0; collab o:admin b:admin
 # on, only those CODEOWNERS names count.
 co() { mkdir -p "$good/.github"; printf '%s\n' "$@" > "$good/.github/CODEOWNERS"; }
 nco() { rm -f "$good/.github/CODEOWNERS"; }
-merge_wall "one approval, code owners' review off, the agent's account can approve: not alone" "FC-E31 pass" "count 1; collab o:admin agent:write" "${M[@]}"
-merge_wall "one approval, code owners' review on, CODEOWNERS names only o: a WARN" "FC-E31 warn" "count 1 owners; collab o:admin agent:write; co '* @o' '/.github/ @o'" "${M[@]}"
+merge_wall "one approval, code owners' review off, the agent's account can approve: not alone" "FC-E35 pass" "count 1; collab o:admin agent:write" "${M[@]}"
+merge_wall "one approval, code owners' review on, CODEOWNERS names only o: a WARN" "FC-E35 warn" "count 1 owners; collab o:admin agent:write; co '* @o' '/.github/ @o'" "${M[@]}"
 merge_wall "  saying their own pull requests cannot merge" "only o can give one that counts \(code owners' review is on, and CODEOWNERS names no one else with write\): a pull request of theirs cannot merge" "count 1 owners; collab o:admin agent:write; co '* @o'" "${M[@]}"
 merge_wall "  with the one-person command" "add-ruleset-rule.sh o/r one-person" "count 1 owners; collab o:admin agent:write; co '* @o'" "${M[@]}"
 merge_wall "  and fails nothing" '^-- 0 failed' "count 1 owners; collab o:admin agent:write; co '* @o'" "${M[@]}"
 merge_wall "code owners' review on and no CODEOWNERS file: a WARN saying so" "no CODEOWNERS file is here" "count 1 owners; collab o:admin agent:write; nco" "${M[@]}"
-merge_wall "CODEOWNERS names o and b (write), o merges: a PASS, not one-person" "FC-E31 pass" "count 1 owners; collab o:admin b:write agent:write; co '* @o @B' '/.github/ @o @acme/team'" "${M[@]}"
-merge_wall "one approval and only o with write: a WARN" "FC-E31 warn" "count 1; collab o:admin; nco" "${M[@]}"
-merge_wall "one approval and two admins: a PASS" "FC-E31 pass" "count 1; collab o:admin b:admin agent:write" "${M[@]}"
-merge_wall "a bot with admin is not a person" "FC-E31 pass" "count 0; collab o:admin dependabot:bot" "${M[@]}"
+merge_wall "CODEOWNERS names o and b (write), o merges: a PASS, not one-person" "FC-E35 pass" "count 1 owners; collab o:admin b:write agent:write; co '* @o @B' '/.github/ @o @acme/team'" "${M[@]}"
+merge_wall "one approval and only o with write: a WARN" "FC-E35 warn" "count 1; collab o:admin; nco" "${M[@]}"
+merge_wall "one approval and two admins: a PASS" "FC-E35 pass" "count 1; collab o:admin b:admin agent:write" "${M[@]}"
+merge_wall "a bot with admin is not a person" "FC-E35 pass" "count 0; collab o:admin dependabot:bot" "${M[@]}"
 # The review of #1235: an author cannot approve their own pull request, so
 # two people with two approvals required leaves each one short; and a team
 # in CODEOWNERS may hold approvers this does not read, so the count is not
 # made and nothing weaker is suggested.
-merge_wall "two approvals and two people who can approve: a WARN" "FC-E31 warn" "count 2; collab o:admin b:admin; nco" "${M[@]}"
+merge_wall "two approvals and two people who can approve: a WARN" "FC-E35 warn" "count 2; collab o:admin b:admin; nco" "${M[@]}"
 merge_wall "  with the two-people command, not one-person" "add-ruleset-rule.sh o/r two-people" "count 2; collab o:admin b:admin; nco" "${M[@]}"
-merge_wall "two approvals and three who can approve: a PASS" "FC-E31 pass" "count 2; collab o:admin b:admin c:write; nco" "${M[@]}"
-merge_wall "code owners' review on, CODEOWNERS names a team and only o: not counted, an INFO" "FC-E31 info" "count 1 owners; collab o:admin agent:write; co '* @o @acme/maintainers'" "${M[@]}"
+merge_wall "two approvals and three who can approve: a PASS" "FC-E35 pass" "count 2; collab o:admin b:admin c:write; nco" "${M[@]}"
+merge_wall "code owners' review on, CODEOWNERS names a team and only o: not counted, an INFO" "FC-E35 info" "count 1 owners; collab o:admin agent:write; co '* @o @acme/maintainers'" "${M[@]}"
 merge_wall "  naming the team" "CODEOWNERS names @acme/maintainers, whose members are not read here" "count 1 owners; collab o:admin agent:write; co '* @o @acme/maintainers'" "${M[@]}"
 fc_out="$(FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "${M[@]}" 2>&1)"
 if grep -q "one-person" <<<"$fc_out"; then bad "  and no one-person command beside a team"; else ok "  and no one-person command beside a team"; fi
 nco
 # Without the merge ruleset, everyone with write can merge: the agent's own
 # account is one of them (FC-E25 says to add the ruleset).
-merge_wall "no merge ruleset: write counts" "FC-E31 warn" "count 0; collab o:admin agent:write; jq -c 'map(select(.type != \"update\"))' \"$mapi/repos/o/r/rules/branches/main.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
-merge_wall "collaborators not readable: an INFO, not a SKIP" "FC-E31 info" "count 0; rm -f \"$mapi/repos/o/r/collaborators?per_page=100.json\"" "${M[@]}"
+merge_wall "no merge ruleset: write counts" "FC-E35 warn" "count 0; collab o:admin agent:write; jq -c 'map(select(.type != \"update\"))' \"$mapi/repos/o/r/rules/branches/main.json\" > \"$mapi/x\" && mv \"$mapi/x\" \"$mapi/repos/o/r/rules/branches/main.json\"" "${M[@]}"
+merge_wall "collaborators not readable: an INFO, not a SKIP" "FC-E35 info" "count 0; rm -f \"$mapi/repos/o/r/collaborators?per_page=100.json\"" "${M[@]}"
 merge_wall "  that adds nothing unverified (the one is the labels, offline)" '^-- 0 failed, 1 not verified$' "count 0; rm -f \"$mapi/repos/o/r/collaborators?per_page=100.json\"" "${M[@]}"
-merge_wall "collaborators not readable with the Actions token: left to the skill" "FC-E31 review" "count 0; rm -f \"$mapi/repos/o/r/collaborators?per_page=100.json\"" "${M[@]}" --actions-token
-merge_wall "no person with admin among the collaborators: an INFO" "FC-E31 info" "count 0; collab agent:write; nco" "${M[@]}"
+merge_wall "collaborators not readable with the Actions token: left to the skill" "FC-E35 review" "count 0; rm -f \"$mapi/repos/o/r/collaborators?per_page=100.json\"" "${M[@]}" --actions-token
+merge_wall "no person with admin among the collaborators: an INFO" "FC-E35 info" "count 0; collab agent:write; nco" "${M[@]}"
 merge_wall "no approval count in the rule: nothing said" '^-- ' "collab o:admin b:admin; rm -f \"$mapi/x\"" "${M[@]}"
 fc_out="$(FLOOR_CHECK_API_DIR="$mapi" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "${M[@]}" 2>&1)"
-if grep -q "approvals required\|can merge (" <<<"$fc_out"; then bad "no approval count in the rule: no FC-E31 line"; else ok "no approval count in the rule: no FC-E31 line"; fi
+if grep -q "approvals required\|can merge (" <<<"$fc_out"; then bad "no approval count in the rule: no FC-E35 line"; else ok "no approval count in the rule: no FC-E35 line"; fi
 rm -f "$mapi/repos/o/r/collaborators?per_page=100.json"
 # CodeQL: enforced by the code_scanning rule (the door since #41) or by
 # a `CodeQL` check name (repositories the door created before that). Either

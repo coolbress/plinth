@@ -1129,7 +1129,7 @@ def _wall() -> tuple[dict, ...]:
                         "unlisted": "the tag ruleset not verified: this repository's rulesets could not be listed",
                         "members": "the tag ruleset for members released on their own tags not verified: "
                                    "[tool.plinth.release] own-tags in pyproject.toml could not be read here"}),
-        check("FC-E31", "the approvals required match who can merge", states=("pass", "warn", "review", "info"),
+        check("FC-E35", "the approvals required match who can merge", states=("pass", "warn", "review", "info"),
               handoff="admin", docs=WALL_DOCS, hosts=gh, needs=net, lifecycle="experimental",
               fix="the two-person rules, or back to one: scripts/add-ruleset-rule.sh <repo> two-people or one-person",
               messages={"good": "{branch}: {required} required, and {people} can merge ({who})",
@@ -6133,10 +6133,10 @@ def check_approvals(repo: str, branch: str, pr: dict, reserved: str | None, netw
         return
     got = api(f"repos/{repo}/collaborators?per_page=100", network, paginate=True)
     if not isinstance(got, list) and actions_token:
-        emit("FC-E31", "review", "review", reader=ADMIN_READER)
+        emit("FC-E35", "review", "review", reader=ADMIN_READER)
         return
     if not isinstance(got, list):
-        emit("FC-E31", "info", "unread", {"branch": branch})
+        emit("FC-E35", "info", "unread", {"branch": branch})
         return
     role = "admin" if reserved in ("stands", "never") else "push"
     who = sorted(c.get("login", "?") for c in got if isinstance(c, dict) and c.get("type") != "Bot"
@@ -6160,17 +6160,17 @@ def check_approvals(repo: str, branch: str, pr: dict, reserved: str | None, netw
     # approve leaves it unable to merge (#1235 review). A team in CODEOWNERS
     # may hold more approvers than are read: then the count is not made.
     if required >= 1 and len(approvers) <= required and teams:
-        emit("FC-E31", "info", "teams", dict(values, teams=", ".join(f"@{t}" for t in sorted(teams))))
+        emit("FC-E35", "info", "teams", dict(values, teams=", ".join(f"@{t}" for t in sorted(teams))))
     elif required >= 1 and len(approvers) <= required:
-        emit("FC-E31", "warn", "alone", values)
-        emit("FC-E31", "info", "hint", dict(values, preset="one-person" if len(approvers) <= 1 else "two-people"))
+        emit("FC-E35", "warn", "alone", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="one-person" if len(approvers) <= 1 else "two-people"))
     elif not who:
-        emit("FC-E31", "info", "nobody", dict(values, role="admin" if role == "admin" else "write"))
+        emit("FC-E35", "info", "nobody", dict(values, role="admin" if role == "admin" else "write"))
     elif len(who) >= 2 and required == 0:
-        emit("FC-E31", "warn", "none", values)
-        emit("FC-E31", "info", "hint", dict(values, preset="two-people"))
+        emit("FC-E35", "warn", "none", values)
+        emit("FC-E35", "info", "hint", dict(values, preset="two-people"))
     else:
-        emit("FC-E31", "pass", "good", values)
+        emit("FC-E35", "pass", "good", values)
 
 
 def bypass_key(actor: dict) -> tuple[str, str, str]:

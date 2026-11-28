@@ -14,7 +14,7 @@
   opened a pull request. The line names the page and stops once a CODEOWNERS
   file is there. Its end row opens the issue form "End or hand over this
   project", and a handover goes through the second-person page first (#1150).
-- `/plinth:floor-check` warns (FC-E31, never a FAIL) when two or more people can
+- `/plinth:floor-check` warns (FC-E35, never a FAIL) when two or more people can
   merge and no approval is required, or when no more people can give an
   approval that counts than the approvals required, since an author cannot
   approve their own; with a team in CODEOWNERS it says the count was not made
