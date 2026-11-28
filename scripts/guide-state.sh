@@ -454,7 +454,10 @@ echo "repository: $repo"; repo_name="$repo"
 # returns its status. Each is taken where its line was said before, so a
 # failed read says what it said, in the same order.
 bg="$(mktemp -d)" || { echo "guide-state: could not make a temp folder" >&2; exit 1; }
-trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$bg"' EXIT
+# At exit, a read not taken (a run that ends early, on a failed read) is
+# waited for, not killed: killing reaches only its subshell, which leaves gh
+# running and says Terminated on standard error.
+trap 'wait; rm -rf "$bg"' EXIT
 start() { local k="$1"; shift; "$@" > "$bg/$k" & printf -v "pid_$k" '%s' "$!"; }
 take() { local p="pid_$1" rc; wait "${!p}"; rc=$?; printf -v "$2" '%s' "$(cat "$bg/$1")"; return "$rc"; }
 # in_top <command>...: in the checkout, its errors with its output.

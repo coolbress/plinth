@@ -2197,11 +2197,16 @@ printf '%s\n' "$out" > "$work/printed"
 [ -z "${GUIDE_RUNS_OUT:-}" ] || { mkdir -p "$GUIDE_RUNS_OUT" && cp "$runs" "$GUIDE_RUNS_OUT/runs.tsv" &&
   for f in "$work"/out.*; do [ -e "$f" ] && sed "s|$work|WORK|g" "$f" > "$GUIDE_RUNS_OUT/${f##*/}"; done; }
 cap=11
+# over_cap <runs file>: each row above the cap, as "<calls> calls: fixture <name> <arguments>".
+over_cap() { awk -F '\t' -v c="$cap" '$1 > c { n = split($2, p, "/"); print $1 " calls: fixture " p[n] " " $3 }' "$1"; }
+printf '12\t%s/too-many\tmap\n9\t%s/fine\t\n' "$work" "$work" > "$work/runs-over"
+[ "$(over_cap "$work/runs-over")" = "12 calls: fixture too-many map" ] && ok "the cap check names a run over $cap calls, and only it" ||
+  bad "the cap check on a run over the cap: $(over_cap "$work/runs-over")"
 most="$(sort -t "$(printf '\t')" -k1,1nr "$runs" | head -1)"
-over="$(awk -F '\t' -v c="$cap" '$1 > c' "$runs")"
+over="$(over_cap "$runs")"
 f="$(cut -f2 <<<"$most")"
 if [ -s "$runs" ] && [ -z "$over" ]; then ok "every run makes at most $cap gh calls: $(grep -c . "$runs") runs, the most $(cut -f1 <<<"$most") (fixture ${f##*/})"
-else bad "runs over $cap gh calls:"; awk -F '\t' '{ n = split($2, p, "/"); print "        " $1 " calls: fixture " p[n] " " $3 }' <<<"$over" | head; fi
+else bad "runs over $cap gh calls:"; sed 's/^/        /' <<<"$over" | head; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
