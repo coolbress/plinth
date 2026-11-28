@@ -692,19 +692,27 @@ run="$(cd "$top" && gh api "repos/$repo/actions/workflows/ci.yml/runs?branch=mai
 # main moved on, the run is an older commit's). Not when #N is itself a
 # revert (that would undo the undo), nor while a revert of #N is open (that
 # pull request is the way, routed below). The route undoes #N first.
-main_undo=""; main_undo_title=""
+# is_revert <title>: a title that reverts, in every form ci / pr-title
+# accepts (#1203): GitHub's `Revert "<title>"`, and the type revert, with a
+# scope or a `!` or both (`revert!:`, `revert(api)!:`). The scope's letters
+# are python-ci.yml's; tests/guide-cases.sh fails when the two disagree.
+revert_type='^revert(\([a-zA-Z0-9_.,/ -]+\))?!?: .+'
+is_revert() { case "$1" in 'Revert "'*) return 0 ;; esac; grep -qE "$revert_type" <<<"$1"; }
+main_undo=""; main_undo_title=""; open_revert=""; open_reverts=""
 if [ -n "$run_ok" ] && [ -n "$run" ]; then
   case "$(cut -f2 <<<"$run")" in success|neutral|skipped) ;; *) main_red=yes ;; esac
   if [ "$(cut -f2 <<<"$run")" = failure ]; then
     main_undo_title="$(cut -f4 <<<"$run")"
     main_undo="$(sed -nE 's/.* \(#([0-9]+)\)$/\1/p' <<<"$main_undo_title")"
-    case "$main_undo_title" in 'Revert "'*|revert:*|revert\(*) main_undo="" ;; esac
+    ! is_revert "$main_undo_title" || main_undo=""
     [ -z "$main_undo" ] || [ "$(head -1 <<<"$merged" | cut -f1)" = "$main_undo" ] || main_undo=""
     # An open revert of #N: GitHub titles it Revert "<#N's title>", with no
     # (#N) inside the quotes (ci / pr-title refuses one there); a title that
     # does carry (#N) counts too (#1196 review).
-    [ -z "$main_undo" ] || ! REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
-      'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { found = 1 } END { exit !found }' <<<"$prs" || main_undo=""
+    # That pull request is then the route itself, ahead of any other (#1203).
+    [ -z "$main_undo" ] || open_revert="$(REVERTED="Revert \"$(head -1 <<<"$merged" | cut -f4)\"" awk -F '\t' -v n="$main_undo" \
+      'index($6, "Revert \"") == 1 && ($6 == ENVIRON["REVERTED"] || index($6, "(#" n ")")) { print $1; exit }' <<<"$prs")"
+    [ -z "$open_revert" ] || { open_reverts="$main_undo"; main_undo=""; }
   fi
 fi
 
@@ -1193,6 +1201,20 @@ elif [ -n "$main_undo" ]; then
   if [ "$archetype" = web ]; then restore="with the README's \"Where it runs\" and the restore you tried (step 3 of $plugin/docs/how-to/set-four-things-by-hand.md)"
   else restore="this archetype's project has no restore steps of its own"; fi
   echo "then also: after the undo, restore any data the change lost or changed ($restore), then reproduce and fix, and leave a short blameless note in the issue's Outcome when it lost data, needed a revert or reached users"
+elif [ -n "$open_revert" ]; then
+  # The undo is open (#1203): its pull request comes before any other's
+  # failing check, since main stays broken until it merges.
+  run_id_red="$(cut -f1 <<<"$run")"
+  checks="$(awk -F '\t' -v n="$open_revert" '$1 == n { print $4; exit }' <<<"$prs")"
+  note="pull request #$open_revert reverts #$open_reverts, whose merge failed main's latest CI run (run $run_id_red); it comes before any other pull request"
+  case "$checks" in
+    pass) note="$note; its checks are green, so saying merge #$open_revert is the person's word for it"
+          say "Green, and seen working" "merge #$open_revert" ;;
+    fail) note="$note; it has a failing check: the agent reads its log first, as for any other"
+          say "Something broke" "diagnose this: pull request #$open_revert has a failing check" ;;
+    *) note="$note; its checks are ${checks:-not read}: merge it once they are green"
+       say "A pull request with checks running" "/run" ;;
+  esac
 elif [ -n "$people_prs" ]; then
   # A red check does not turn green by waiting: that is something broke.
   if [ -n "$broken" ] && [ -n "$plinth_failing" ] && [ -n "$pin_behind" ]; then
