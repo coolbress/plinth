@@ -17,6 +17,7 @@ when the person asks about one item; the skill's own rules are in
 - [The Actions allowlist and private vulnerability reporting](#the-actions-allowlist-and-private-vulnerability-reporting)
 - [What the door sets beside the wall, and the project's own answers](#what-the-door-sets-beside-the-wall-and-the-projects-own-answers)
 - [Dependabot alerts, secret scanning and registry tokens](#dependabot-alerts-secret-scanning-and-registry-tokens)
+- [Experimental reads](#experimental-reads)
 - [A private repository](#a-private-repository)
 - [Template drift](#template-drift)
 - [The adoption record](#the-adoption-record)
@@ -439,6 +440,52 @@ needs `repo`):
   token for another registry is not named. Names only: GitHub's secrets API
   returns no value. A list longer than one page (100) is not verified. A name is a guess at what a secret holds,
   which is why it is a WARN and experimental.
+
+## Experimental reads
+
+Read only with `--experimental`, which this skill passes and `ci / floor-check`
+does not (#1114), so CI's output does not change. Each is a WARN at most,
+GitHub only, and stays experimental until the dogfooding ledger (#1117) shows
+it is not noise: under 10% effective false alarms over at least 10 showings.
+
+- **An AI agent fed text others write (FC-D09).** An AI agent action
+  (`anthropics/claude-code-action`, `google-github-actions/run-gemini-cli`,
+  `openai/codex-action`, `actions/ai-inference`) in a workflow that
+  `issues`, `issue_comment`, `pull_request_target`,
+  `pull_request_review_comment`, `discussion`, `discussion_comment` or
+  `workflow_run` triggers. The action is matched in any case, a subpath
+  such as `/base-action` too. It is named when its job holds a write
+  permission or a secret, and neither the job nor the agent's step has an
+  `if:` on `author_association`, `github.actor`,
+  `github.triggering_actor` or `github.event.sender.login`. Whoever writes
+  the issue or the comment writes the agent's prompt.
+  - **No `permissions:`.** A job with none, and none at the top, holds the
+    default token. The repository's setting may make that token writable,
+    so it counts as holding write.
+  - **Secrets.** A secret counts in the job (`secrets.X`, `secrets['X']`,
+    `secrets: inherit`) or in the workflow's top-level `env:`.
+  - **The `if:`.** It is searched for those names, not evaluated. One that
+    names the author beside `!=`, `!` or `||` may let anyone through, so it
+    is not verified rather than passed.
+  - **Not verified either:** a job that calls a reusable workflow, which is
+    not followed, and an `on:` in a form the line reader does not read. zizmor at
+  `--min-severity medium` reported nothing on this shape with 1.29.0
+  (2026-11-25), nor with 1.33.1 for `issues`,
+  `pull_request_review_comment`, `discussion` and `discussion_comment`
+  (2026-11-28). For `issue_comment`, `pull_request_target` and
+  `workflow_run` it reports `dangerous-triggers`, gated or not: the
+  trigger, not this shape. `tests/workflow-lint.sh` measures it again with
+  each zizmor pin, and the check retires for a trigger once zizmor reports
+  the shape there.
+- **A registry token in any workflow (FC-D10).** `secrets.PYPI*`,
+  `TWINE_PASSWORD`, `NPM_TOKEN`, `NODE_AUTH_TOKEN` or `CARGO_REGISTRY_TOKEN`
+  (or `secrets['…']`, any case) read on any line of any workflow but a
+  comment, `run:` blocks included. A name is the evidence, so
+  `TEST_PYPI_API_TOKEN` and `secrets: inherit` are not named.
+  A long-lived token publishes for as long as it is valid. The registry's
+  trusted publisher (OIDC) needs none: once it works, delete the secret
+  and revoke the token at the registry. zizmor's `use-trusted-publishing`
+  is informational, below CI's `medium` (measured 2026-11-25).
 
 ## A private repository
 

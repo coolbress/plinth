@@ -332,6 +332,73 @@ quiet "an explicit-key run block (? run, then : |) is still a block" "wf '- ? ru
 quiet "a run block with a trailing comment is still a block" "wf '- run: |  # note: |' '    uses: not/yaml@v1' '- \"a # b\": |' '    uses: not/yaml@v1' > .github/workflows/t.yml" "pinned|workflow"
 says  "a uses this checker cannot read is not verified, not passed" "wf '- {uses: actions/checkout@v4}' > .github/workflows/t.yml" "FC-D01 unknown"
 says  "an explicit-key uses is not verified either" "wf '- ? uses' '  : actions/checkout@v4' > .github/workflows/t.yml" "FC-D01 unknown"
+
+# Experimental workflow reads (#1114): --experimental only, never in CI's run.
+# FC-D09: an AI agent action fed text others write, holding a write permission
+# or a secret, with no author check. FC-D10: a registry token in any workflow.
+exp() { # <description> <shell to change the copy> <`<id> <state>` expected> [absent]
+  local copy="$work/case"; rm -rf "$copy"; cp -R "$good" "$copy"
+  ( cd "$copy" && eval "$2" )
+  local out; out="$(python3 "$checker" --root "$copy" --no-network --experimental 2>&1)"
+  if [ "${4:-}" = absent ]; then
+    if ! reports "$out" "$3"; then ok "$1"; else bad "$1 (did not expect $3)"; printf '%s\n' "$out" | grep -E 'FC-D09|agent|registry' | sed 's/^/        /'; fi
+  elif reports "$out" "$3"; then ok "$1"; else bad "$1 (expected $3)"; printf '%s\n' "$out" | grep -E 'WARN|FAIL|SKIP' | sed 's/^/        /'; fi
+}
+agent='anthropics/claude-code-action@0000000000000000000000000000000000000000'
+planted="printf 'on:\n  issue_comment:\n    types: [created]\npermissions:\n  contents: write\njobs:\n  claude:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: $agent\n        with:\n          anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}\n' > .github/workflows/claude.yml"
+exp "FC-D09: the good fixture has no AI agent action" ":" "FC-D09 pass"
+exp "FC-D09: the planted shape (issue_comment, contents: write, a secret, no author check) is a WARN" "$planted" "FC-D09 warn"
+exp "FC-D09: it carries the author_association gate as its repair" "$planted" "FC-D09 info"
+exp "FC-D09: the same with an author_association gate on the job passes" \
+  "printf 'on:\n  issue_comment:\n    types: [created]\npermissions:\n  contents: write\njobs:\n  claude:\n    if: >-\n      github.event.comment.author_association == %s\n    runs-on: ubuntu-latest\n    steps:\n      - uses: $agent\n        with:\n          anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}\n' \"'OWNER'\" > .github/workflows/claude.yml" "FC-D09 pass"
+exp "FC-D09: a gate on the agent's step passes" \
+  "printf 'on: [issues, issue_comment]\npermissions:\n  issues: write\njobs:\n  a:\n    steps:\n      - name: agent\n        if: >-\n          github.actor == github.repository_owner\n        uses: $agent\n' > .github/workflows/a.yml" "FC-D09 pass"
+exp "FC-D09: on pull_request with read-only permissions passes" \
+  "printf 'on: pull_request\npermissions:\n  contents: read\njobs:\n  r:\n    steps:\n      - uses: openai/codex-action@$(printf '%040d' 0)\n' > .github/workflows/r.yml" "FC-D09 pass"
+exp "FC-D09: an untrusted trigger with read-only permissions and no secret passes" \
+  "printf 'on: pull_request_target\npermissions:\n  contents: read\njobs:\n  r:\n    steps:\n      - uses: actions/ai-inference@$(printf '%040d' 0)\n' > .github/workflows/r.yml" "FC-D09 pass"
+exp "FC-D09: no permissions set anywhere holds the default token: a WARN" \
+  "printf 'on:\n  issues:\njobs:\n  g:\n    steps:\n      - uses: google-github-actions/run-gemini-cli@$(printf '%040d' 0)\n' > .github/workflows/g.yml" "FC-D09 warn"
+exp "FC-D09: read-only permissions but a secret: a WARN" \
+  "printf 'on: {discussion_comment: {types: [created]}}\npermissions:\n  contents: read\njobs:\n  g:\n    steps:\n      - uses: $agent\n        with:\n          key: \${{ secrets.K }}\n' > .github/workflows/g.yml" "FC-D09 warn"
+exp "FC-D09: the job's own permissions override the workflow's" \
+  "printf 'on: workflow_run\npermissions:\n  contents: write\njobs:\n  g:\n    permissions:\n      contents: read\n    steps:\n      - uses: $agent\n' > .github/workflows/g.yml" "FC-D09 pass"
+exp "FC-D09: an agent named with a subpath, in another case, is read" \
+  "printf 'on:\n  - issues\n  - issue_comment\npermissions:\n  contents: write\njobs:\n  a:\n    steps:\n      - uses: Anthropics/claude-code-action/base-action@$(printf '%040d' 0)\n' > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: an if: that names the author beside != is not verified, not passed" \
+  "printf 'on: issue_comment\npermissions:\n  contents: write\njobs:\n  a:\n    if: github.actor != github.repository_owner\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 unknown"
+exp "FC-D09: a job that calls a reusable workflow is not verified, not passed" \
+  "printf 'on: issue_comment\npermissions:\n  contents: write\njobs:\n  a:\n    uses: o/r/.github/workflows/agent.yml@$(printf '%040d' 0)\n    secrets: inherit\n' > .github/workflows/a.yml" "FC-D09 unknown"
+exp "FC-D09: a secret in the top-level env: is every job's" \
+  "printf 'on: issue_comment\npermissions:\n  contents: read\nenv:\n  K: \${{ secrets.K }}\njobs:\n  a:\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: an agent line inside a run: block is not a step" \
+  "printf 'on: issue_comment\npermissions:\n  contents: read\njobs:\n  a:\n    steps:\n      - run: |\n          - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 pass"
+exp "FC-D09: an indentless on: list is read" \
+  "printf 'on:\n- issues\npermissions:\n  contents: write\njobs:\n  a:\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: a quoted jobs: key is read" \
+  "printf 'on: issues\npermissions:\n  contents: write\n\"jobs\":\n  a:\n    steps:\n      - uses: $agent\n' > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: an author name only in the if: line's comment is no gate" \
+  "printf 'on: issues\npermissions:\n  contents: write\njobs:\n  a:\n    if: contains(github.event.issue.body, %s) # TODO restrict github.actor\n    steps:\n      - uses: $agent\n' \"'@claude'\" > .github/workflows/a.yml" "FC-D09 warn"
+exp "FC-D09: an on: it cannot read is not verified, not passed" \
+  "printf 'on: &t\n  issues:\njobs:\n  g:\n    steps:\n      - uses: $agent\n' > .github/workflows/g.yml" "FC-D09 unknown"
+out="$(rm -rf "$work/case"; cp -R "$good" "$work/case"; (cd "$work/case" && eval "$planted"); python3 "$checker" --root "$work/case" --no-network 2>&1)"
+if ! grep -qE 'AI agent|registry token' <<<"$out"; then ok "FC-D09, FC-D10: without --experimental neither prints a line"
+else bad "an experimental read printed without --experimental"; grep -E 'AI agent|registry token' <<<"$out" | sed 's/^/        /'; fi
+exp "FC-D10: the good fixture reads no registry token" ":" "FC-D10 pass"
+exp "FC-D10: a workflow file that is not UTF-8 is not verified, not passed" \
+  "printf 'jobs:\\n  p:\\n    steps:\\n      - run: echo \\377\\n' > .github/workflows/p.yml" "FC-D10 unknown"
+exp "FC-D09: and neither is it read for an AI agent" \
+  "printf 'jobs:\\n  p:\\n    steps:\\n      - run: echo \\377\\n' > .github/workflows/p.yml" "FC-D09 unknown"
+exp "FC-D10: secrets.NPM_TOKEN in any workflow is a WARN" \
+  "printf 'jobs:\n  p:\n    steps:\n      - run: npm publish\n        env:\n          NODE_AUTH_TOKEN: \${{ secrets.NPM_TOKEN }}\n' > .github/workflows/p.yml" "FC-D10 warn"
+exp "FC-D10: one read inside a run: block is a WARN too" \
+  "printf 'jobs:\n  p:\n    steps:\n      - run: |\n          twine upload -p \"\${{ secrets.pypi_api_token }}\" dist/*\n' > .github/workflows/p.yml" "FC-D10 warn"
+exp "FC-D10: the bracket form secrets['NPM_TOKEN'] is a read too" \
+  "printf 'jobs:\n  p:\n    steps:\n      - run: npm publish\n        env:\n          T: \${{ secrets[%s] }}\n' \"'NPM_TOKEN'\" > .github/workflows/p.yml" "FC-D10 warn"
+exp "FC-D10: it carries the delete and revoke line" \
+  "printf 'jobs:\n  p:\n    steps:\n      - run: cargo publish\n        env:\n          CARGO_REGISTRY_TOKEN: \${{ secrets.CARGO_REGISTRY_TOKEN }}\n' > .github/workflows/p.yml" "FC-D10 info"
+exp "FC-D10: a comment that names a token is not a read" \
+  "printf 'jobs:\n  p:\n    steps:\n      # was secrets.TWINE_PASSWORD before OIDC\n      - run: uv publish\n' > .github/workflows/p.yml" "FC-D10 pass"
 says  "an anchored uses key is not verified either" "wf '- &step uses: actions/checkout@v4' > .github/workflows/t.yml" "FC-D01 unknown"
 says  "a uses later in a flow mapping is not verified either" "wf '- {name: a, uses: actions/checkout@v4}' > .github/workflows/t.yml" "FC-D01 unknown"
 says  "a repository with no workflow says so rather than pass" "sed -i.bak 's/backend/cli/' .copier-answers.yml && rm -r .github/workflows" "FC-D01 info"

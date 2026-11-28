@@ -136,3 +136,5 @@ FC-E34 no registry token among the secrets while release.yml publishes through O
 FC-F09 the adoption record is read
 FC-G12 no plugin from the plinth marketplace is one it no longer lists
 FC-E35 the approvals required match who can merge
+FC-D09 no AI agent action runs on text others write with a write permission or a secret and no author check
+FC-D10 no workflow reads a registry token from the secrets
