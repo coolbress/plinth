@@ -20,7 +20,8 @@ agents.
 
 **Gated where a check can:** the groundwork, which GitHub enforces.
 
-**Guided where it can't:** the workflow, which plinth explains and you decide.
+**Guided where it can't:** the workflow, which plinth explains and you decide,
+with the checks answering at one step.
 
 You decide. The checks answer. The record remembers.
 
@@ -48,9 +49,10 @@ point.
 
 ### The groundwork: gated where a check can
 
-In a new project `/plinth:new-project` makes on GitHub, set up without your
-having to name any of it. Each row is held by a check or a rule GitHub
-enforces, while those rules stand:
+This is what `/plinth:new-project` sets up in a new project on GitHub,
+without your having to name any of it. Each row is held by a check or a rule
+GitHub enforces, while those rules stand; on a private project, some need
+GitHub Code Security:
 
 | What is set up | What it means for you |
 | --- | --- |
@@ -103,7 +105,8 @@ The steps experienced engineers follow for every change, each explained in
 plain words as you reach it. `/plinth:guide` reads the project and names the
 one command to type next; [run a project](docs/how-to/run-a-project.md) has
 every step in full. Guidance does not stop anything: it is what the agent is
-asked to do, and what is yours to decide.
+asked to do, and what is yours to decide. Only the step where the checks
+answer is held by them.
 
 ```mermaid
 flowchart LR
@@ -121,9 +124,9 @@ flowchart LR
 | Shape the idea | `/grilling` and the idea | The agent interviews you, brings you only the decisions, and opens an issue saying what "done" means | Guidance |
 | Plan a big job | Ask for a plan, then tickets | The plan goes into one issue, cut into small tickets that say which waits for which | Guidance |
 | Build one ticket | `/implement #N` | The agent writes a failing test first where it can, then the code; a reviewer that never saw the session reads the diff; the agent opens the pull request and says in it what changed, why and how it was checked | Guidance; the result still meets the checks |
-| The checks answer | Nothing: wait | The automatic checks run on the pull request | The checks: nothing merges while one fails |
+| The checks answer | Nothing: wait | The automatic checks run on the pull request | The checks: while the rules stand, nothing merges while one fails |
 | You check | Open what changed | You look at what no check can judge: is it what you wanted | Yours |
-| You merge | Say "merge" | The agent is asked to wait for your word, then merges that one pull request | Guidance: an agent working with an administrator's login can still merge itself. On an account of its own, GitHub refuses its merge |
+| You merge | Say "merge" | The agent is asked to wait for your word, then merges that one pull request; on an account of its own, you press the merge button | Guidance: an agent working with an administrator's login can still merge itself. On an account of its own, GitHub refuses its merge |
 | Release and deploy | Depends on the kind of project | A merged change goes out as the project's kind needs ([the catalog's table](skills/arsenal/SKILL.md#where-you-are-and-what-to-do-next)) | Guidance |
 
 The path comes from how experienced engineers run projects; whether the
