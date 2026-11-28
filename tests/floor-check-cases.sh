@@ -417,6 +417,15 @@ jq -n --arg c "$(base64 < "$good/.github/workflows/ci.yml" | tr -d '\n')" '{type
   > "$api/repos/o/r/contents/.github/workflows/ci.yml.json"
 good_setup='{"state":"configured","languages":["actions","python"],"query_suite":"default"}'
 printf '%s' "$good_setup" > "$api/repos/o/r/code-scanning/default-setup.json"
+# Dependabot alerts on with none open, security updates on, and no open secret
+# scanning alert (#1118): GitHub answers the first with a 204, read as {}.
+mkdir -p "$api/repos/o/r/dependabot" "$api/repos/o/r/secret-scanning"
+printf '{}' > "$api/repos/o/r/vulnerability-alerts.json"
+printf '[]' > "$api/repos/o/r/dependabot/alerts?state=open&per_page=100.json"
+printf '{"enabled":true,"paused":false}' > "$api/repos/o/r/automated-security-fixes.json"
+printf '[]' > "$api/repos/o/r/secret-scanning/alerts?state=open&per_page=100&hide_secret=true.json"
+# The same answers where gh serves them (its mock below drops the query).
+printf '[]' > "$api/repos/o/r/dependabot/alerts.json"; printf '[]' > "$api/repos/o/r/secret-scanning/alerts.json"
 # The Actions allowlist the door sets, and private vulnerability reporting on (#747).
 mkdir -p "$api/repos/o/r/actions/permissions"
 good_perms='{"enabled":true,"allowed_actions":"selected","sha_pinning_required":true}'
@@ -866,6 +875,132 @@ else bad "scripts/e2e.sh passes --actions-token, or its checker call was not fou
 if [ -n "$skill_call" ] && ! grep -q -- '--actions-token' <<<"$skill_call"; then ok "the skill's Run block calls the checker without --actions-token"
 else bad "the skill's Run block passes --actions-token, or its call was not found"; fi
 
+# Dependabot alerts, Dependabot security updates, secret scanning and registry
+# token names (#1118): admin reads, each a WARN at most, left to the skill
+# under --actions-token. The base fixture has all three on and nothing open.
+va="$api/repos/o/r/vulnerability-alerts.json"; da="$api/repos/o/r/dependabot/alerts?state=open&per_page=100.json"
+asf="$api/repos/o/r/automated-security-fixes.json"; ssa="$api/repos/o/r/secret-scanning/alerts?state=open&per_page=100&hide_secret=true.json"
+admin_meta="{$repo_meta,\"permissions\":{\"admin\":true},\"security_and_analysis\":{\"secret_scanning\":{\"status\":\"enabled\"},\"secret_scanning_push_protection\":{\"status\":\"enabled\"}}}"
+sec_reset() { printf '{}' > "$va"; printf '[]' > "$da"; printf '{"enabled":true,"paused":false}' > "$asf"; printf '[]' > "$ssa"; }
+sr() { wall "$@"; sec_reset; }
+sr "Dependabot alerts on with none open is a PASS" "FC-E31 pass"
+sr "Dependabot alerts off, read by a login that administers the repository, is a WARN" "FC-E31 warn" \
+  "rm \"$va\"; printf '%s' '$admin_meta' > \"$api/repos/o/r.json\""
+sr "Dependabot alerts off carries the call that turns them on" "gh api -X PUT repos/o/r/vulnerability-alerts" \
+  "rm \"$va\"; printf '%s' '$admin_meta' > \"$api/repos/o/r.json\""
+sr "a 404 to a login not shown to administer the repository is not read as off" "FC-E31 unknown" "rm \"$va\""
+sr "Dependabot alerts open are a WARN counted by severity" "2 open Dependabot alert(s) (1 critical, 1 high)" \
+  "printf '[{\"state\":\"open\",\"security_advisory\":{\"severity\":\"high\"}},{\"state\":\"open\",\"security_vulnerability\":{\"severity\":\"critical\"}}]' > \"$da\""
+sr "open Dependabot alerts are the row, not on" "FC-E31 warn" \
+  "printf '[{\"state\":\"open\",\"security_advisory\":{\"severity\":\"low\"}}]' > \"$da\""
+sr "open Dependabot alerts not read are a SKIP" "FC-E31 unknown" "printf 'x' > \"$da\""
+sr "Dependabot security updates on is a PASS" "FC-E32 pass"
+sr "Dependabot security updates off is a WARN" "FC-E32 warn" "printf '{\"enabled\":false,\"paused\":false}' > \"$asf\""
+sr "Dependabot security updates off carries the call" "gh api -X PUT repos/o/r/automated-security-fixes" \
+  "printf '{\"enabled\":false,\"paused\":false}' > \"$asf\""
+sr "Dependabot security updates paused is a WARN" "FC-E32 warn" "printf '{\"enabled\":true,\"paused\":true}' > \"$asf\""
+sr "Dependabot security updates not answered is a SKIP" "FC-E32 unknown" "rm \"$asf\""
+sr "secret scanning on with no open alert is a PASS" "FC-E33 pass"
+ss_open='[{"number":3,"state":"open","secret_type":"github_personal_access_token","secret_type_display_name":"GitHub Personal Access Token","secret":"ghp_THISVALUEMUSTNOTPRINT"},{"number":4,"state":"open","secret_type":"slack_api_token","secret":"xoxb-THISVALUEMUSTNOTPRINT"}]'
+mkdir -p "$api/repos/o/r/secret-scanning/alerts/3" "$api/repos/o/r/secret-scanning/alerts/4"
+printf '[{"type":"commit","details":{"path":"config/settings.py","start_line":3}}]' > "$api/repos/o/r/secret-scanning/alerts/3/locations.json"
+printf '[{"type":"issue_comment","details":{"issue_comment_url":"https://api.github.com/x"}}]' > "$api/repos/o/r/secret-scanning/alerts/4/locations.json"
+sr "open secret scanning alerts are the row, not on" "FC-E33 warn" "printf '%s' '$ss_open' > \"$ssa\""
+sr "an open secret scanning alert is named by type and path" "GitHub Personal Access Token in config/settings.py" \
+  "printf '%s' '$ss_open' > \"$ssa\""
+sr "an alert found outside a file is named by where" "slack_api_token in an issue comment" "printf '%s' '$ss_open' > \"$ssa\""
+printf '%s' "$ss_open" > "$ssa"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+out_json="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --format json 2>&1)"
+sec_reset
+if ! grep -q "THISVALUEMUSTNOTPRINT" <<<"$out$out_json"; then ok "an open secret scanning alert's value is printed nowhere, text or JSON"
+else bad "an open secret scanning alert's value was printed"; fi
+sr "open secret scanning alerts not read are a SKIP" "FC-E33 unknown" "printf 'x' > \"$ssa\""
+sr "secret scanning off on a public repository is a WARN" "FC-E33 warn" \
+  "security '{\"secret_scanning\":{\"status\":\"disabled\"},\"secret_scanning_push_protection\":{\"status\":\"disabled\"}}'"
+sr "secret scanning off carries the call that turns it on" '"secret_scanning": {"status": "enabled"}' \
+  "security '{\"secret_scanning\":{\"status\":\"disabled\"},\"secret_scanning_push_protection\":{\"status\":\"disabled\"}}'"
+sr "secret scanning with no status in the settings is a SKIP" "FC-E33 unknown" "security '{\"secret_scanning_push_protection\":{\"status\":\"enabled\"}}'"
+private_off="{$repo_meta,\"private\":true,\"security_and_analysis\":{\"secret_scanning\":{\"status\":\"disabled\"},\"secret_scanning_push_protection\":{\"status\":\"disabled\"}}}"
+sr "secret scanning off on a private repository says the plan, not off" "FC-E33 info" \
+  "printf '%s' '$private_off' > \"$api/repos/o/r.json\""
+out="$(printf '%s' "$private_off" > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+printf '%s' "$good_meta" > "$api/repos/o/r.json"
+if ! is "$out" FC-E33 warn && grep -q "secret scanning is not on this private repository: it needs GitHub Secret Protection" <<<"$out"
+then ok "secret scanning on a private repository without Secret Protection is no WARN, and names the product"
+else bad "secret scanning on a private repository without Secret Protection"; grep -i "secret scanning" <<<"$out" | sed 's/^/        /'; fi
+hidden_meta="{$repo_meta,\"private\":true,\"permissions\":{\"admin\":true}}"
+for m in "$hidden_meta" "{$repo_meta}"; do
+  out="$(printf '%s' "$m" > "$api/repos/o/r.json"; FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+  printf '%s' "$good_meta" > "$api/repos/o/r.json"
+  if ! states "$out" | grep -q '^FC-E33 ' && states "$out" | grep -q '^FC-E09 unknown$'
+  then ok "security settings not answered: push protection's SKIP says so once, and secret scanning adds no second line"
+  else bad "security settings not answered: secret scanning"; grep -iE "secret scanning|push protection" <<<"$out" | sed 's/^/        /'; fi
+done
+# In ci / floor-check: unread, each is an INFO left to the skill, and the FAIL
+# and SKIP counts are the ones a run without the new reads prints.
+ci_run() { FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" --actions-token 2>&1; }
+security; rm -f "$va" "$asf"
+out="$(ci_run)"
+sec_reset; printf '%s' "$good_meta" > "$api/repos/o/r.json"
+if is "$out" FC-E31 review && is "$out" FC-E32 review && is "$out" FC-E09 review && ! states "$out" | grep -q '^FC-E33 '
+then ok "--actions-token: Dependabot alerts and security updates unread are left to /plinth:floor-check; the security settings once, on push protection's line"
+else bad "--actions-token: the settings unread"; grep -iE "dependabot|secret scanning|push protection" <<<"$out" | sed 's/^/        /'; fi
+printf 'x' > "$ssa"; out_ss="$(ci_run)"; sec_reset
+if is "$out_ss" FC-E33 review; then ok "--actions-token: secret scanning on with its open alerts unread is left to /plinth:floor-check"
+else bad "--actions-token: open alerts unread"; grep -i "secret scanning" <<<"$out_ss" | sed 's/^/        /'; fi
+# Their only lines there are those INFOs: no FAIL, WARN or SKIP of theirs, so
+# the summary's failed and not-verified counts are as before (the golden test
+# compares every recorded CI-form run line for line).
+if ! states "$out" | grep -qE '^FC-E3[1-4] (fail|warn|unknown)$'; then ok "--actions-token: unread, the new reads print no FAIL, WARN or SKIP"
+else bad "--actions-token: a new read printed a FAIL, WARN or SKIP"; states "$out" | grep '^FC-E3[1-4]' | sed 's/^/        /'; fi
+# Registry token names beside OIDC (experimental): only when release.yml
+# publishes through OIDC; names only.
+oidc_rel='name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions: {}
+jobs:
+  publish:
+    permissions:
+      id-token: write
+    steps:
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+'
+sec_api="$api/repos/o/r/actions/secrets?per_page=100.json"; env_api="$api/repos/o/r/environments?per_page=100.json"
+mkdir -p "$api/repos/o/r/environments/pypi"
+env_sec="$api/repos/o/r/environments/pypi/secrets?per_page=100.json"
+cp "$rel" "$work/release.yml.keep2"
+tok() { # <description> <expected> <repository secrets json> [environments json] [pypi environment secrets json] [flags]
+  printf '%s' "$oidc_rel" > "$rel"; printf '%s' "$3" > "$sec_api"
+  local no_envs='{"environments":[]}' no_secrets='{"secrets":[]}'
+  printf '%s' "${4:-$no_envs}" > "$env_api"; printf '%s' "${5:-$no_secrets}" > "$env_sec"
+  local out; out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" ${6:-} 2>&1)"
+  if sees "$out" "$2" -F -- "$2"; then ok "$1"; else bad "$1"; grep -iE "secret|registry" <<<"$out" | sed 's/^/        /'; fi
+  cp "$work/release.yml.keep2" "$rel"; rm -f "$sec_api" "$env_api" "$env_sec"
+}
+tok "OIDC publishing with no token-like secret is a PASS" "FC-E34 pass" '{"secrets":[{"name":"SLACK_WEBHOOK"}]}'
+tok "OIDC publishing with a PyPI token secret is a WARN" "FC-E34 warn" '{"secrets":[{"name":"PYPI_API_TOKEN"}]}'
+tok "the WARN names the secret and where" "PYPI_API_TOKEN (repository), TWINE_PASSWORD (environment pypi)" \
+  '{"secrets":[{"name":"PYPI_API_TOKEN"}]}' '{"environments":[{"name":"pypi"}]}' '{"secrets":[{"name":"TWINE_PASSWORD"}]}'
+tok "each named secret has its delete line" "gh secret delete TWINE_PASSWORD --repo o/r --env pypi" \
+  '{"secrets":[]}' '{"environments":[{"name":"pypi"}]}' '{"secrets":[{"name":"TWINE_PASSWORD"}]}'
+tok "a token for another registry than the one OIDC publishes to is not named" "FC-E34 pass" \
+  '{"secrets":[{"name":"DOCKER_REGISTRY_TOKEN"},{"name":"NPM_TOKEN"}]}'
+tok "a list longer than the page read is a SKIP, not a pass" "FC-E34 unknown" \
+  '{"total_count":120,"secrets":[{"name":"SLACK_WEBHOOK"}]}'
+tok "more environments than the page read is a SKIP, not a pass" "FC-E34 unknown" \
+  '{"secrets":[]}' '{"total_count":101,"environments":[{"name":"pypi"}]}'
+tok "secret names not listed are a SKIP naming the permission" "FC-E34 unknown" 'x'
+tok "an environment's secrets not listed are a SKIP" "FC-E34 unknown" '{"secrets":[]}' '{"environments":[{"name":"pypi"}]}' 'x'
+tok "--actions-token: secret names not listed are left to the skill" "FC-E34 review" 'x' "" "" --actions-token
+printf '%s' '{"secrets":[{"name":"PYPI_API_TOKEN"}]}' > "$sec_api"
+out="$(FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$good" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+rm -f "$sec_api"
+if ! grep -q "registry token" <<<"$out"; then ok "a release.yml that does not publish through OIDC: no registry token line"
+else bad "registry token line without OIDC"; fi
+
 # A private repository's wall is read against what its licences allow (#351,
 # decided in #320): the code_scanning rule is expected only where GitHub Code
 # Security is enabled on the repository, push protection only where GitHub
@@ -1184,6 +1319,32 @@ else bad "a missing label produced a FAIL"; fi
 # that includes a passed item is the defect in the other direction.
 if grep -qx -- "-- 0 failed, 0 not verified" <<<"$out" && ! grep -q '^  SKIP ' <<<"$out"; then ok "a run whose every read was answered counts 0 not verified, and says so"
 else bad "a fully read run still counts something as not verified"; printf '%s\n' "$out" | grep -E 'SKIP|failed' | sed 's/^/        /'; fi
+# GitHub answers Dependabot alerts on with a 204 and no body: through gh, an
+# empty answer is read as on, not as an error (#1118).
+: > "$api/repos/o/r/vulnerability-alerts.json"
+out_204="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+printf '{}' > "$api/repos/o/r/vulnerability-alerts.json"
+if is "$out_204" FC-E31 pass; then ok "through gh, a 204 with no body reads Dependabot alerts as on"
+else bad "through gh, a 204 with no body"; grep -i dependabot <<<"$out_204" | sed 's/^/        /'; fi
+# `gh api --paginate` prints one JSON array per page, one after another
+# (#1247 review): every page is read, not taken for an error.
+python3 - "$api/repos/o/r" <<'PYEOF'
+import json, sys
+d = sys.argv[1]
+page = lambda n, sev: json.dumps([{"state": "open", "security_advisory": {"severity": sev}}] * n)
+open(f"{d}/dependabot/alerts.json", "w").write(page(100, "high") + "\n" + page(1, "critical") + "\n")
+alerts = [{"number": 7, "state": "open", "secret_type": "slack_api_token"}]
+open(f"{d}/secret-scanning/alerts.json", "w").write(json.dumps(alerts * 100) + json.dumps(alerts))
+PYEOF
+mkdir -p "$api/repos/o/r/secret-scanning/alerts/7"; printf '[{"type":"commit","details":{"path":"a.py"}}]' > "$api/repos/o/r/secret-scanning/alerts/7/locations.json"
+out_pages="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+printf '[]' > "$api/repos/o/r/dependabot/alerts.json"; printf '[]' > "$api/repos/o/r/secret-scanning/alerts.json"
+if is "$out_pages" FC-E31 warn && grep -qF "101 open Dependabot alert(s) (1 critical, 100 high)" <<<"$out_pages"
+then ok "through gh, two pages of Dependabot alerts are both counted"
+else bad "through gh, two pages of Dependabot alerts"; grep -i dependabot <<<"$out_pages" | sed 's/^/        /'; fi
+if is "$out_pages" FC-E33 warn && grep -qF "101 open secret scanning alert(s)" <<<"$out_pages"
+then ok "through gh, two pages of secret scanning alerts are both counted"
+else bad "through gh, two pages of secret scanning alerts"; grep -i "secret scanning" <<<"$out_pages" | sed 's/^/        /'; fi
 if grep -q -- "--paginate" "$work/gh-calls.log"; then ok "the label read is paginated (30 per page would report labels missing that are there)"
 else bad "the label read is not paginated"; sed 's/^/        /' "$work/gh-calls.log"; fi
 # The exit code is the property that keeps consumers merging; lock it.
@@ -1290,11 +1451,28 @@ plugins_run
 for want in 'INFO  plugins from another marketplace, outside what plinth compares: codex@openai-codex' \
             'SKIP  last30days@plinth (project in /p) not checked: its entry pins no full commit' \
             'SKIP  frontend-design@plinth (user) not checked: its install records no full commit' \
-            'SKIP  gone@plinth (user) not checked: the plinth marketplace has no entry for it'; do
+            'WARN  gone@plinth (user) is not in the plinth marketplace; Claude Code reports it "not found in marketplace" until it is uninstalled. fix: claude plugin uninstall gone@plinth --scope user'; do
   grep -qF -- "$want" <<<"$out" || { bad "--plugins: expected '$want'"; grep -E 'plugin|@' <<<"$out" | sed 's/^/        /'; }
 done
 grep -qE 'at the plinth.*(codex|last30days|frontend-design|gone)' <<<"$out" && bad "--plugins: a plugin not compared was reported at the pin" \
-  || ok "--plugins: another marketplace, no pinned commit, no installed commit and no entry are not checked, never at the pin"
+  || ok "--plugins: another marketplace, no pinned commit, no installed commit are not checked and an entry the marketplace no longer has is FC-G12, never at the pin"
+# An entry the marketplace no longer lists (#1229): a retired one names the
+# release it left in and its replacement, from the marketplace copy's Retired
+# entries table, and its uninstall command with the install's scope; one not in
+# the table is named all the same; another marketplace's plugin has no line.
+plugins_fixture "$pin" ',"taste-skill@plinth":[{"scope":"user","gitCommitSha":"'"$pin"'"},{"scope":"project","projectPath":"/w/my app","gitCommitSha":"'"$pin"'"}],"taste-skill@other":[{"scope":"user","gitCommitSha":"'"$pin"'"}],"gone@plinth":[{"scope":"local","gitCommitSha":"'"$pin"'"}]'
+mkdir -p "$pm/docs/reference"
+printf '## Retired entries\n\n| Name | Kind | Left in | Replaced by | Issue | An installed user runs |\n| --- | --- | --- | --- | --- | --- |\n| `taste-skill` | entry removed | v2.46.0 | `frontend-design` | #1082 | `claude plugin uninstall taste-skill@plinth` |\n' > "$pm/docs/reference/dependency-entries.md"
+plugins_run
+for want in 'WARN  taste-skill@plinth (user) left the plinth marketplace in v2.46.0, replaced by frontend-design; Claude Code reports it "not found in marketplace" until it is uninstalled. fix: claude plugin uninstall taste-skill@plinth --scope user' \
+            "WARN  taste-skill@plinth (project in /w/my app) left the plinth marketplace in v2.46.0, replaced by frontend-design; Claude Code reports it \"not found in marketplace\" until it is uninstalled. fix: cd '/w/my app' && claude plugin uninstall taste-skill@plinth --scope project" \
+            'WARN  gone@plinth (local) is not in the plinth marketplace; Claude Code reports it "not found in marketplace" until it is uninstalled. fix: claude plugin uninstall gone@plinth --scope local, run from the project folder it was installed for'; do
+  grep -qF -- "$want" <<<"$out" || { bad "--plugins: expected '$want'"; grep -E '@' <<<"$out" | sed 's/^/        /'; }
+done
+if [ "$rc" = 0 ] && is "$out" FC-G12 warn && ! grep -qE '(WARN|SKIP).*taste-skill@other' <<<"$out" \
+   && grep -qF 'outside what plinth compares: taste-skill@other' <<<"$out" && ! grep -qE 'SKIP .*(taste-skill|gone)@plinth' <<<"$out"
+then ok "--plugins: a retired entry names its release, its replacement and its scoped uninstall; one not in the table is named too; another marketplace's has no FC-G12 line"
+else bad "--plugins retired"; grep -E '@' <<<"$out" | sed 's/^/        /'; fi
 # Another marketplace's plugin is outside what floor-check compares, not a read
 # that failed (#1002): an INFO, out of the not-verified count.
 plugins_fixture "$pin"; plugins_run; without="$(grep -- '^-- ' <<<"$out")"
@@ -1836,6 +2014,51 @@ printf 'services: []\n' > "$dash/render.yaml"; git -C "$dash" add -A
 out="$(python3 "$checker" --root "$dash" --no-network 2>&1)"
 if is "$out" FC-C12 pass && grep -q -- '-- 0 failed' <<<"$out"; then ok "a dashboard on Render with render.yaml passes, and no image is asked"
 else bad "a dashboard on Render with render.yaml"; printf '%s\n' "$out" | grep -E 'FAIL|render' | sed 's/^/        /'; fi
+# A cli that runs on GitHub on a schedule (#1070, coolbress/plinth-template#363)
+# is a cli: its answer, its workflow and its data/ folder change nothing in
+# the report, which is the same, line for line, as the cli's without them,
+# but for the counts of files read; the new workflow's actions are read as
+# pinned.
+sched="$work/sched"; rm -rf "$sched"; cp -R "$web.empty" "$sched"
+printf 'scheduled_run: true\n' >> "$sched/.copier-answers.yml"
+mkdir -p "$sched/data"; printf '*\n!.gitignore\n!README.md\n' > "$sched/data/.gitignore"; printf '# Data\n' > "$sched/data/README.md"
+cat > "$sched/.github/workflows/schedule.yml" <<'YAML'
+name: Scheduled run
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: scheduled-run
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: uv sync --locked --no-dev
+      - run: |
+          mkdir -p data/processed
+          uv run --no-sync python -m app > data/processed/result.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: results
+          path: data/processed/
+          if-no-files-found: error
+YAML
+git -C "$sched" add -A
+plain_out="$(python3 "$checker" --root "$web.empty" --no-network 2>&1)"; sched_out="$(python3 "$checker" --root "$sched" --no-network 2>&1)"
+uncount() { sed -E 's/[0-9]+/N/g'; }
+if [ "$(printf '%s\n' "${sched_out//$sched/<root>}" | uncount)" = "$(printf '%s\n' "${plain_out//$web.empty/<root>}" | uncount)" ] \
+   && grep -q -- '-- 0 failed' <<<"$sched_out" && grep -qF 'PASS  every action in 3 workflow files is pinned to a commit (3 uses)' <<<"$sched_out"
+then ok "a cli with the scheduled run gets the same report as one without, its workflow's actions read as pinned"
+else bad "a cli with the scheduled run is reported differently"; diff <(printf '%s\n' "${plain_out//$web.empty/<root>}") <(printf '%s\n' "${sched_out//$sched/<root>}") | sed 's/^/        /'; fi
 # What render.yaml says (#811), read when the file is there: each web
 # service's healthCheckPath and autoDeployTrigger: checksPass, a database plan
 # other than free, and secret-named envVars set without a literal value. Each
@@ -4030,6 +4253,264 @@ out="$(FLOOR_CHECK_API_DIR="$same_skew" python3 "$checker" --root "$glgood" --ho
 if [ -n "$gl_pin" ] && is "$out" FC-F02 warn
 then ok "GitLab: the include's pin is the one compared"
 else bad "skew, GitLab pin '$gl_pin'"; printf '%s\n' "$out" | grep -E 'plugin|plinth pin' | sed 's/^/        /'; fi
+
+# --- The adoption record (#1112): .plinth-adoption.yml at the root, written by
+# the adopt pull request. A run with no file is byte for byte the golden one
+# (tests/floor-check-golden.sh); the cases below each write one.
+adopt="$work/adopt"
+mkdir -p "$work/adopt-records"; n_records=0
+adoption() { # <file body, or "" for none>: a copy of the good fixture with that record, kept for the schema check below
+  rm -rf "$adopt"; cp -R "$good" "$adopt"; [ -z "$1" ] && return
+  printf '%s\n' "$1" > "$adopt/.plinth-adoption.yml"
+  n_records=$((n_records + 1)); cp "$adopt/.plinth-adoption.yml" "$work/adopt-records/$n_records.yml"
+}
+record_head='schema: 1
+plinth: v2.45.0
+origin: none
+archetype: backend
+started: 2026-11-01
+step: ci
+wall_due: 2026-11-20'
+a_run() { # <TODAY> [checker args...]: sets out and rc for the copy
+  local d="$1"; shift
+  out="$(FLOOR_CHECK_TODAY="$d" python3 "$checker" --root "$adopt" --no-network "$@" 2>&1)"; rc=$?
+}
+a_wall() { # <TODAY> [checker args...]: the copy against the wall fixture with no rules on main
+  local d="$1"; shift
+  printf '[]' > "$api/repos/o/r/rules/branches/main.json"
+  out="$(FLOOR_CHECK_TODAY="$d" FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$adopt" --no-network --repo o/r \
+    --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" "$@" 2>&1)"; rc=$?
+  printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+}
+expect() { # <description> <condition>
+  if eval "$2"; then ok "$1"; else bad "$1"; printf '%s\n' "$out" | grep -E 'FAIL|WARN|INFO|SKIP|failed' | sed 's/^/        /'; fi
+}
+unpin="sed -i.bak 's/@sha256:[0-9a-f]*//' \"\$adopt/Dockerfile\""   # FC-C20 alone fails
+
+adoption "$record_head"
+a_run 2026-11-10
+expect "a valid record is read and said once, with its step and what it keeps" \
+  'is "$out" FC-F09 info && [ "$rc" = 0 ] && grep -qF ".plinth-adoption.yml read: step ci, 0 kept by choice; the wall due by 2026-11-20" <<<"$out"'
+
+adoption "$record_head
+kept:
+  - id: FC-C20
+    path: Dockerfile
+    reason: deliberately-different
+    why: \"the base image is pinned by the registry we mirror\""
+eval "$unpin"
+a_run 2026-11-10
+expect "a kept FAIL prints as kept by choice, is not counted, and the run exits 0" \
+  'is "$out" FC-C20 kept && grep -qE "^  INFO  kept by choice \(deliberately-different\): " <<<"$out" && grep -q -- "^-- 0 failed" <<<"$out" && [ "$rc" = 0 ]'
+a_run 2026-11-10 --actions-token --verdicts "$work/adopt.verdicts"
+expect "in the CI form the kept finding leaves the verdicts file a pass" \
+  '[ "$rc" = 0 ] && head -1 "$work/adopt.verdicts" | grep -q "^pass: " && ! grep -q "base image" "$work/adopt.verdicts"'
+out="$(FLOOR_CHECK_TODAY=2026-11-10 python3 "$checker" --root "$adopt" --no-network --format json 2>&1)"; rc=$?
+expect "--format json: the kept result is an info carrying what kept it and what it was" \
+  '[ "$rc" = 0 ] && jq -e '"'"'[.results[] | select(.id == "FC-C20")][0] | .state == "info" and .kept.reason == "deliberately-different" and .kept.was == "fail" and .kept.path == "Dockerfile"'"'"' <<<"$out" >/dev/null && jq -e '"'"'[.results[] | select(.id != "FC-C20") | .kept] | all(. == null)'"'"' <<<"$out" >/dev/null'
+
+adoption "$record_head
+kept:
+  - id: FC-C20
+    path: Dockerfile
+    reason: later
+    why: rewrite after the release
+    until: 2026-11-05"
+eval "$unpin"
+a_run 2026-11-10
+expect "a kept entry whose until has passed FAILs, and the finding is counted again" \
+  'is "$out" FC-F09 fail && is "$out" FC-C20 fail && grep -qF "kept FC-C20 until 2026-11-05, which has passed" <<<"$out" && [ "$rc" = 1 ]'
+a_run 2026-11-05
+expect "on its until date the entry still applies" 'is "$out" FC-C20 kept && [ "$rc" = 0 ]'
+
+adoption "$record_head
+kept:
+  - id: FC-C20
+    path: Dockerfile
+    reason: later
+    why: rewrite after the release"
+eval "$unpin"
+a_run 2026-11-10
+expect "reason later with no until: the file is invalid, a FAIL naming it, and nothing in it applies" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml is not valid: kept entry 1: reason later with no until" <<<"$out" && is "$out" FC-C20 fail'
+
+adoption "$record_head
+kept:
+  - id: FC-A28
+    path: .env
+    reason: deliberately-different
+    why: it holds no secret"
+a_run 2026-11-10
+expect "an id marked not keepable is not applied, and a FAIL says it cannot be kept and why" \
+  'is "$out" FC-F09 fail && grep -qF "keeps FC-A28, which cannot be kept (a tracked secret reaches everyone" <<<"$out" && [ "$rc" = 1 ]'
+
+adoption "$record_head
+kept:
+  - id: FC-Z99
+    path: x
+    reason: not-applicable
+    why: x"
+a_run 2026-11-10
+expect "a kept id that names no check is a FAIL, never a silent pass" \
+  'is "$out" FC-F09 fail && grep -qF "keeps FC-Z99, which names no check" <<<"$out"'
+
+# A comment after a quoted value is taken off outside the quotes; a `#`
+# inside them stays (#1236 review).
+adoption 'schema: 1
+plinth: "v2.45.0"   # the release that wrote it
+origin: none
+archetype: backend
+started: 2026-11-01
+step: ci
+wall_due: "2026-11-20" # finish the wall
+kept:
+  - id: FC-C20
+    path: Dockerfile
+    reason: deliberately-different
+    why: "pinned by the mirror, see #12" # the decision'
+eval "$unpin"
+a_run 2026-11-10
+expect "quoted values with a comment after them are read, and a # inside the quotes stays" \
+  'is "$out" FC-F09 info && is "$out" FC-C20 kept && grep -qF "the wall due by 2026-11-20" <<<"$out" && [ "$rc" = 0 ]'
+out="$(FLOOR_CHECK_TODAY=2026-11-10 python3 "$checker" --root "$adopt" --no-network --format json 2>&1)"
+expect "the # inside the quotes is in the kept reason given, not taken for a comment" \
+  'jq -e '"'"'[.results[] | select(.id == "FC-C20")][0].kept.why == "pinned by the mirror, see #12"'"'"' <<<"$out" >/dev/null'
+# The kept list's header with a comment after it (#1236 review, round 2):
+# `kept: # …` opens the list, `kept: [] # …` is the empty one.
+adoption "$record_head
+kept: # what the adopt pull request left as it was
+  - id: FC-C20 # the base image
+    path: Dockerfile
+    reason: deliberately-different
+    why: pinned by the mirror"
+eval "$unpin"
+a_run 2026-11-10
+expect "kept: with a comment after it opens the list, and its entry applies" \
+  'is "$out" FC-F09 info && is "$out" FC-C20 kept && [ "$rc" = 0 ]'
+adoption "$record_head
+kept: [] # nothing kept"
+a_run 2026-11-10
+expect "kept: [] with a comment after it is the empty list" \
+  'is "$out" FC-F09 info && grep -qF "0 kept by choice" <<<"$out"'
+adoption "$(sed 's/^wall_due: .*$/wall_due: # later/' <<<"$record_head")"
+a_run 2026-11-10
+expect "a value that is only a comment is empty, not the comment's text" \
+  'is "$out" FC-F09 fail && grep -qF "wall_due (empty) is not a date" <<<"$out" && ! grep -qF "# later" <<<"$out"'
+adoption "$(sed 's/^step: ci$/step: "ci" then more/' <<<"$record_head")"
+a_run 2026-11-10
+expect "a quoted value followed by more than a comment is a FAIL naming the line, not a value with its quotes" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml is not valid: line 6: a quoted value with more than a comment after it" <<<"$out"'
+
+adoption "$record_head
+kept: [FC-C20]
+step: wall"
+a_run 2026-11-10
+expect "a field given twice is a FAIL naming the file and the line" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml is not valid: line 9: step given twice" <<<"$out"'
+adoption "$record_head
+  stray: indented"
+a_run 2026-11-10
+expect "a line in a form this checker does not read is a FAIL naming the line" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml is not valid: line 8 is not in the form this checker reads" <<<"$out"'
+adoption "$record_head
+colour: blue"
+a_run 2026-11-10
+expect "an unknown field makes the file invalid" 'is "$out" FC-F09 fail && grep -qF "unknown field colour" <<<"$out"'
+adoption ""; mkdir "$adopt/.plinth-adoption.yml"
+a_run 2026-11-10
+expect "a record that cannot be read is a FAIL naming it, not a silent pass" \
+  'is "$out" FC-F09 fail && grep -qF ".plinth-adoption.yml cannot be read (" <<<"$out" && [ "$rc" = 1 ]'
+
+# The wall, with no rules on main: later until wall_due, the FAIL after it.
+adoption "$record_head"
+a_wall 2026-11-20
+expect "no ruleset, on wall_due: the wall prints as later and is not counted" \
+  'is "$out" FC-E12 info && grep -qF "the wall: later, after the first green run on main (until 2026-11-20" <<<"$out" && ! is "$out" FC-E12 fail'
+a_wall 2026-11-21
+expect "no ruleset, the day after wall_due: the wall is down again, a FAIL" 'is "$out" FC-E12 fail && ! is "$out" FC-E12 info'
+a_wall 2026-11-20 --actions-token --verdicts "$work/adopt.verdicts"
+expect "in the CI form, before wall_due, the wall is no fail line in the verdicts file" \
+  '! grep -q "the wall is down" "$work/adopt.verdicts" && is "$out" FC-E12 info'
+adoption "${record_head/step: ci/step: done}"
+a_wall 2026-11-10
+expect "at step done wall_due holds nothing off: no rules is a FAIL" 'is "$out" FC-E12 fail'
+adoption "${record_head/wall_due: 2026-11-20/wall_due: 2027-01-15}"
+a_wall 2026-12-05
+expect "wall_due more than 30 days after started is read as 30 days: said, and the wall FAILs after it" \
+  'is "$out" FC-F09 info && grep -qF "wall_due 2027-01-15 is more than 30 days after started 2026-11-01; read as 2026-12-01" <<<"$out" && is "$out" FC-E12 fail'
+a_wall 2026-12-01
+expect "on the 30th day the capped wall_due still holds the wall off" 'is "$out" FC-E12 info'
+adoption "${record_head/started: 2026-11-01/started: 2099-01-01}"
+a_wall 2026-11-10
+expect "a started after today makes the record invalid, so the 30 days cannot be moved forward: the wall FAILs" \
+  'is "$out" FC-F09 fail && grep -qF "started 2099-01-01 is after today (2026-11-10)" <<<"$out" && is "$out" FC-E12 fail'
+adoption "$record_head"
+out="$(FLOOR_CHECK_TODAY=2026-11-10 FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$adopt" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+expect "with a ruleset in place the record changes no wall line: the intact wall passes as without it" \
+  'grep -q -- "^-- 0 failed" <<<"$out" && ! grep -q "the wall: later" <<<"$out"'
+printf '[{"type":"deletion","ruleset_source_type":"Repository","ruleset_id":1}]' > "$api/repos/o/r/rules/branches/main.json"
+out="$(FLOOR_CHECK_TODAY=2026-11-10 FLOOR_CHECK_API_DIR="$api" python3 "$checker" --root "$adopt" --no-network --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"; rc=$?
+printf '%s' "$good_rules" > "$api/repos/o/r/rules/branches/main.json"
+expect "a ruleset with rules missing, before wall_due: the missing rules still FAIL" \
+  'is "$out" FC-E15 fail && [ "$rc" = 1 ]'
+
+# The schema: every record above, printed as the checker reads it, against
+# scripts/plinth-adoption.schema.json. The valid ones pass it; the invalid
+# ones the checker refuses fail it too.
+schema_ok() { # <description> <0 valid | 1 invalid> <file body>
+  adoption "$3"
+  local doc; doc="$(python3 "$checker" --root "$adopt" --print-adoption 2>/dev/null)" || { bad "$1 (not printed)"; return; }
+  printf '%s\n' "$doc" > "$work/adopt.json"
+  python3 "$root/tests/lib/json-schema-check.py" "$root/scripts/plinth-adoption.schema.json" "$work/adopt.json" > "$work/adopt.schema" 2>&1
+  local got=$?
+  if [ "$got" = "$2" ]; then ok "$1"; else bad "$1 (schema check exit $got)"; sed 's/^/        /' "$work/adopt.schema"; fi
+}
+schema_ok "schema: the plain record is valid" 0 "$record_head"
+schema_ok "schema: a record with a kept entry is valid" 0 "$record_head
+kept:
+  - id: FC-A06
+    path: CONTRIBUTING.md
+    reason: later
+    why: rewrite after the release
+    until: 2026-11-05"
+schema_ok "schema: later with no until is invalid, as the checker says" 1 "$record_head
+kept:
+  - id: FC-A06
+    path: CONTRIBUTING.md
+    reason: later
+    why: rewrite after the release"
+schema_ok "schema: an unknown field is invalid, as the checker says" 1 "$record_head
+colour: blue"
+schema_ok "schema: a step outside files, ci, wall and done is invalid" 1 "${record_head/step: ci/step: halfway}"
+schema_ok "schema: an origin other than none or other-template:<source> is invalid" 1 "${record_head/origin: none/origin: somewhere}"
+# Every record the cases above wrote, read as the checker reads it: where the
+# checker finds no schema error, the schema finds none; where it finds one, so
+# does the schema. A record not in the form the checker reads has no document
+# to give the schema, and is counted apart. The checker is loaded as a module,
+# so these reads are no checker runs for the golden file.
+agree="$(python3 - "$checker" "$root/tests/lib/json-schema-check.py" "$root/scripts/plinth-adoption.schema.json" "$work/adopt-records" <<'PY'
+import importlib.util, json, subprocess, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("floor_check", sys.argv[1])
+fc = importlib.util.module_from_spec(spec); spec.loader.exec_module(fc)
+both = form = 0
+for f in sorted(Path(sys.argv[4]).glob("*.yml"), key=lambda p: int(p.stem)):
+    try:
+        d = fc.read_adoption(f.read_text(encoding="utf-8"))
+    except ValueError:
+        form += 1
+        continue
+    doc = f.with_suffix(".json"); doc.write_text(json.dumps(fc.adoption_json(d)), encoding="utf-8")
+    schema_ok = subprocess.run([sys.executable, sys.argv[2], sys.argv[3], str(doc)], capture_output=True).returncode == 0
+    if schema_ok != (not fc.adoption_errors(d)):
+        print(f"disagree {f.name}: checker {fc.adoption_errors(d) or 'valid'}, schema {'valid' if schema_ok else 'invalid'}")
+    both += 1
+print(f"read {both} form {form}")
+PY
+)"
+if grep -qE '^read [1-9][0-9]+ form [1-9]' <<<"$agree" && ! grep -q '^disagree' <<<"$agree"
+then ok "every record the cases wrote: the checker and the schema agree on each ($(tail -1 <<<"$agree"))"
+else bad "the checker and the schema disagree on a record the cases wrote"; sed 's/^/        /' <<<"$agree"; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]

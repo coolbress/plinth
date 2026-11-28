@@ -7,7 +7,7 @@
 # that names a tool #711 left out, fails (the must-not-pass cases first).
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-script="$root/scripts/guide-state.sh"
+real="$root/scripts/guide-state.sh"
 names="$root/tests/lib/guide-names.sh"
 arsenal="$root/skills/arsenal/SKILL.md"
 work="$(mktemp -d)" && work="$(cd "$work" && pwd -P)" || { echo "guide-cases: could not make a temp folder" >&2; exit 1; }; trap 'rm -rf "$work"' EXIT
@@ -28,6 +28,8 @@ cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 # MOCK_CALLS_LOG gets one line per call, to count the calls of a run (#1145).
 [ -z "${MOCK_CALLS_LOG:-}" ] || echo "$1 $2" >> "$MOCK_CALLS_LOG"
+# GUIDE_RUN_LOG: the same, for the count every run is held to (#1180).
+[ -z "${GUIDE_RUN_LOG:-}" ] || echo "$1 $2" >> "$GUIDE_RUN_LOG"
 # MOCK_DIR holds open.json, merged.json, issues.json and all.json, and comments.json
 # when a case reads a pull request's comments; MOCK_GH_FAIL makes every call
 # fail as an unauthenticated gh does. A list is cut at --limit.
@@ -77,6 +79,10 @@ fi
 # one unless it says so, whatever day the tests run.
 if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *mergedPulls* ]]; then
   [ -n "${MOCK_HISTORY_FAIL:-}" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
+  # A partial error, as gh 2.x answers one (measured for #1180): the data and
+  # the errors to standard output, unfiltered, a message, exit 1.
+  [ -n "${MOCK_HISTORY_PARTIAL:-}" ] && { echo '{"data":{"lookBack":{"nodes":[]},"repository":null},"errors":[{"type":"NOT_FOUND","path":["repository"],"message":"Could not resolve to a Repository with the name '"'"'o/r'"'"'."}]}'
+    echo "gh: Could not resolve to a Repository with the name 'o/r'." >&2; exit 1; }
   set -o pipefail
   if [ -f "$MOCK_DIR/history.json" ]; then cat "$MOCK_DIR/history.json"
   else echo '{"data":{"repository":{"createdAt":"2026-10-01T00:00:00Z","pushedAt":"2026-10-28T00:00:00Z","mergedPulls":{"totalCount":0},"closedIssues":{"totalCount":0},"records":{"nodes":[]},"releases":{"totalCount":0,"nodes":[]},"tags":{"totalCount":0,"nodes":[]},"firstMerges":{"nodes":[]}}}}'
@@ -102,6 +108,8 @@ if [ "$1" = api ] && [ "$2" = graphql ] && [[ "$*" == *issueOrPullRequest* ]]; t
 fi
 if [ "$1" = api ] && [ "$2" = graphql ]; then
   [ -z "${MOCK_DEPS_LOG:-}" ] || echo deps >> "$MOCK_DEPS_LOG"
+  [ -n "${MOCK_DEPS_PARTIAL:-}" ] && { echo '{"data":{"repository":{"issues":{"nodes":[{"number":3,"blockedBy":null,"blocking":null}]}}},"errors":[{"type":"FORBIDDEN","path":["repository","issues","nodes",0,"blockedBy"],"message":"Resource not accessible by integration"}]}'
+    echo "gh: Resource not accessible by integration" >&2; exit 1; }
   [ -n "${MOCK_DEPS_FAIL:-}" ] && { echo "GraphQL: Field 'blockedBy' doesn't exist on type 'Issue' (repository.issues.nodes.0.blockedBy)" >&2; exit 1; }
   set -o pipefail
   if [ -f "$MOCK_DIR/deps.json" ]; then cat "$MOCK_DIR/deps.json"; else echo '{"data":{"repository":{"issues":{"nodes":[]}}}}'; fi | jq -r "$jqf"
@@ -181,6 +189,22 @@ jq --argjson n "$limit" --arg f "$fields" --arg l "$label" 'map(select($l == "" 
   | if $f == "" then . else map(with_entries(select(.key as $k | $f | split(",") | index($k)))) end' "$MOCK_DIR/$f" | jq -r "$jqf"
 MOCK
 chmod +x "$work/bin/gh"
+# The gh calls of one run (#1180): every case runs the script through this,
+# which counts the calls its run made and writes the count, with the case's
+# fixture and arguments, to $runs; the check near the end holds each to $cap.
+runs="$work/runs"; : > "$runs"
+script="$work/bin/guide-state"
+cat > "$script" <<WRAP
+#!/usr/bin/env bash
+log="\$(mktemp)"
+out="\$(mktemp)"
+GUIDE_RUN_LOG="\$log" "$real" "\$@" > "\$out" 2> "\$out.err"; rc=\$?
+cat "\$out"; cat "\$out.err" >&2; cat "\$out.err" >> "\$out"; rm -f "\$out.err"
+n="\$(grep -c . "$runs")"; [ -z "\${GUIDE_RUNS_OUT:-}" ] || cp "\$out" "$work/out.\$n"
+printf '%s\\t%s\\t%s\\n' "\$(grep -c . "\$log")" "\${MOCK_DIR:-none}" "\$*" >> "$runs"; rm -f "\$log" "\$out"
+exit \$rc
+WRAP
+chmod +x "$script"
 export PATH="$work/bin:$PATH"
 # floor-check's reads (#904) come from fixtures here, never the network: an
 # empty folder is a 404 for each, which it says as not read.
@@ -980,6 +1004,13 @@ grep -qxF "ticket to take: #4, not blocked; the lowest number of the 2 left; Git
   grep -qxF 'command: /implement #4' <<<"$out" && grep -qxF 'skipped: 1 of 3 ready-for-agent; blocked by an open issue: #3 on #2' <<<"$out" &&
   ok "the dependencies not read: the bodies choose, the line says not read, the rest of the guide still read" ||
   { bad "the dependencies not read"; grep -E 'ticket|skipped|command|where' <<<"$out" | sed 's/^/        /'; }
+# A partial GraphQL error (#1180): the read started beside the others still
+# says it was not read, with gh's message, and nothing else moves.
+out="$(MOCK_DEPS_PARTIAL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+grep -qxF "ticket to take: #4, not blocked; the lowest number of the 2 left; GitHub's issue dependencies: not read (gh: Resource not accessible by integration)" <<<"$out" &&
+  grep -qxF 'command: /implement #4' <<<"$out" &&
+  ok "the dependencies with a partial GraphQL error: not read, gh's message, the bodies choose" ||
+  { bad "the dependencies with a partial error"; grep -E 'ticket|command' <<<"$out" | sed 's/^/        /'; }
 log="$work/deps.log"; : > "$log"
 MOCK_DEPS_LOG="$log" MOCK_DIR="$d" "$script" "$d" >/dev/null 2>&1
 [ "$(grep -c . "$log")" = 1 ] && ok "three ready tickets: the dependencies are one call" || bad "dependencies read $(grep -c . "$log") times for three ready tickets"
@@ -1156,7 +1187,7 @@ grep -qx 'where: not read' <<<"$out" && ! grep -q '^command:' <<<"$out" &&
 
 # A table that lost a row the guide looks for stops with exit 1, never guesses.
 mkdir -p "$work/plugin/skills/arsenal" "$work/plugin/skills/guide" "$work/plugin/scripts/lib"
-cp "$script" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
+cp "$real" "$root/scripts/new-project.sh" "$work/plugin/scripts/"
 cp "$root/scripts/lib/admin-reach.sh" "$root/scripts/lib/stage-table.sh" "$work/plugin/scripts/lib/"
 cp "$root/skills/guide/steps.md" "$work/plugin/skills/guide/"
 grep -v '^| An idea in your own words' "$arsenal" > "$work/plugin/skills/arsenal/SKILL.md"
@@ -1166,23 +1197,39 @@ out="$(MOCK_DIR="$d" "$work/plugin/scripts/guide-state.sh" "$d" 2>&1)"; rc=$?
   ok "a row missing from the arsenal's table: exit 1, named" || bad "missing row: exit $rc: $out"
 
 # The reasons (#834): copied from the table and the list, never the script's.
-# The moments' are on every path, a repository being read or not.
+# The moments' are on every path, a repository being read or not. Said once,
+# then faded (#1147): the row's whole tool cell (its class left out) while
+# fewer than three pull requests by a person have merged, or nothing was
+# read; the single clause from the reason's words after that. Bots' merges
+# do not count.
+why_rows=("A merged change to put out" "The project in use" "Looking back on a piece of work" "Ending the project")
+full_whys() { local r c; for r in "${why_rows[@]}"; do
+  c="$(awk -F ' \\| ' -v p="| $r" 'index($0, p) == 1 { sub(/^\| /, "", $1); print $1; exit }' "$joined")"
+  printf 'why: %s: %s\n' "$c" "$(row_tool "$r" | sed 's/; class: .*//')"; done; }
+short_whys='why: A merged change to put out (release and deploy, after step 6): plinth does not deploy a `web` app that runs anywhere else
+why: The project in use (operate): an uptime monitor (UptimeRobot or Better Stack) and an error tracker with a free plan each, one copy of the data off the host and the bill to expect. None is installed: the person sets each up in the service'"'"'s own account
+why: Looking back on a piece of work (retrospective): it reads the session and suggests rules and checks, most serious first, and changes nothing
+why: Ending the project, or handing it over (end): the table gives no reason'
+whys_of() { grep '^why: ' <<<"$1"; }
 d="$work/plain"
 out="$("$script" "$d" 2>&1)"
-missing=""
-for line in \
-  'why: A merged change to put out (release and deploy, after step 6): plinth does not deploy a `web` app that runs anywhere else' \
-  "why: The project in use (operate): an uptime monitor (UptimeRobot or Better Stack) and an error tracker with a free plan each, one copy of the data off the host and the bill to expect. None is installed: the person sets each up in the service's own account" \
-  'why: Looking back on a piece of work (retrospective): it reads the session and suggests rules and checks, most serious first, and changes nothing' \
-  'why: Ending the project, or handing it over (end): the table gives no reason'; do
-  grep -qxF -- "$line" <<<"$out" || missing="$missing
-$line"
-done
-if [ -z "$missing" ]; then ok "a why: line for each moment, each the table's words"
-else bad "why: lines missing:$missing"; fi
+[ "$(whys_of "$out")" = "$(full_whys)" ] && ok "no repository: a why: line for each moment, the row's whole tool cell" ||
+  { bad "no repository: the full why: lines"; diff <(full_whys) <(whys_of "$out") | head -8; }
 d="$work/idle"
 out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
-grep -qF "why: The project in use (operate): an uptime monitor" <<<"$out" && ok "the moments' why: lines on a repository that is read too" || bad "no moments' why: line on a read repository"
+[ "$(whys_of "$out")" = "$(full_whys)" ] && ok "a read repository, nothing merged: the full why: lines" || bad "idle: $(whys_of "$out" | head -2)"
+d="$(repo why-fade)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 3 'feat: a' false SUCCESS)" \
+  "$(pr 4 'chore(deps): bump a' true SUCCESS)" "$(pr 5 'chore(deps): bump b' true SUCCESS)" "$(pr 6 'chore(deps): bump c' true SUCCESS)"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+[ "$(whys_of "$out")" = "$(full_whys)" ] && ok "two merges by a person and three by Dependabot: still the full why: lines" ||
+  bad "two people's merges, three bots': $(whys_of "$out" | head -2)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)" "$(pr 3 'feat: a' false SUCCESS)" "$(pr 4 'feat: b' false SUCCESS)"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
+[ "$(whys_of "$out")" = "$short_whys" ] && ok "three merges by a person: one clause each, the table's words" ||
+  { bad "three merges: the faded why: lines"; diff <(printf '%s\n' "$short_whys") <(whys_of "$out") | head -8; }
+d="$work/idle"
+out="$(MOCK_DIR="$d" "$script" "$d" 2>&1)"
 # Off by default: the sorting rule, flattened, its links reduced to their words.
 rule="$(grep -E '^  why: ' <<<"$out")"
 if grep -qF 'A choice they cannot judge yet starts off and is told, in the list below, with when it is worth turning on and how (progressive disclosure).' <<<"$rule" &&
@@ -1669,6 +1716,12 @@ grep -qxF "so far: not read (HTTP 502: Bad Gateway)" <<<"$out" && grep -qxF "tot
 state "GitLab: so far not read" "$work/gitlab" "so far: not read (the guide reads GitHub only)"
 grep -qxF "release due: not read (HTTP 502: Bad Gateway)" <<<"$out" && ok "the history read failing: release due not read" ||
   bad "the history read failing: $(grep '^release due' <<<"$out")"
+out="$(MOCK_HISTORY_PARTIAL=1 MOCK_DIR="$d" "$script" "$d" 2>&1)"
+m="not read (gh: Could not resolve to a Repository with the name 'o/r'.)"
+grep -qxF "so far: $m" <<<"$out" && grep -qxF "started: $m" <<<"$out" && grep -qxF "look back: $m" <<<"$out" &&
+  [ "$(others "$out")" = "$(others "$base")" ] &&
+  ok "the history read with a partial GraphQL error: not read, gh's message, the rest unchanged" ||
+  { bad "the history read with a partial error"; diff <(others "$base") <(others "$out") | head; grep -E '^(started|so far|look back)' <<<"$out" | sed 's/^/        /'; }
 
 # ── a release due (#1077) ─────────────────────────────────────────────────
 # The last tag comes from the history read; the merges since it from the
@@ -2000,7 +2053,7 @@ has "map, past the first merge: the title, the legend, the three groups, the ret
   "  next command:" "    /grilling" \
   "  /plinth:guide map <step>: " "  /plinth:guide features: "
 has "map: create and the first merge done, read from the lines the script prints" "$out" \
-  "  ✓ done 1 Create it with the wall: /plinth:new-project <owner>/<name>" \
+  "  ✓ done 1 Create it with its checks and rules: /plinth:new-project <owner>/<name>" \
   "  ✓ done 1 Merge its first pull request on green: merge #N"
 has "map: the step the project is at, marked, with one line on why now" "$out" \
   "  ▶ 2 An idea in your own words: /grilling (you are here)" "      why now: "
@@ -2024,12 +2077,12 @@ n="$(map_of "$out" | grep -c .)"
 
 out="$(MOCK_DIR="$work/created" "$script" "$work/created" map 2>&1)"
 has "map, before the first merge: created done, the first merge here, the token not yet" "$out" \
-  "  ✓ done 1 Create it with the wall: " "  ▶ 1 Merge its first pull request on green: merge #2 (you are here)" \
+  "  ✓ done 1 Create it with its checks and rules: " "  ▶ 1 Merge its first pull request on green: merge #2 (you are here)" \
   "  · not yet 1 A token that cannot change the checks: " "  /plinth:guide map <step>: " "!  ▶ 2"
 has "map, before the first merge: the next command is the ▶ row's" "$out" "  next command:" "    merge #2"
 out="$(MOCK_DIR="$work/plain" "$script" "$work/plain" map 2>&1)"
 has "map, no repository: create is here, nothing done" "$out" \
-  "  ▶ 1 Create it with the wall: /plinth:new-project <owner>/<name> (you are here)" "  · not yet 1 Merge its first pull request on green: " "!  ✓" \
+  "  ▶ 1 Create it with its checks and rules: /plinth:new-project <owner>/<name> (you are here)" "  · not yet 1 Merge its first pull request on green: " "!  ✓" \
   "  · not yet 1 A token that cannot change the checks: " "    7 Something broke: " "    8 Stopping, or coming back: " "      A \`web\` project to put online: "
 # A git checkout plinth did not make: nothing read, so the token has no mark.
 d="$(repo map-foreign none)"
@@ -2137,6 +2190,62 @@ for w in '`/plinth:guide map <step>`' '`/plinth:guide features`' 'from the print
   grep -qF -- "$w" "$guide_md" && ok "the skill says: $w" || bad "the skill does not say: $w"
 done
 
+# ── ask first, at three milestones (#1147) ──────────────────────────────
+# The first merge, the first release due and a look back due: an `ask first:`
+# line, the person names the next step before the command is shown. Every
+# other state: none.
+ask_tail="before the command, ask the person what they think the next step is; show the command once they answer, or at once if they ask for it"
+d="$(repo ask-first-merge)"
+put "$d/merged.json" "$(pr 2 'docs: first' false SUCCESS)"
+MOCK_ADMIN=true state "ask first: the first merge, the token step not done" "$d" \
+  "where: First pull request merged (step 1)" "ask first: the first merge: $ask_tail"
+MOCK_ADMIN=false state "ask first: the first merge, the token step done: step 2's command, asked first" "$d" \
+  "command: /grilling" "ask first: the first merge: $ask_tail"
+put "$d/open.json" "$(pr 3 'chore(deps): bump x' true SUCCESS)"
+MOCK_ADMIN=false state "no ask: the first merge with Dependabot open, its route" "$d" "command: /plinth:floor-check" "!ask first:"
+state "ask first: the first release due (no tag yet)" "$work/release-no-tag" \
+  "command: $rel_cmd" "ask first: the first release due: $ask_tail"
+state "no ask: a release due after a tag" "$work/release-feat" "where: $rel_where" "!ask first:"
+d="$(repo ask-look-back 'archetype: web')"
+cp "$work/lookback-feats/merged.json" "$work/lookback-feats/history.json" "$d/"
+state "ask first: a look back due" "$d" \
+  "where: $lb_where" "command: $lb_cmd" "ask first: a look back due: $ask_tail"
+state "no ask: three merges, nothing open" "$work/why-fade" "command: /grilling" "!ask first:"
+state "no ask: the first pull request open" "$work/created" "command: merge #2" "!ask first:"
+state "no ask: a ticket ready" "$work/release-ticket" "command: /implement #11" "!ask first:"
+out="$(MOCK_DIR="$work/ask-look-back" "$script" "$work/ask-look-back" map 2>&1)"
+grep -qx '    /plinth:floor-check' <<<"$out" && ! grep -q '^ask first:' <<<"$out" && ok "no ask on map, at a milestone: its next command is the answer's code block" ||
+  bad "map at a milestone: $(grep -E '^ask first:|next command' <<<"$out")"
+for w in 'With an `ask first:` line (the first merge, the first release due, a' \
+         'show the command once they answer' 'show it anyway if they ask for it' \
+         'whole tool cell while fewer than three pull' 'and one clause after that'; do
+  grep -qF -- "$w" "$guide_md" && ok "the skill says: $w" || bad "the skill does not say: $w"
+done
+
+# ── plain words in printed rows (#1147) ───────────────────────────────────
+# A beginner word in a row the guide or the arsenal prints, outside a
+# command or path in backticks, is either replaced or glossed in the term
+# table (docs/reference/terms.md). The case that must fail first.
+terms="$root/docs/reference/terms.md"
+unglossed() { # <table file>: each beginner word left in a row without a gloss
+  local w
+  local w forms
+  # Each word with the forms it takes: walls, pinned, boundaries, re-rendered.
+  for w in wall floor pin boundary re-render listed; do
+    grep -q "^| \*\*$w\*\* |" "$terms" && continue
+    case "$w" in pin) forms='pin(s|ned|ning)?' ;; boundary) forms='boundar(y|ies)' ;; listed) forms='listed' ;; *) forms="$w(s|ed|ing)?" ;; esac
+    grep '^| ' "$1" | sed 's/`[^`]*`//g' | grep -qiE "(^|[^a-z-])$forms([^a-z-]|$)" && echo "$w"
+  done; return 0
+}
+sed 's/| Create it with its checks and rules;/| Create it behind the wall;/' "$joined" > "$work/joined-wall"
+[ "$(unglossed "$work/joined-wall")" = wall ] && ok "plain words: a row saying \"the wall\" fails" || bad "plain words: the wall passed: $(unglossed "$work/joined-wall")"
+sed 's/| Create it with its checks and rules;/| Create it with `\/plinth:floor-check` and a pin;/' "$joined" > "$work/joined-pin"
+sed 's/| Create it with its checks and rules;/| Create it behind its walls, at its boundaries, re-rendered;/' "$joined" > "$work/joined-forms"
+[ "$(unglossed "$work/joined-forms" | paste -sd ' ' -)" = "wall boundary re-render" ] && ok "plain words: walls, boundaries and re-rendered fail too" ||
+  bad "plain words: other forms: $(unglossed "$work/joined-forms" | paste -sd ' ' -)"
+[ -z "$(unglossed "$work/joined-pin")" ] && ok "plain words: a command in backticks and a glossed word pass" || bad "plain words: $(unglossed "$work/joined-pin")"
+[ -z "$(unglossed "$joined")" ] && ok "plain words: every printed row is plain or glossed" || bad "plain words unglossed in the table: $(unglossed "$joined" | paste -sd ' ' -)"
+
 # ── names ────────────────────────────────────────────────────────────────
 printf 'Next, type `/speckit.specify` to write the spec.\n' > "$work/n1"
 printf 'Install superpowers for a better plan.\n' > "$work/n2"
@@ -2154,6 +2263,22 @@ grep -q 'CLAUDE_PLUGIN_ROOT' <<<"$out" && bad "the printed table still carries \
   ok "the printed table names the plugin's own path, not the variable"
 printf '%s\n' "$out" > "$work/printed"
 "$names" "$arsenal" "$work/printed" >/dev/null && ok "what the script prints names only the table's commands" || bad "the script's output names something outside the table"
+
+# Every run's gh calls, held to the cap (#1180): the most of any one run.
+# GUIDE_RUNS_OUT, when set, keeps the counts for a reading after the run.
+[ -z "${GUIDE_RUNS_OUT:-}" ] || { mkdir -p "$GUIDE_RUNS_OUT" && cp "$runs" "$GUIDE_RUNS_OUT/runs.tsv" &&
+  for f in "$work"/out.*; do [ -e "$f" ] && sed "s|$work|WORK|g" "$f" > "$GUIDE_RUNS_OUT/${f##*/}"; done; }
+cap=11
+# over_cap <runs file>: each row above the cap, as "<calls> calls: fixture <name> <arguments>".
+over_cap() { awk -F '\t' -v c="$cap" '$1 > c { n = split($2, p, "/"); print $1 " calls: fixture " p[n] " " $3 }' "$1"; }
+printf '12\t%s/too-many\tmap\n9\t%s/fine\t\n' "$work" "$work" > "$work/runs-over"
+[ "$(over_cap "$work/runs-over")" = "12 calls: fixture too-many map" ] && ok "the cap check names a run over $cap calls, and only it" ||
+  bad "the cap check on a run over the cap: $(over_cap "$work/runs-over")"
+most="$(sort -t "$(printf '\t')" -k1,1nr "$runs" | head -1)"
+over="$(over_cap "$runs")"
+f="$(cut -f2 <<<"$most")"
+if [ -s "$runs" ] && [ -z "$over" ]; then ok "every run makes at most $cap gh calls: $(grep -c . "$runs") runs, the most $(cut -f1 <<<"$most") (fixture ${f##*/})"
+else bad "runs over $cap gh calls:"; sed 's/^/        /' <<<"$over" | head; fi
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

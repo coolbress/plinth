@@ -139,6 +139,7 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import datetime
 import fnmatch
 import importlib
 import ipaddress
@@ -742,6 +743,7 @@ PUSH_DOCS = f"{DOCS}#push-protection"
 ALLOWLIST_DOCS = f"{DOCS}#the-actions-allowlist-and-private-vulnerability-reporting"
 BESIDE_DOCS = f"{DOCS}#what-the-door-sets-beside-the-wall-and-the-projects-own-answers"
 PRIVATE_DOCS = f"{DOCS}#a-private-repository"
+ALERTS_DOCS = f"{DOCS}#dependabot-alerts-secret-scanning-and-registry-tokens"
 # The rule types the door's ruleset carries on the default branch, each its own check (#1103).
 WALL_RULES = (("FC-E13", "deletion"), ("FC-E14", "non_fast_forward"), ("FC-E15", "pull_request"),
               ("FC-E16", "required_status_checks"))
@@ -896,11 +898,15 @@ def _wall() -> tuple[dict, ...]:
                                   "a login that administers the repository",
                         "unread": "private vulnerability reporting not verified (GitHub gave no answer this checker "
                                   "reads; a login with repository administration reads it)"}),
-        check("FC-E12", "rules govern the default branch", states=("fail", "unknown"), handoff="admin",
+        check("FC-E12", "rules govern the default branch", states=("fail", "unknown", "info"), handoff="admin",
               docs=WALL_DOCS, hosts=gh, needs=net, baseline=("OSPS-AC-03.01",), not_keepable=WALL_IS_THE_RULES,
               fix="apply the door's ruleset to the default branch",
               messages={"unread": "could not read the rules of {branch} (API error)",
-                        "none": "no rules govern {branch}: the wall is down"}),
+                        "none": "no rules govern {branch}: the wall is down",
+                        # .plinth-adoption.yml's wall_due (#1112): the adopt order puts the
+                        # ruleset after the first green run on the default branch.
+                        "later": "the wall: later, after the first green run on {branch} (until {due}, "
+                                 ".plinth-adoption.yml's wall_due)"}),
         *(check(cid, f"the default branch has a {t} rule", states=TWO_WAY, handoff="admin", docs=WALL_DOCS,
                 hosts=gh, needs=net, baseline=rule_baseline.get(t, ()), not_keepable=WALL_IS_THE_RULES,
                 fix=f"add the {t} rule of the door's ruleset to the default branch",
@@ -1128,10 +1134,74 @@ def _wall() -> tuple[dict, ...]:
               messages={"good": "the repository has a description",
                         "none": "the repository has no description: GitHub's community profile counts one; set it "
                                 "with gh repo edit {repo} --description '<one line>'"}),
+        check("FC-E31", "Dependabot alerts are on, and none is open", states=("pass", "warn", "unknown", "review", "info"),
+              handoff="admin", docs=ALERTS_DOCS, hosts=gh, needs=admin,
+              fix="turn Dependabot alerts on, and fix or dismiss each open alert",
+              messages={"good": "Dependabot alerts are on, and none is open",
+                        "open": "{count} open Dependabot alert(s) ({severities}): a dependency this repository uses "
+                                "has a published vulnerability",
+                        "list": "  https://github.com/{repo}/security/dependabot lists them",
+                        "off": "Dependabot alerts are off: GitHub does not say when a dependency this repository uses "
+                               "has a published vulnerability",
+                        "hint": "  gh api -X PUT repos/{repo}/vulnerability-alerts   (needs repository administration)",
+                        "unread": "Dependabot alerts not verified ({what}: a token with the {permission} permission "
+                                  "(read) reads it)",
+                        "review": "Dependabot alerts are not read here: /plinth:floor-check reads them with a login "
+                                  "that administers the repository"}),
+        check("FC-E32", "Dependabot security updates are on", states=("pass", "warn", "unknown", "review", "info"),
+              handoff="admin", docs=ALERTS_DOCS, hosts=gh, needs=admin,
+              fix="turn Dependabot security updates on",
+              messages={"good": "Dependabot security updates are on: Dependabot opens a pull request that moves a "
+                                "vulnerable dependency to a fixed version",
+                        "off": "Dependabot security updates are off: an open Dependabot alert gets no pull request "
+                               "with the fix",
+                        "paused": "Dependabot security updates are paused (GitHub pauses them after a run of pull "
+                                  "requests nobody merges): an open alert gets no pull request with the fix",
+                        "hint": "  gh api -X PUT repos/{repo}/automated-security-fixes   (needs repository "
+                                "administration; it needs Dependabot alerts on)",
+                        "unread": "Dependabot security updates not verified (no answer this checker reads: a token "
+                                  "with the Administration permission (read) reads it)",
+                        "review": "Dependabot security updates are not read here: /plinth:floor-check reads them with "
+                                  "a login that administers the repository"}),
+        check("FC-E33", "secret scanning is on, and no alert is open",
+              states=("pass", "warn", "unknown", "review", "info"), handoff="admin", docs=ALERTS_DOCS, hosts=gh,
+              needs=admin, baseline=("OSPS-BR-07.01",),
+              not_keepable="an open alert is a secret on GitHub that everyone who can read the repository can use "
+                           "until it is revoked",
+              fix="turn secret scanning on; revoke each secret an open alert names, then close the alert",
+              messages={"good": "secret scanning is on, and no alert is open",
+                        "open": "{count} open secret scanning alert(s): {where}. Each is a secret on GitHub until "
+                                "it is revoked at its provider; closing the alert does not revoke it",
+                        "list": "  https://github.com/{repo}/security/secret-scanning lists them",
+                        "off": "secret scanning is off: GitHub does not say when a secret in a format it knows is "
+                               "in this repository",
+                        "hint": "  gh api -X PATCH repos/{repo} --input - <<<'{body}'   (needs repository "
+                                "administration)",
+                        "gap": "secret scanning is not on this private repository: it needs GitHub Secret Protection, "
+                               "a paid product for Team and Enterprise. In its place: `ci / secrets`. {turn_on}",
+                        "unread": "secret scanning not verified ({what}: a token with the {permission} permission "
+                                  "(read) reads it)",
+                        "review": "secret scanning and its open alerts are not read here: /plinth:floor-check reads "
+                                  "them with a login that administers the repository"}),
+        check("FC-E34", "no registry token among the secrets while release.yml publishes through OIDC",
+              states=("pass", "warn", "unknown", "review", "info"), handoff="person", docs=ALERTS_DOCS, hosts=gh,
+              needs=admin, lifecycle="experimental",
+              fix="delete the registry token secrets once the trusted publisher works",
+              messages={"good": "release.yml publishes through OIDC, and no secret is named like a registry token",
+                        "bad": "release.yml publishes through OIDC, and these secrets are named like a token for "
+                               "that registry: {names}. A long-lived token is a second way to publish, and it never "
+                               "expires on its own",
+                        "hint": "  {line}   (once a release has published through OIDC and no other workflow "
+                                "reads it)",
+                        "unread": "the secret names not verified ({what}: a token with the {permission} permission "
+                                  "(read) lists them; values are never read)",
+                        "review": "the secret names are not read here: /plinth:floor-check lists them (names only) "
+                                  "with a login that administers the repository"}),
     )
 
 
 DRIFT_DOCS = f"{DOCS}#template-drift"
+ADOPTION_DOCS = f"{DOCS}#the-adoption-record"
 
 
 # The answers that rely on a file in the owner's .github repository, one
@@ -1225,6 +1295,17 @@ def _plinth() -> tuple[dict, ...]:
                         "bad": "{line}",
                         "one": "  set every {repo} uses: to the one commit the ci job should call",
                         "fix": "  {line}   (moves it to the SHA the ci job calls)"}),
+        check("FC-F09", "the adoption record is read", states=("info", "fail"), handoff="person", docs=ADOPTION_DOCS,
+              not_keepable="an adoption record that keeps itself could keep anything it names, unread",
+              fix="write .plinth-adoption.yml in the form the reference describes, or take the entry out",
+              messages={"read": "{file} read: step {step}, {kept} kept by choice{due}",
+                        "capped": "{file}: wall_due {due} is more than {days} days after started {started}; read as "
+                                  "{cap}",
+                        "unreadable": "{file} cannot be read ({why}): nothing in it is applied",
+                        "invalid": "{file} is not valid: {why}; nothing in it is applied",
+                        "unknown_id": "{file} keeps {id}, which names no check: that entry is not applied",
+                        "not_keepable": "{file} keeps {id}, which cannot be kept ({why}): it is reported as found",
+                        "expired": "{file} kept {id} until {until}, which has passed: it is reported as found"}),
         check("FC-F07", "the recorded host is one this checker reads", states=("unknown",), handoff="person",
               docs=GITLAB_DOCS, fix="pass --host github or --host gitlab",
               messages={"other": ".copier-answers.yml says host: {host}, which this checker does not read; read as "
@@ -1373,6 +1454,17 @@ def _machine() -> tuple[dict, ...]:
                                   "files or the env of .claude/settings*.json (the repository's and the user's); best "
                                   "effort: shell profile files, other files and schemes other than postgres:// and "
                                   "postgresql:// are not read"}),
+        machine("FC-G12", "no plugin from the plinth marketplace is one it no longer lists",
+                states=("warn",), handoff="person",
+                view_why="--plugins runs it; it reads this machine's installed Claude Code plugins, not the repository",
+                fix="run the claude plugin uninstall line the WARN names",
+                messages={"replaced": "{pid} ({where}) left the plinth marketplace in {left}, replaced by {replaced}; "
+                                      "Claude Code reports it \"not found in marketplace\" until it is uninstalled. "
+                                      "fix: {fix}",
+                          "retired": "{pid} ({where}) left the plinth marketplace in {left}; Claude Code reports it "
+                                     "\"not found in marketplace\" until it is uninstalled. fix: {fix}",
+                          "gone": "{pid} ({where}) is not in the plinth marketplace; Claude Code reports it \"not "
+                                  "found in marketplace\" until it is uninstalled. fix: {fix}"}),
     )
 
 
@@ -1405,7 +1497,13 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
     assert (state == "unknown") == (reason is not None), (cid, state, reason)
     assert (state == "review") == (reader is not None), (cid, state, reader)
     msg = e["messages"][msg_key].format(**(values or {}))
-    r = {"id": cid, "state": state, "msg": msg, "reason": reason, "reader": reader, "key": msg_key}
+    k = kept.get(cid) if state in ("fail", "warn") else None
+    # A finding the adoption record keeps (#1112) is said, as an INFO, and not counted.
+    if k is not None:
+        msg = f"kept by choice ({k['reason']}): {msg}"
+    r = {"id": cid, "state": "info" if k else state, "msg": msg, "reason": reason, "reader": reader, "key": msg_key,
+         "kept": None if k is None else {"reason": k["reason"], "why": k["why"], "path": k["path"],
+                                         "until": k.get("until"), "was": state}}
     results.append(r)
     verdicts.extend(verdict_lines(r))
     line = render_text(r)
@@ -1413,7 +1511,7 @@ def emit(cid: str, state: str, msg_key: str, values: dict | None = None, *,
         print(line)
     if TRACE:
         with open(TRACE, "a", encoding="utf-8") as t:
-            t.write(f"{cid} {state}\t{line.splitlines()[0]}\n")
+            t.write(f"{cid} {'kept' if k else state}\t{line.splitlines()[0]}\n")
 
 
 def verdict(cid: str, cond: bool, values: dict | None = None, bad: str = "fail") -> bool:
@@ -1491,7 +1589,7 @@ def run_record(rs: list[dict], run: dict | None = None, crashed: dict | None = N
         results.append({"id": r["id"], "state": r["state"], "shown": SHOWN[r["state"]], "message": r["msg"],
                         "reason": r["reason"], "cannot_be_read_here": r["reason"] == HERE, "reader": r["reader"],
                         "key": r["key"], "area": AREAS[e["area"]], "name": e["name"], "handoff": e["handoff"],
-                        "fix": e["fix"], "keepable": e["keepable"],
+                        "fix": e["fix"], "keepable": e["keepable"], "kept": r["kept"],
                         "lifecycle": e["lifecycle"], "view": e["view"], "ci_visible": e["ci_visible"]})
     return {"schema": SCHEMA_ID, **(run or {}), "results": results,
             "not_evaluated": [{"id": i, "name": e["name"], "area": AREAS[e["area"]]}
@@ -1516,6 +1614,30 @@ def read(path: Path) -> str:
 
 ABSENT = object()   # 404: the resource does not exist
 ERROR = object()    # anything else went wrong: do not conclude
+
+
+def json_pages(text: str):
+    """The answer `gh api --paginate` prints: one JSON value per page, one
+    after another ("Each page is a separate JSON array or object", gh api
+    --help). One value is returned as it is; several arrays are one list. A
+    value that is not an array among several pages is a ValueError: no page
+    of it is guessed at."""
+    dec, i, pages = json.JSONDecoder(), 0, []
+    while True:
+        while i < len(text) and text[i].isspace():
+            i += 1
+        if i == len(text):
+            break
+        value, i = dec.raw_decode(text, i)
+        pages.append(value)
+    if len(pages) == 1:
+        return pages[0]
+    if pages and all(isinstance(p, list) for p in pages):
+        return [x for p in pages for x in p]
+    raise ValueError(f"{len(pages)} pages, not all of them arrays")
+
+
+NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
 
 
 def api(path: str, network: bool, paginate: bool = False):
@@ -1550,20 +1672,37 @@ def api(path: str, network: bool, paginate: bool = False):
         except (OSError, subprocess.TimeoutExpired):
             r = None
         if r is not None and r.returncode == 0:
+            # A 204 has no body (repos/{r}/vulnerability-alerts answers so when on): an empty object.
+            if not r.stdout.strip():
+                return {}
             try:
-                return json.loads(r.stdout)
+                return json_pages(r.stdout) if paginate else json.loads(r.stdout)
             except ValueError:
                 return ERROR
         if r is not None and "HTTP 404" in r.stderr:
             return ABSENT
-    req = urllib.request.Request(f"https://api.github.com/{path}")
-    req.add_header("Accept", "application/vnd.github+json")
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
+    url: str | None = f"https://api.github.com/{path}"
+    pages: list = []
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return json.loads(resp.read().decode())
+        # With paginate, each page's `Link: <…>; rel="next"` is followed, as
+        # gh does; a page that is not an array ends it as an ERROR.
+        while url is not None and len(pages) < 100:
+            req = urllib.request.Request(url)
+            req.add_header("Accept", "application/vnd.github+json")
+            if token:
+                req.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                body = resp.read().decode()
+                link = NEXT_LINK.search(resp.headers.get("Link") or "") if paginate else None
+            value = json.loads(body) if body.strip() else {}
+            if not paginate or (link is None and not pages):
+                return value
+            if not isinstance(value, list):
+                return ERROR
+            pages.append(value)
+            url = link.group(1) if link else None
+        return ERROR if url is not None else [x for p in pages for x in p]
     except urllib.error.HTTPError as e:
         return ABSENT if e.code == 404 else ERROR
     except (urllib.error.URLError, TimeoutError, ValueError):
@@ -2725,6 +2864,219 @@ def copier_answers(root: Path) -> dict[str, str] | None:
         if m:
             out[m.group(1)] = m.group(2).strip().strip("'\"")
     return out
+
+
+# --- The adoption record (#1112) ----------------------------------------------
+ADOPTION_FILE = ".plinth-adoption.yml"
+ADOPTION_STEPS = ("files", "ci", "wall", "done")
+KEEP_REASONS = ("not-applicable", "deliberately-different", "later")
+ADOPTION_TOP = ("schema", "plinth", "origin", "archetype", "started", "step", "wall_due", "kept")
+ADOPTION_REQUIRED = ("schema", "plinth", "origin", "archetype", "started", "step")
+KEPT_KEYS = ("id", "path", "reason", "why", "until")
+KEPT_REQUIRED = ("id", "path", "reason", "why")
+WALL_DUE_DAYS = 30   # a starting value, chosen without evidence (#1112's Decisions)
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+adoption: dict | None = None   # the record as read, when it is valid
+kept: dict[str, dict] = {}     # id -> its kept entry, the ones applied
+
+
+def today() -> datetime.date:
+    """The date the record's dates are compared with: UTC, or FLOOR_CHECK_TODAY (the tests)."""
+    given = os.environ.get("FLOOR_CHECK_TODAY")
+    return datetime.date.fromisoformat(given) if given else datetime.datetime.now(datetime.timezone.utc).date()
+
+
+# A quoted value, then nothing or a ` #` comment: the comment is taken off
+# outside the quotes, so a `#` inside them stays in the value.
+SINGLE_QUOTED = re.compile(r"'((?:[^']|'')*)'(?:\s+#.*)?")
+DOUBLE_QUOTED = re.compile(r'("(?:[^"\\]|\\.)*")(?:\s+#.*)?')
+
+
+def yaml_scalar(text: str, n: int) -> str:
+    """One value of the record's form, on line `n`: quoted ('…' or "…"), with
+    or without a ` #` comment after the closing quote, or plain up to a ` #`
+    comment. A quote that does not close, or anything but a comment after
+    it, is a ValueError naming the line, never a value with its quotes."""
+    t = text.strip()
+    if t[:1] == "'":
+        m = SINGLE_QUOTED.fullmatch(t)
+        if m:
+            return m.group(1).replace("''", "'")
+    elif t[:1] == '"':
+        m = DOUBLE_QUOTED.fullmatch(t)
+        if m:
+            return json.loads(m.group(1))
+    else:
+        # A comment is a `#` at the start or after a space: `key: # note` is empty.
+        return re.sub(r"(?:^|\s+)#.*$", "", t)
+    raise ValueError(f"line {n}: a quoted value with more than a comment after it, or not closed: {t}")
+
+
+def read_adoption(text: str) -> dict:
+    """.plinth-adoption.yml in the form the adopt pull request writes: top-level
+    `key: value` lines, and `kept:` as a list of `- key: value` mappings (or
+    `kept: []`). Not a YAML parser (standard library only): any other line is
+    a ValueError naming it, never a guess."""
+    out: dict = {}
+    item: dict | None = None
+    in_kept = False
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        top = re.match(r"^([a-z_]+):(?:\s+(.*))?$", line)
+        if top:
+            key, value = top.group(1), (top.group(2) or "").strip()
+            if key in out:
+                raise ValueError(f"line {n}: {key} given twice")
+            # The list's header is read with its comment off: `kept: # why`
+            # opens the list, `kept: [] # none` is the empty one.
+            head = yaml_scalar(value, n) if key == "kept" and not value.startswith(("'", '"')) else value
+            in_kept = key == "kept" and head in ("", "[]")
+            out[key] = [] if in_kept else yaml_scalar(value, n)
+            if in_kept and head == "[]":
+                in_kept = False
+            item = None
+            continue
+        entry = re.match(r"^  (- |  )([a-z_]+):(?:\s+(.*))?$", line)
+        if in_kept and entry and (entry.group(1) == "- " or item is not None):
+            if entry.group(1) == "- ":
+                item = {}
+                out["kept"].append(item)
+            assert item is not None
+            if entry.group(2) in item:
+                raise ValueError(f"line {n}: {entry.group(2)} given twice in one kept entry")
+            item[entry.group(2)] = yaml_scalar(entry.group(3) or "", n)
+            continue
+        raise ValueError(f"line {n} is not in the form this checker reads")
+    return out
+
+
+def adoption_errors(d: dict) -> list[str]:
+    """What makes the record invalid, in the shape of scripts/plinth-adoption.schema.json."""
+    errs = [f"unknown field {k}" for k in d if k not in ADOPTION_TOP]
+    errs += [f"no {k}" for k in ADOPTION_REQUIRED if k not in d]
+    if "schema" in d and d["schema"] != "1":
+        errs.append(f"schema {d['schema']} is not 1")
+    if "plinth" in d and not re.fullmatch(r"v\d+\.\d+\.\d+", str(d["plinth"])):
+        errs.append(f"plinth {d['plinth']} is not a release tag")
+    if "origin" in d and not (d["origin"] == "none" or re.fullmatch(r"other-template:\S+", str(d["origin"]))):
+        errs.append(f"origin {d['origin']} is neither none nor other-template:<source>")
+    if "archetype" in d and not re.fullmatch(r"[a-z][a-z-]*", str(d["archetype"])):
+        errs.append(f"archetype {d['archetype']} is not an archetype name")
+    if "step" in d and d["step"] not in ADOPTION_STEPS:
+        errs.append(f"step {d['step']} is not one of {', '.join(ADOPTION_STEPS)}")
+    for k in ("started", "wall_due"):
+        if k in d and not valid_date(d[k]):
+            errs.append(f"{k} {d[k] or '(empty)'} is not a date (YYYY-MM-DD)")
+    if not isinstance(d.get("kept", []), list):
+        errs.append("kept is not a list")
+        return errs
+    for i, e in enumerate(d.get("kept", []), 1):
+        errs += [f"kept entry {i}: unknown field {k}" for k in e if k not in KEPT_KEYS]
+        errs += [f"kept entry {i}: no {k}" for k in KEPT_REQUIRED if not e.get(k)]
+        if e.get("id") and not re.fullmatch(r"FC-[A-Z]\d\d", e["id"]):
+            errs.append(f"kept entry {i}: id {e['id']} is not a check id")
+        if e.get("reason") and e["reason"] not in KEEP_REASONS:
+            errs.append(f"kept entry {i}: reason {e['reason']} is not one of {', '.join(KEEP_REASONS)}")
+        if e.get("reason") == "later" and "until" not in e:
+            errs.append(f"kept entry {i}: reason later with no until")
+        if "until" in e and not valid_date(e["until"]):
+            errs.append(f"kept entry {i}: until {e['until'] or '(empty)'} is not a date (YYYY-MM-DD)")
+    return errs
+
+
+def valid_date(v: object) -> bool:
+    if not isinstance(v, str) or not DATE.match(v):
+        return False
+    try:
+        datetime.date.fromisoformat(v)
+    except ValueError:
+        return False
+    return True
+
+
+def adoption_json(d: dict) -> dict:
+    """The record as the schema types it: schema an integer, the rest strings."""
+    return {**d, "schema": 1} if d.get("schema") == "1" else d
+
+
+def wall_due(d: dict) -> datetime.date | None:
+    """The record's wall_due, at most WALL_DUE_DAYS after started; None without one."""
+    if "wall_due" not in d:
+        return None
+    due, started = datetime.date.fromisoformat(d["wall_due"]), datetime.date.fromisoformat(d["started"])
+    return min(due, started + datetime.timedelta(days=WALL_DUE_DAYS))
+
+
+def wall_later() -> str | None:
+    """The date the wall is due by, when the record holds it off today (#1112):
+    a valid record not at step done, on or before its (capped) wall_due.
+    check_wall asks only when the default branch has no rules: wall_due has
+    no effect on a repository that has a ruleset."""
+    if adoption is None or adoption["step"] == "done":
+        return None
+    due = wall_due(adoption)
+    return due.isoformat() if due is not None and today() <= due else None
+
+
+def check_adoption(root: Path) -> None:
+    """Reads .plinth-adoption.yml at the repository root (#1112). With no file
+    nothing is printed and nothing changes. A file that cannot be read or is
+    not valid is a FAIL naming it, and nothing in it applies. Each kept entry
+    applies unless it names no check, its check cannot be kept, or its
+    `until` has passed: then a FAIL says so and the finding stands. A `later`
+    entry with no `until` makes the file invalid, as the schema says."""
+    global adoption
+    p = root / ADOPTION_FILE
+    if not p.exists() and not p.is_symlink():
+        return
+    f = ADOPTION_FILE
+    try:
+        d = read_adoption(p.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError) as exc:
+        emit("FC-F09", "fail", "unreadable", {"file": f, "why": type(exc).__name__})
+        return
+    except (ValueError, json.JSONDecodeError) as exc:
+        emit("FC-F09", "fail", "invalid", {"file": f, "why": str(exc)})
+        return
+    errs = adoption_errors(d)
+    # The 30 days count from started: a started after today would move the
+    # cap as far as it is written, so it makes the record invalid.
+    if not errs and datetime.date.fromisoformat(d["started"]) > today():
+        errs.append(f"started {d['started']} is after today ({today().isoformat()})")
+    if errs:
+        emit("FC-F09", "fail", "invalid", {"file": f, "why": "; ".join(errs)})
+        return
+    adoption = d
+    aliases = {a: i for i, e in REGISTRY.items() for a in e["aliases"]}
+    now = today()
+    for e in d.get("kept", []):
+        cid = aliases.get(e["id"], e["id"])
+        if cid not in REGISTRY:
+            emit("FC-F09", "fail", "unknown_id", {"file": f, "id": e["id"]})
+        elif not REGISTRY[cid]["keepable"]:
+            emit("FC-F09", "fail", "not_keepable", {"file": f, "id": cid, "why": REGISTRY[cid]["not_keepable"]})
+        elif "until" in e and datetime.date.fromisoformat(e["until"]) < now:
+            emit("FC-F09", "fail", "expired", {"file": f, "id": cid, "until": e["until"]})
+        else:
+            kept[cid] = e
+    due = wall_due(d)
+    if due is not None and due.isoformat() != d["wall_due"]:
+        emit("FC-F09", "info", "capped", {"file": f, "due": d["wall_due"], "days": WALL_DUE_DAYS,
+                                          "started": d["started"], "cap": due.isoformat()})
+    emit("FC-F09", "info", "read", {"file": f, "step": d["step"], "kept": len(kept),
+                                    "due": f"; the wall due by {due.isoformat()}" if due and d["step"] != "done" else ""})
+
+
+def print_adoption(root: Path) -> int:
+    """--print-adoption: the record as the schema reads it, or why it is not read."""
+    try:
+        d = read_adoption((root / ADOPTION_FILE).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        print(f"{ADOPTION_FILE} not read: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(adoption_json(d), indent=2, ensure_ascii=False))
+    return 0
 
 
 def resolve_plinth_pin(root: Path) -> tuple[str | None, str | None]:
@@ -5016,6 +5368,211 @@ def check_actions_token(repo: str, network: bool, actions_token: bool = False) -
     emit("FC-E28", "info", "hint", {"repo": repo})
 
 
+# What a token needs to read each of the items below, as GitHub's table of
+# fine-grained token permissions gives it (read 2026-11-28): the alerts'
+# on/off and security updates under "Administration", the open Dependabot
+# alerts under "Dependabot alerts", the open secret scanning alerts under
+# "Secret scanning alerts", repository secrets' names under "Secrets" and an
+# environment's under "Environments". A classic token or gh's own login
+# needs `repo`. No endpoint here returns a secret's value; the secret
+# scanning alert does carry it, and it is never kept or printed.
+SEVERITIES = ("critical", "high", "medium", "low")
+# A release workflow that publishes through OIDC (it asks for the identity
+# token, and a step publishes with it), and the secret names a token for that
+# same registry goes by. Only the registry the workflow publishes to through
+# OIDC is matched: a token for another registry (an image's, an npm publish
+# without provenance) may still be in use.
+OIDC_REGISTRIES = (
+    (re.compile(r"pypa/gh-action-pypi-publish|\buv publish\b"), re.compile(r"PYPI|TWINE|UV_PUBLISH", re.IGNORECASE)),
+    (re.compile(r"\bnpm publish\b.*--provenance"), re.compile(r"NPM|NODE_AUTH", re.IGNORECASE)),
+)
+
+
+def unread(cid: str, actions_token: bool, values: dict, reason: str) -> None:
+    """An answer not read: left to the skill under --actions-token, otherwise a SKIP."""
+    if actions_token:
+        emit(cid, "review", "review", reader=ADMIN_READER)
+    else:
+        emit(cid, "unknown", "unread", values, reason=reason)
+
+
+def check_dependabot_alerts(repo: str, meta: dict, network: bool, actions_token: bool) -> None:
+    """Dependabot alerts on, and how many are open, by severity (#1118). The
+    on/off is a 204 or a 404 on repos/{r}/vulnerability-alerts, and GitHub
+    answers 404 as well to a login that does not administer the repository:
+    a 404 is "off" only when the repository's answer says this login does.
+    Count and severity only; GitHub only (FC-A19 is GitLab's line)."""
+    on = api(f"repos/{repo}/vulnerability-alerts", network)
+    admin = isinstance(meta.get("permissions"), dict) and meta["permissions"].get("admin") is True
+    if on is ABSENT and admin and not actions_token:
+        emit("FC-E31", "warn", "off")
+        emit("FC-E31", "info", "hint", {"repo": repo})
+        return
+    if not isinstance(on, dict):
+        unread("FC-E31", actions_token, {"what": "whether they are on was not answered", "permission": "Administration"},
+               "Dependabot alerts not read")
+        return
+    alerts = api(f"repos/{repo}/dependabot/alerts?state=open&per_page=100", network, paginate=True)
+    if not isinstance(alerts, list):
+        unread("FC-E31", actions_token, {"what": "they are on; the open alerts were not read",
+                                         "permission": "Dependabot alerts"}, "the open Dependabot alerts not read")
+        return
+    sev = [((a.get("security_advisory") or {}).get("severity") or (a.get("security_vulnerability") or {}).get("severity"))
+           for a in alerts if isinstance(a, dict) and a.get("state", "open") == "open"]
+    if not sev:
+        emit("FC-E31", "pass", "good")
+        return
+    counts = [f"{sev.count(s)} {s}" for s in SEVERITIES if s in sev]
+    other = sum(s not in SEVERITIES for s in sev)
+    emit("FC-E31", "warn", "open", {"count": len(sev),
+                                    "severities": ", ".join(counts + ([f"{other} of no severity"] if other else []))})
+    emit("FC-E31", "info", "list", {"repo": repo})
+
+
+def check_security_updates(repo: str, network: bool, actions_token: bool) -> None:
+    """Dependabot security updates on (#1118): repos/{r}/automated-security-fixes
+    answers `enabled` and `paused`. Anything else is not read."""
+    got = api(f"repos/{repo}/automated-security-fixes", network)
+    enabled = got.get("enabled") if isinstance(got, dict) else None
+    if enabled is True and got.get("paused") is not True:
+        emit("FC-E32", "pass", "good")
+    elif enabled is True:
+        emit("FC-E32", "warn", "paused")
+        emit("FC-E32", "info", "hint", {"repo": repo})
+    elif enabled is False:
+        emit("FC-E32", "warn", "off")
+        emit("FC-E32", "info", "hint", {"repo": repo})
+    elif actions_token:
+        emit("FC-E32", "review", "review", reader=ADMIN_READER)
+    else:
+        emit("FC-E32", "unknown", "unread", reason="Dependabot security updates not read")
+
+
+def alert_place(repo: str, number, network: bool) -> str:
+    """Where an open secret scanning alert's secret is: the first location's
+    path, or its kind (an issue comment, an Actions log); never the value."""
+    locs = api(f"repos/{repo}/secret-scanning/alerts/{number}/locations", network)
+    first = locs[0] if isinstance(locs, list) and locs and isinstance(locs[0], dict) else None
+    if first is None:
+        return "where not read"
+    details = first.get("details")
+    path = details.get("path") if isinstance(details, dict) else None
+    if isinstance(path, str) and path:
+        return f"in {path}"
+    kind = str(first.get("type") or "place").replace("_", " ")
+    return f"in {'an' if kind[:1] in 'aeiou' else 'a'} {kind}"
+
+
+def check_secret_scanning(repo: str, meta: dict, network: bool, actions_token: bool, hidden: str | None) -> None:
+    """Secret scanning on, and its open alerts named by type and where, never
+    by value (#1118). The status is in `security_and_analysis`, as push
+    protection's is (FC-E09), which reports an unanswered block once for
+    both; a private repository without GitHub Secret
+    Protection has it off by plan, an INFO naming the plan. With alerts open
+    the row is the alerts, not "on"."""
+    security = meta.get("security_and_analysis")
+    if not isinstance(security, dict) or hidden is not None:
+        # The settings were not answered: push protection's line (FC-E09)
+        # reports that one read, a SKIP, its plan or an INFO left to the
+        # skill, and a second line here would count the same answer twice.
+        return
+    entry = security.get("secret_scanning")
+    status = entry.get("status") if isinstance(entry, dict) else None
+    if status == "disabled" and is_private(meta):
+        emit("FC-E33", "info", "gap", {"turn_on": TURN_ON})
+        return
+    if status == "disabled":
+        emit("FC-E33", "warn", "off")
+        body = json.dumps({"security_and_analysis": {"secret_scanning": {"status": "enabled"}}})
+        emit("FC-E33", "info", "hint", {"repo": repo, "body": body})
+        return
+    if status != "enabled":
+        unread("FC-E33", actions_token, {"what": "its status was not answered", "permission": "Administration"},
+               "secret scanning not read")
+        return
+    alerts = api(f"repos/{repo}/secret-scanning/alerts?state=open&per_page=100&hide_secret=true", network,
+                 paginate=True)
+    if not isinstance(alerts, list):
+        unread("FC-E33", actions_token, {"what": "it is on; the open alerts were not read",
+                                         "permission": "Secret scanning alerts"}, "the open secret scanning alerts not read")
+        return
+    open_ = [a for a in alerts if isinstance(a, dict) and a.get("state", "open") == "open"]
+    if not open_:
+        emit("FC-E33", "pass", "good")
+        return
+    # Only the type and the place are taken from each alert. The request asks
+    # GitHub to leave the value out (hide_secret), and its `secret` field,
+    # should one come back, is never read into a message.
+    named = [f"{a.get('secret_type_display_name') or a.get('secret_type') or 'a secret'} "
+             f"{alert_place(repo, a.get('number'), network)}" for a in open_[:10]]
+    more = f"; {len(open_) - 10} more" if len(open_) > 10 else ""
+    emit("FC-E33", "warn", "open", {"count": len(open_), "where": "; ".join(named) + more})
+    emit("FC-E33", "info", "list", {"repo": repo})
+
+
+def check_registry_secrets(root: Path, repo: str, network: bool, actions_token: bool) -> None:
+    """Secrets named like a registry token while release.yml publishes through
+    OIDC (#1118): names only, from the repository and each environment; a
+    value is never read (GitHub returns none). Experimental, a WARN at most:
+    the names are a guess at what a secret holds."""
+    rel = root / RELEASE_WORKFLOW
+    text = read(rel) if rel.is_file() else ""
+    names = [n for publish, n in OIDC_REGISTRIES if publish.search(text)]
+    if not (re.search(r"id-token:\s*write", text) and names):
+        return
+
+    def listed(got) -> bool:
+        """A whole list of secrets: more than one page is not read, so not listed."""
+        return (isinstance(got, dict) and isinstance(got.get("secrets"), list)
+                and not (isinstance(got.get("total_count"), int) and got["total_count"] > len(got["secrets"])))
+
+    repo_secrets = api(f"repos/{repo}/actions/secrets?per_page=100", network)
+    if not listed(repo_secrets):
+        unread("FC-E34", actions_token, {"what": "the repository's secrets were not listed", "permission": "Secrets"},
+               "the secret names not read")
+        return
+    found = [(s.get("name"), None) for s in repo_secrets["secrets"] if isinstance(s, dict)]
+    envs = api(f"repos/{repo}/environments?per_page=100", network)
+    if envs is ABSENT:
+        envs = {"environments": []}
+    if not isinstance(envs, dict) or not isinstance(envs.get("environments"), list) or (
+            isinstance(envs.get("total_count"), int) and envs["total_count"] > len(envs["environments"])):
+        unread("FC-E34", actions_token, {"what": "the environments were not listed", "permission": "Actions"},
+               "the environments not read")
+        return
+    for env in envs["environments"]:
+        name = env.get("name") if isinstance(env, dict) else None
+        got = api(f"repos/{repo}/environments/{name}/secrets?per_page=100", network) if name else None
+        if not listed(got) or not isinstance(got, dict):
+            unread("FC-E34", actions_token, {"what": f"environment {name}'s secrets were not listed",
+                                             "permission": "Environments"}, "an environment's secret names not read")
+            return
+        found += [(s.get("name"), name) for s in got["secrets"] if isinstance(s, dict)]
+    tokens = [(n, e) for n, e in found if isinstance(n, str) and any(r.search(n) for r in names)]
+    if not tokens:
+        emit("FC-E34", "pass", "good")
+        return
+    emit("FC-E34", "warn", "bad", {"names": ", ".join(f"{n} ({'environment ' + e if e else 'repository'})"
+                                                      for n, e in tokens)})
+    for n, e in tokens:
+        emit("FC-E34", "info", "hint", {"line": f"gh secret delete {n} --repo {repo}" + (f" --env {e}" if e else "")})
+
+
+def check_security_reads(root: Path, repo: str, network: bool, actions_token: bool) -> None:
+    """The admin reads of #1118, after the wall: alerts, security updates,
+    secret scanning and the registry token names."""
+    if not network and not os.environ.get("FLOOR_CHECK_API_DIR"):
+        return
+    meta = api(f"repos/{repo}", network)
+    if not isinstance(meta, dict):
+        return   # FC-E06 has said the repository was not read
+    hidden = hidden_security(repo, meta, network, actions_token)
+    check_dependabot_alerts(repo, meta, network, actions_token)
+    check_security_updates(repo, network, actions_token)
+    check_secret_scanning(repo, meta, network, actions_token, hidden)
+    check_registry_secrets(root, repo, network, actions_token)
+
+
 # The patterns that cover every `v*` tag: the door's, and the two wider ones.
 TAG_NAMESPACE = ("refs/tags/v*", "refs/tags/*", "~ALL")
 
@@ -5340,7 +5897,11 @@ def check_wall(repo: str, expected: list[str], merge_methods: set[str], policy: 
             check_merge_setup(branch, meta, "unread", actions_token)
         return
     if rules is ABSENT or not rules:
-        emit("FC-E12", "fail", "none", {"branch": branch})
+        due = wall_later()
+        if due:
+            emit("FC-E12", "info", "later", {"branch": branch, "due": due})
+        else:
+            emit("FC-E12", "fail", "none", {"branch": branch})
         if merge is not None:
             check_merge_setup(branch, meta, "no rules", actions_token)
         return
@@ -5729,6 +6290,20 @@ def check_plugins() -> None:
              reason="the marketplace's pins not read")
         return
 
+    # The Retired entries table of the marketplace copy's
+    # docs/reference/dependency-entries.md (#1229), for the release a removed
+    # entry left in and what replaced it. Best effort: unread, the WARN names
+    # neither.
+    retired: dict[str, tuple[str, str]] = {}
+    try:
+        for line in read(loc / "docs" / "reference" / "dependency-entries.md").splitlines():
+            m = re.match(r"^\| `([^`]+)` \| entry removed \| (v[0-9.]+) \| ([^|]*?) \|", line)
+            if m:
+                rep = re.fullmatch(r"`([^`]+)`", m.group(3).strip())
+                retired[m.group(1)] = (m.group(2), rep.group(1) if rep else "")
+    except OSError:
+        pass
+
     def pinned(name: str) -> tuple[str | None, str]:
         """What the entry pins and how an install is compared with it: a full
         commit, or plinth's version; (None, why) when it pins neither."""
@@ -5750,6 +6325,26 @@ def check_plugins() -> None:
         name, _, mkt = pid.rpartition("@")
         if mkt != "plinth" or not name:
             other.append(pid)
+            continue
+        if name not in entries and isinstance(installs, list) and installs:
+            # An entry the marketplace no longer lists (#1229): Claude Code
+            # keeps the install and reports it "not found in marketplace";
+            # with forceRemoveDeletedPlugins it uninstalls it at the next
+            # session start, and this names the command for one not yet.
+            left, replaced = retired.get(name, ("", ""))
+            for rec in installs:
+                rec = rec if isinstance(rec, dict) else {}
+                where = rec.get("scope") or "unknown scope"
+                if rec.get("projectPath"):
+                    where += f" in {rec['projectPath']}"
+                scope = rec.get("scope")
+                fix = f"claude plugin uninstall {pid}" + (f" --scope {scope}" if scope in ("user", "project", "local") else "")
+                if scope in ("project", "local"):
+                    path = rec.get("projectPath")
+                    fix = f"cd {shlex.quote(path)} && {fix}" if isinstance(path, str) and path else \
+                        f"{fix}, run from the project folder it was installed for"
+                key = "replaced" if left and replaced else "retired" if left else "gone"
+                emit("FC-G12", "warn", key, {"pid": pid, "where": where, "left": left, "replaced": replaced, "fix": fix})
             continue
         want, how = pinned(name)
         if not isinstance(installs, list) or not installs:
@@ -6219,6 +6814,9 @@ def main() -> int:
                          "gh accounts, git helpers, ~/.netrc; and a production database URL in the environment, "
                          ".env* files or the env of .claude/settings*.json")
     ap.add_argument("--print-conditional-archetypes", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--print-adoption", action="store_true",
+                    help="print .plinth-adoption.yml as JSON, in the shape of scripts/plinth-adoption.schema.json, and "
+                         "exit 0 (1, with the reason, when it is not read) (#1112)")
     ap.add_argument("--print-diff-size", action="store_true",
                     help="print what ci / diff-size counts against here, from the ci job's with: or plinth's defaults, "
                          "as max=, exclude= and root= lines, and exit 0 (1, with the reason, when not read) (#795)")
@@ -6279,6 +6877,8 @@ def main() -> int:
     root = Path(a.root).resolve()
     if a.move_archetype is not None and not a.print_update_command:
         ap.error("--move-archetype needs --print-update-command")
+    if a.print_adoption:
+        return print_adoption(root)
     if a.print_plinth_pins:
         return print_plinth_pins(root)
     if a.print_plinth_comments:
@@ -6319,6 +6919,7 @@ def main() -> int:
     if out_format == "text":
         print(f"floor check: root={root} project={project.relative_to(root) if project != root else '.'}"
               + (" host=gitlab" if host == "gitlab" else ""))
+    check_adoption(root)
     javascript = host == "github" and javascript_project(project, root)
     if javascript:
         emit("FC-C04", "info", "info")
@@ -6389,6 +6990,7 @@ def main() -> int:
                    None if a.archetype else archetype, (project / ".copier-answers.yml").relative_to(root).as_posix())
         check_actions_allowlist(root, a.repo, network, a.actions_token)
         check_actions_token(a.repo, network, a.actions_token)
+        check_security_reads(root, a.repo, network, a.actions_token)
         check_tag_ruleset(a.repo, archetype, network, a.actions_token, project)
         check_description(a.repo, network)
         check_labels(a.repo, network)

@@ -6,6 +6,10 @@
   "owner": {
     "name": "coolbress"
   },
+  "renames": {
+    "taste-skill": null
+  },
+  "forceRemoveDeletedPlugins": true,
   "plugins": [
     {
       "name": "plinth",

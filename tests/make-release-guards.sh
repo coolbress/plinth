@@ -90,6 +90,8 @@ cp "$root"/scripts/make-release.sh "$root"/scripts/new-project.sh "$root"/script
 mkdir -p "$repo/docs/reference"
 printf -- '- A decision being built. 2026-11-25, #1 (decided; not built yet: #1)\n' > "$repo/docs/reference/decisions-in-force.md"
 cp "$root"/scripts/lib/template-reads.sh "$repo/scripts/lib/"
+cp "$root"/scripts/retired-entries.py "$repo/scripts/"
+mkdir -p "$repo/docs/reference"; cp "$root"/docs/reference/dependency-entries.md "$repo/docs/reference/"
 # Nothing under Unreleased and two known fragments, whatever the real files
 # hold today (#1136): one lists Fixed before Added, and a name later in the
 # order holds the other Fixed entry, so the section's order is the script's.
@@ -387,6 +389,61 @@ is "  and nothing changed"         untouched
 is "  and the refusal says why"    says "not an annotated tag"
 untag
 is "no tag left on origin"         [ -z "$(git -C "$origin" tag -l)" ]
+
+echo "-- retired entries (#1229): a removed entry, a dropped or added dependency, named in the release"
+# The release before (tagged) lists old-tool as an entry and depends on it, and
+# depends on kept-tool, whose entry stays; this commit removes old-tool, drops
+# the kept-tool dependency and adds new-dep.
+retire_before="$(g rev-parse HEAD)"
+manifests() { # <old|new>: the two manifests of the release before, or of this commit
+  python3 - "$repo/.claude-plugin" "$1" <<'PY'
+import json, pathlib, sys
+d, which = pathlib.Path(sys.argv[1]), sys.argv[2]
+m, p = json.loads((d / "marketplace.json").read_text()), json.loads((d / "plugin.json").read_text())
+entry = lambda n: {"name": n, "description": n, "source": "./"}
+if which == "old":
+    m["plugins"] += [entry("old-tool"), entry("kept-tool")]
+    p["dependencies"] += ["old-tool", "kept-tool"]
+else:
+    m["plugins"] = [e for e in m["plugins"] if e["name"] != "old-tool"]
+    p["dependencies"] = [x for x in p["dependencies"] if x not in ("old-tool", "kept-tool")] + ["new-dep"]
+(d / "marketplace.json").write_text(json.dumps(m, indent=2) + "\n")
+(d / "plugin.json").write_text(json.dumps(p, indent=2) + "\n")
+PY
+}
+manifests old; g commit -q -am "the release before: old-tool and kept-tool"; g push -q origin main
+tag_aged $(( 8 * day ))
+manifests new; g commit -q -am "remove old-tool, drop kept-tool, add new-dep"; g push -q origin main
+run "v$next" "$work/why.md";       check "a removed entry, a dropped and an added dependency, none said, are refused" no $?
+is "  and nothing changed"         untouched
+is "  and the removed entry's missing row is named" says "entry old-tool was removed, and the Retired entries table has no 'entry removed' row"
+is "  and its missing renames key" says "entry old-tool was removed, and marketplace.json's renames does not map it to null"
+is "  and its missing command"     says "the release section does not name \`claude plugin uninstall old-tool@plinth\`"
+is "  and the dropped dependency's missing prune" says "dependency kept-tool was dropped, and the release section does not name \`claude plugin prune\`"
+is "  and the added dependency, unnamed" says "dependency new-dep was added, and the release section does not name it"
+# The table rows and the renames key, as the page says; the why still silent.
+python3 - "$repo" <<'PY'
+import json, pathlib, sys
+r = pathlib.Path(sys.argv[1]); m = r / ".claude-plugin/marketplace.json"; d = json.loads(m.read_text())
+d.setdefault("renames", {})["old-tool"] = None; m.write_text(json.dumps(d, indent=2) + "\n")
+doc = r / "docs/reference/dependency-entries.md"
+doc.write_text(doc.read_text() + "| `old-tool` | entry removed | v9.9.9 | - | #1 | `claude plugin uninstall old-tool@plinth` |\n"
+               "| `kept-tool` | dependency dropped | v9.9.9 | - | #1 | `claude plugin prune` |\n")
+PY
+g commit -q -am "rows and renames for old-tool and kept-tool"; g push -q origin main
+run "v$next" "$work/why.md";       check "with the rows and the renames key, a release that names no command is still refused" no $?
+is "  and nothing changed"         untouched
+is "  and the rows are no longer named" not says "Retired entries table has no"
+is "  and the uninstall command still is" says "claude plugin uninstall old-tool@plinth"
+printf 'A reason, with new-dep in it.\n\nRun `claude plugin uninstall old-tool@plinth`\nonce, then `claude plugin prune`.\n\ntested with %s\n' "$template" > "$work/retired.md"
+run "v$next" "$work/retired.md";   check "with the commands and new-dep named, across a line break, it bumps" ok $?
+is "  and says what changed"       says "removed old-tool; dropped kept-tool; added new-dep"
+undo_bump
+untag; g reset -q --hard "$retire_before"; g push -q -f origin main
+tag_aged $(( 8 * day ))
+run "v$next" "$work/why.md";       check "with nothing removed, dropped or added since the release before, nothing is asked" ok $?
+is "  and says nothing of it"      not says "entries and dependencies since"
+undo_bump; untag
 
 echo "-- bump"
 run "v${current%%.*}.0.0" "$work/why.md"; check "a version not above the current one is refused" no $?
