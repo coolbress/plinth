@@ -299,6 +299,21 @@ d="$(fresh)"; pages "$d"; verdict "$d" AUDIT=failure
 if has "$d/summary" "not yet confirmed: the pages' audit. Why: the audit did not finish (its log says why)" && ! has "$d/summary" "pass:"; then
   ok "an audit that crashed: not yet confirmed, never a pass"
 else bad "audit crashed" "$(cat "$d/summary" "$d/stdout")"; fi
+# An audit that failed after writing a report (review on #1256): the gate
+# still judges what was written, and the Verdict names it.
+d="$(fresh)"; pages "$d"; lhr "$d/web-audit/0.lhr.json" 1
+cp "$fx/serious.axe.json" "$d/web-audit/0.axe.json"
+OUT="$d/web-audit" bash "$tmp/gate.sh" > "$d/gate.log" 2>&1; echo $? > "$d/gate.rc"
+verdict "$d" AUDIT=failure "GATE=$([ "$(cat "$d/gate.rc")" = 0 ] && echo success || echo failure)"
+if [ "$(cat "$d/gate.rc")" = 1 ] && has "$d/summary" "not yet confirmed: the pages' audit. Why: the audit did not finish" \
+   && has "$d/summary" "fail: no critical or serious violation of the WCAG 2.2 A and AA rules on / (logged in): axe-core found 2" \
+   && has "$d/summary" "not yet confirmed: axe-core on /accounts/login/ (not logged in). Why: it wrote no report" \
+   && has "$d/stdout" "::error title=ci / web-audit::"; then
+  ok "an audit that failed after a report with a serious violation: the gate fails on it, the Verdict names it, the page without one is not confirmed"
+else bad "partial audit" "$(cat "$d/gate.log" "$d/summary" "$d/stdout")"; fi
+if grep -qF "if: inputs.web && (steps.audit.outcome == 'success' || steps.audit.outcome == 'failure')" "$wf"; then
+  ok "  and the gate step runs after a failed audit, not only a finished one"
+else bad "the gate's if: still skips a failed audit"; fi
 
 d="$(fresh)"; pages "$d"; verdict "$d"
 if has "$d/summary" "not yet confirmed: Lighthouse's scores for / (logged in). Why: it wrote no report" \

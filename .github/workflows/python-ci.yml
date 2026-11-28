@@ -3290,7 +3290,9 @@ jobs:
       # not finish is the Verdict's `not yet confirmed`, not a failure here.
       - name: Critical or serious accessibility violations (axe-core, WCAG 2.2 A and AA)
         id: gate
-        if: inputs.web && steps.audit.outcome == 'success'
+        # After an audit that failed too: a report it wrote before failing is
+        # judged, and a page without one fails nothing (review on #1256).
+        if: inputs.web && (steps.audit.outcome == 'success' || steps.audit.outcome == 'failure')
         working-directory: .
         env:
           OUT: ${{ runner.temp }}/web-audit
@@ -3379,6 +3381,11 @@ jobs:
                                       ("Lighthouse CI and axe-core", "TOOLS")) if env[k] != "success"]
               if broke:
                   stop = " and ".join(broke) + " did not install (the step's log says why)"
+              elif env["AUDIT"] == "failure" and isinstance(load("pages.json"), list):
+                  # The reports it wrote before it failed are judged below, as
+                  # the gate judged them; a page without one is not confirmed.
+                  lines.append(f"not yet confirmed: {STD}. Why: the audit did not finish (its log says why); "
+                               "the pages it reported on are judged below. What confirms it: a run that gets past it.")
               elif env["AUDIT"] != "success":
                   stop = ran("the audit", env["AUDIT"])
           pages = load("pages.json") if not stop else None
