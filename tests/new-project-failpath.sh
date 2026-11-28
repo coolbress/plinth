@@ -26,7 +26,9 @@ cat > "$work/bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 set -u
 printf 'gh %s\n' "$*" >> "$GH_LOG"
-answer_qs() { [ "${MOCK_NO_ANSWER_Q:-0}" = 1 ] || printf 'description:\n  type: str\nrecords_language:\n  type: str\n  default: English\ncustom_user_model:\n  type: bool\n  default: false\n'; }
+answer_qs() { [ "${MOCK_NO_ANSWER_Q:-0}" = 1 ] || printf 'description:\n  type: str\nrecords_language:\n  type: str\n  default: English\ncustom_user_model:\n  type: bool\n  default: false\n'
+  # MOCK_SCHED_Q=1: a template that asks a cli's scheduled run (coolbress/plinth-template#363).
+  [ "${MOCK_SCHED_Q:-0}" != 1 ] || printf 'scheduled_run:\n  type: bool\n  default: false\n'; }
 all="$*"; step=other
 case "$all" in
   "auth status"*)                                step=auth ;;
@@ -307,6 +309,8 @@ esac
 for a in "$@"; do case "$a" in
   description=*|records_language=*) printf '%s: %s\n' "${a%%=*}" "${a#*=}" >> "$dst/.copier-answers.yml" ;;
   custom_user_model=true) [ "${MOCK_CUM_NORECORD:-0}" = 1 ] || printf 'custom_user_model: true\n' >> "$dst/.copier-answers.yml" ;;
+  # MOCK_SCHED_NORECORD=1 plays a template that took scheduled_run=true and dropped it.
+  scheduled_run=true) [ "${MOCK_SCHED_NORECORD:-0}" = 1 ] || printf 'scheduled_run: true\n' >> "$dst/.copier-answers.yml" ;;
 esac; done
 case " $* " in *" code_of_conduct=true "*)
   if [ "${MOCK_COC_NORENDER:-0}" != 1 ] && [[ " $* " != *" owner_has_code_of_conduct=true "* ]]; then
@@ -958,9 +962,7 @@ run answers ok yes no "(public, MIT, cli, records in Korean, as owner)" -- probe
 if grep -qF -- '--data description=매일 아침 날씨를 모으는 도구 --data records_language=Korean --vcs-ref' "$work/home-answers/calls.log"
 then ok answers "the description and the records language are passed to copier as given"
 else bad answers "copier did not get them as given"; grep '^uvx' "$work/home-answers/calls.log" | cut -c1-400 | sed 's/^/        /'; fi
-if ! grep -qE -- '--data (description|records_language|custom_user_model)=' "$work/home-none/calls.log"
-then ok answers-none "a run that gives neither passes no description, records language or user model"
-else bad answers-none "an answer was passed that was not given"; fi
+# answers-none and cum-not-web-none read the plain run, `none`, below, once it has run.
 run lang-english ok yes no "(public, MIT, cli, as owner)" -- probe --records-language=English
 grep -qF -- '--data records_language=English' "$work/home-lang-english/calls.log" \
   && ok lang-english "English said out loud is passed, and the summary says nothing more" || bad lang-english "--records-language=English did not reach copier"
@@ -988,10 +990,8 @@ run cum-said ok yes no "its own user model" -- probe --archetype=web --custom-us
 run cum-no ok yes no "(public, MIT, web on Render, as owner)" -- probe --archetype=web --no-custom-user-model
 if ! grep -qF -- 'custom_user_model' "$work/home-cum-no/calls.log"
 then ok cum-no "--no-custom-user-model passes no answer: Django's auth.User, as before"; else bad cum-no "an answer was passed"; fi
-for c in none answers; do
-  if ! grep -qF -- 'custom_user_model' "$work/home-$c/calls.log"; then ok "cum-not-web-$c" "a cli run passes no custom_user_model answer"
-  else bad "cum-not-web-$c" "a cli run passed custom_user_model"; fi
-done
+if ! grep -qF -- 'custom_user_model' "$work/home-answers/calls.log"; then ok "cum-not-web-answers" "a cli run passes no custom_user_model answer"
+else bad "cum-not-web-answers" "a cli run passed custom_user_model"; fi
 run cum-cli err no no "--custom-user-model and --no-custom-user-model are for --archetype=web only" -- probe --custom-user-model
 run cum-both err no no "--custom-user-model and --no-custom-user-model: choose one" -- probe --archetype=web --custom-user-model --no-custom-user-model
 E="MOCK_CUM_NORECORD=1" run cum-dropped err no no "did not record custom_user_model: true" -- probe --archetype=web
@@ -1002,6 +1002,32 @@ E="MOCK_CHOICES=garbage" run cum-unread ok yes no "its own user model" -- probe 
 grep -qF -- '--data custom_user_model=true' "$work/home-cum-unread/calls.log" \
   && ok cum-unread "an unread copier.yml still passes the user model" || bad cum-unread "no custom_user_model answer with copier.yml unread"
 E="MOCK_CHOICES=garbage MOCK_CUM_NORECORD=1" run cum-unread-dropped err no no "did not record custom_user_model: true" -- probe --archetype=web
+
+echo "a cli that runs on GitHub on a schedule (#1070, coolbress/plinth-template#363)"
+E="MOCK_SCHED_Q=1" run sched-on ok yes no "(public, MIT, cli, run on GitHub on a schedule, as owner)" -- probe --scheduled-run
+if grep -qF -- '--data scheduled_run=true --vcs-ref' "$work/home-sched-on/calls.log" \
+   && grep -qF 'where it runs: on GitHub every day at 06:17 UTC and by hand (Actions > Scheduled run > Run workflow), even while this computer is off' "$work/home-sched-on/out"
+then ok sched-on "--scheduled-run reaches copier, and the closing lines say where it runs and where its results are"
+else bad sched-on "the answer or the closing line is missing"; grep -E '^uvx' "$work/home-sched-on/calls.log" | cut -c1-400 | sed 's/^/        /'; fi
+E="MOCK_SCHED_Q=1" run sched-no ok yes no "(public, MIT, cli, as owner)" -- probe --no-scheduled-run
+# No flag, with a template that asks it: the default, no answer passed.
+E="MOCK_SCHED_Q=1" run sched-default ok yes no "(public, MIT, cli, as owner)" -- probe
+for c in sched-no sched-default; do
+  [ -f "$work/home-$c/calls.log" ] && [ -f "$work/home-$c/out" ] || { bad "sched-off-$c" "the case $c has not run: nothing to read"; continue; }
+  if ! grep -qF -- 'scheduled_run' "$work/home-$c/calls.log" && ! grep -qF 'where it runs:' "$work/home-$c/out"
+  then ok "sched-off-$c" "a cli without --scheduled-run passes no answer and says nothing about a schedule: the template's default, on this computer"
+  else bad "sched-off-$c" "a scheduled_run answer or a where-it-runs line appeared"; fi
+done
+run sched-not-cli err no no "--scheduled-run and --no-scheduled-run are for --archetype=cli only" -- probe --archetype=library --scheduled-run
+run sched-no-not-cli err no no "--scheduled-run and --no-scheduled-run are for --archetype=cli only" -- probe --archetype=web --no-scheduled-run
+run sched-both err no no "--scheduled-run and --no-scheduled-run: choose one" -- probe --scheduled-run --no-scheduled-run
+# The pinned template before coolbress/plinth-template#363 does not ask it:
+# the answer would be dropped, so the run stops before anything exists.
+run sched-old-template err no no "does not ask scheduled_run, so --scheduled-run would be dropped; nothing was created" -- probe --scheduled-run
+E="MOCK_SCHED_Q=1 MOCK_SCHED_NORECORD=1" run sched-dropped err no no "did not record scheduled_run: true" -- probe --scheduled-run
+# copier.yml unread: the answer goes anyway, and the render's answers file decides.
+E="MOCK_CHOICES=garbage" run sched-unread ok yes no "run on GitHub on a schedule" -- probe --scheduled-run
+E="MOCK_CHOICES=garbage MOCK_SCHED_NORECORD=1" run sched-unread-dropped err no no "did not record scheduled_run: true" -- probe --scheduled-run
 
 echo "where a web app runs (#677)"
 # A template without the questions (v1.26.0) renders for Render whatever it
@@ -1246,6 +1272,15 @@ E="FAIL_AT=ruleset MOCK_DELETE_FAILS=1" run delete-fails err yes yes "ROLLBACK F
 echo "success: nothing is deleted, and the order is baseline, wall, first pull request"
 run none ok yes no "first pull request: https://github.com/tester/probe/pull/1" -- probe
 log="$work/home-none/calls.log"; proj="$work/home-none/probe"
+# What a run that gives no answer passes (#1068, #1092). Read here, after the
+# run: read before it, the negated greps passed on a file that did not exist.
+if [ ! -s "$log" ]; then bad answers-none "the none run left no calls log to read"
+elif ! grep -qE -- '--data (description|records_language|custom_user_model)=' "$log"
+then ok answers-none "a run that gives neither passes no description, records language or user model"
+else bad answers-none "an answer was passed that was not given"; fi
+if [ ! -s "$log" ]; then bad cum-not-web-none "the none run left no calls log to read"
+elif ! grep -qF -- 'custom_user_model' "$log"; then ok cum-not-web-none "a cli run passes no custom_user_model answer"
+else bad cum-not-web-none "a cli run passed custom_user_model"; fi
 check() { if eval "$2"; then ok none "$1"; else bad none "$1"; fi; }
 check "main is pushed before the rulesets, the first ruleset before the merge one, then the tag one (cli), the pull request after them" \
   '[ "$(grep -E "push -q -u origin main|/rulesets|^gh pr create" "$log" | grep -v "/rulesets/[0-9]" | sed -E "s/^git .*push.*/main/; s/.*rulesets.*ruleset-merge.json.*/merge/; s/.*rulesets.*ruleset-tags.json.*/tags/; s/.*rulesets.*/ruleset/; s/^gh pr create.*/pr/" | tr "\n" " ")" = "main ruleset merge tags pr " ]'
@@ -1926,6 +1961,15 @@ else bad gl-desc "the GitLab door did not pass them as given"; grep -E '^uvx|POS
 E="LC_ALL=C" gl_run gl-desc-long err no no "--description is one line of at most 350 characters (got 400)" -- probe --host gitlab "--description=$ko400"
 gl_run gl-lang-code err no no "--records-language= takes a language named in English" -- probe --host gitlab --records-language=ko
 gl_run gl-cum err no no "--custom-user-model is for --archetype=web, which is made on GitHub only" -- probe --host gitlab --custom-user-model
+# A cli's scheduled run is GitHub only (#1070): refused before anything is
+# read; saying no to it is what GitLab gets, for a cli only.
+gl_run gl-sched err no no "--scheduled-run is for GitHub only: the scheduled run is a GitHub Actions workflow, and a GitLab pipeline schedule was not tried" -- probe --host gitlab --scheduled-run
+gl_run gl-no-sched ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- probe --host gitlab --no-scheduled-run
+if ! grep -qF -- 'scheduled_run' "$work/home-gl-no-sched/calls.log"; then ok gl-no-sched "--no-scheduled-run passes no answer on GitLab"
+else bad gl-no-sched "a scheduled_run answer reached copier on GitLab"; fi
+gl_run gl-no-sched-lib err no no "--no-scheduled-run is for --archetype=cli only" -- probe --host gitlab --archetype=library --no-scheduled-run
+if ! grep -q '^glab ' "$work/home-gl-sched/calls.log" "$work/home-gl-no-sched-lib/calls.log"
+then ok gl-sched-refused "the refusals stop before any glab call"; else bad gl-sched-refused "glab was called before the refusal"; fi
 if ! grep -q '^glab ' "$work/home-gl-desc-long/calls.log" "$work/home-gl-lang-code/calls.log" "$work/home-gl-cum/calls.log"
 then ok gl-answers-refused "a refused answer stops before any glab call"; else bad gl-answers-refused "glab was called before the refusal"; fi
 # The pairs the GitHub door refuses, on GitLab (#960). --private with --public
@@ -2271,6 +2315,21 @@ for phrase in 'With `--host` in the arguments the host is not asked' \
   if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-order "the skill says \"$phrase\""
   else bad skill-order "the skill does not say \"$phrase\""; fi
 done
+# A cli's scheduled run (#1070): a schedule word with the computer off
+# recommends it, "run it on my machine" recommends cli without it, and the
+# prerequisites line says where the results are and the 60-day rule.
+for phrase in 'says the computer is off ("even when my laptop is off", "while I sleep") recommends `cli` with `--scheduled-run`' \
+              '"run it on my machine" or "on my computer" recommends `cli` with `--no-scheduled-run`' \
+              'asks header `Schedule`: "Should it keep running on GitHub while your computer is off?"' \
+              'On GitLab.com it is not asked: say it runs on the computer only' \
+              'The results are a download under Artifacts on each run'"'"'s page, kept 90 days; in a public repository GitHub turns the schedule off after 60 days with no activity' \
+              '`--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub |' \
+              'When the table'"'"'s check stops with "does not ask scheduled_run", the plinth installed renders a template from before the scheduled run'; do
+  if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-schedule "the skill says \"$phrase\""
+  else bad skill-schedule "the skill does not say \"$phrase\""; fi
+done
+if grep -qE '^\| cli, on a schedule \| .+ \| .+ \|$' "$questions"; then ok skill-schedule "the makes table has a row for a cli on a schedule"
+else bad skill-schedule "the makes table has no row for a cli on a schedule"; fi
 # The archetype step's makes / does-not-make table names every kind.
 for k in cli library backend data-ml web dashboard; do
   if grep -qE "^\| $k \| .+ \| .+ \|$" "$questions"; then ok skill-order "the makes table has a row for $k"

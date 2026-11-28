@@ -613,10 +613,12 @@ then ok "a line the template's side already holds as often is not counted as kep
 else bad "helper, where with a count"; fi
 
 # Round 2 of the review on #1224, each as the reviewer reproduced it.
-hc() { # <name> <file name> <ours> <theirs> <old> [<head>]: combine; sets $hout and $hrep
+hc() { # <name> <file name> <ours> <theirs> <old> [<head>] [<the base's head>]: combine; sets $hout and $hrep
+  # <the base's head>: what the base and the old render had above the block,
+  # when the template changed it cleanly (the file now holds <head> there).
   local d="$hx/$1"; mkdir -p "$d"
   { printf '%b' "${6:-}"; echo "<<<<<<< before updating"; printf '%b' "$3"; echo "======="; printf '%b' "$4"; echo ">>>>>>> after updating"; } > "$d/$2"
-  printf '%b%b' "${6:-}" "$3" > "$d/base"; printf '%b%b' "${6:-}" "$5" > "$d/old"
+  printf '%b%b' "${7-${6:-}}" "$3" > "$d/base"; printf '%b%b' "${7-${6:-}}" "$5" > "$d/old"
   python3 "$combine_py" combine "$d/$2" "$d/base" "$d/old" "$d/out/$2" > "$d/report"
   hout="$(cat "$d/out/$2" 2>/dev/null)"; hrep="$(cat "$d/report")"
 }
@@ -630,6 +632,18 @@ hc scope a.toml '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\n' '[tool.a]\nti
 if [ "$hout" = "$(printf '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 20')" ] && grep -qF 'replaces timeout = 30' <<<"$hrep"
 then ok "a line the template's side holds under another table is not counted as kept: [tool.b]'s value stays the project's"
 else bad "helper, kept within its scope"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+# A header the template renamed cleanly, outside the block (review on #1234):
+# the project's line is read in the base's table, where it was added.
+keys='k1 = 1\nk2 = 2\nk3 = 3\nk4 = 4\nk5 = 5\nk6 = 6\nk7 = 7\nk8 = 8\nk9 = 9\nk10 = 10\n'
+hc renamed a.toml 'timeout = 20\n' 'timeout = 30\n' 'timeout = 10\n' "[tool.b]\n$keys" "[tool.a]\n$keys"
+if [ "$hout" = "$(printf "[tool.b]\n${keys}timeout = 20")" ] && grep -qF 'replaces timeout = 30' <<<"$hrep"
+then ok "a table the template renamed outside the block: the project's timeout is still its own, and replaces the template's"
+else bad "helper, a header changed cleanly"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+# An unnamed step whose command continues on the next line (review on #1234).
+hc runstep ci.yml '      - run: |\n          pytest --custom\n' '      - run: |\n          pytest -q\n' '      - run: |\n          pytest\n' 'jobs:\n  t:\n    steps:\n'
+if [ "$hout" = "$(printf 'jobs:\n  t:\n    steps:\n      - run: |\n          pytest --custom')" ] && grep -qF 'replaces - run: |' <<<"$hrep"
+then ok "a step matched by its first line whose command changed below it is replaced, not run twice"
+else bad "helper, a step's continuation"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
 hc order build.sh 'set -eu\nmkdir -p build\ncd build\nmake\n' 'set -eu\nmake -j4\n' 'set -eu\nmake\n'
 if [ "$hout" = "$(printf 'set -eu\nmkdir -p build\ncd build\nmake -j4')" ]
 then ok "consecutive additions after one shared line keep their order"
@@ -642,6 +656,52 @@ hc tabs t.toml 'timeout = 20\n' 'timeout\t=\t30\n' 'timeout = 10\n'
 if [ "$(cut -f3 <<<"$hrep")" = 0 ] && [ "$(cut -f4- <<<"$hrep")" = "timeout = 20" ] && grep -qF 'replaces timeout\t=\t30' <<<"$hrep"
 then ok "a template line with tabs in the placement is shown with \\t, and the fields stay in place"
 else bad "helper, tabs in the placement"; printf '%s\n' "$hrep" | cat -t | sed 's/^/        /'; fi
+
+# #1233: the four shapes round 4 of the review on #1224 reproduced.
+hc comment t.toml '# Keep this timeout for slow tests\ntimeout = 10\n' 'timeout = 30\n' 'timeout = 10\n' '[tool.x]\n'
+if [ "$hout" = "$(printf '[tool.x]\n# Keep this timeout for slow tests\ntimeout = 30')" ]
+then ok "a comment added above an unchanged key is kept above the template's line, with one assignment, the template's"
+else bad "helper, a comment-only addition"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc provenance s.toml '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 20\nmode = "custom"\n' \
+  '[tool.a]\ntimeout = 30\n[tool.b]\ntimeout = 30\nmode = "new"\n' '[tool.a]\ntimeout = 10\n[tool.b]\ntimeout = 20\nmode = "old"\n'
+if [ "$hout" = "$(printf '[tool.a]\ntimeout = 20\n[tool.b]\ntimeout = 30\nmode = "custom"')" ]
+then ok "a line is this repository's only in the scope it changed it: [tool.b]'s timeout takes the template's change"
+else bad "helper, added with its scope"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc anchor n.toml '[tool.a]\nmode = "mine"\nenabled = true\n[tool.b]\nenabled = true\ncustom = 42\ntimeout = 1\n' \
+  '[tool.a]\nmode = "tpl"\nenabled = true\n[tool.b]\nenabled = true\ntimeout = 2\n' \
+  '[tool.a]\nmode = "x"\nenabled = true\n[tool.b]\nenabled = true\ntimeout = 1\n'
+if [ "$hout" = "$(printf '[tool.a]\nmode = "mine"\nenabled = true\n[tool.b]\nenabled = true\ncustom = 42\ntimeout = 2')" ]
+then ok "a line goes after its own neighbour, in its own table, not the first line with the same text"
+else bad "helper, anchors by scope"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc entries r.toml '[[tool.sources]]\nname = "mine"\nurl = "a"\n[[tool.sources]]\nname = "two"\nurl = "custom"\n' \
+  '[[tool.sources]]\nname = "tpl1"\nurl = "a2"\n[[tool.sources]]\nname = "two"\nurl = "b2"\n' \
+  '[[tool.sources]]\nname = "one"\nurl = "a"\n[[tool.sources]]\nname = "two"\nurl = "b"\n'
+if [ "$hout" = "$(printf '[[tool.sources]]\nname = "mine"\nurl = "a2"\n[[tool.sources]]\nname = "two"\nurl = "custom"')" ]
+then ok "each [[table]] entry is its own scope: the second entry's url stays there"
+else bad "helper, array-of-tables entries"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+# The fresh-context review of #1233: a comment above a step goes above that
+# step, not the first `- name:`; an entry the template's added entry shifts is
+# left for the person, never put in another entry.
+hc stepcomment ci.yml '      - name: Setup\n        run: echo setup\n      # runs the tests\n      - name: Test\n        run: pytest\n' \
+  '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest -q\n' \
+  '      - name: Setup\n        run: echo setup\n      - name: Test\n        run: pytest\n' 'jobs:\n  t:\n    steps:\n'
+if [ "$hout" = "$(printf 'jobs:\n  t:\n    steps:\n      - name: Setup\n        run: echo setup\n      # runs the tests\n      - name: Test\n        run: pytest -q')" ]
+then ok "a comment above a YAML step goes above that step, once"
+else bad "helper, a comment above a step"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+hc shifted e.toml '[[s]]\nname = "one"\nurl = "a"\n[[s]]\nname = "two"\nurl = "custom"\n' \
+  '[[s]]\nname = "new"\nurl = "n"\n[[s]]\nname = "one"\nurl = "a"\n[[s]]\nname = "two"\nurl = "b"\n' \
+  '[[s]]\nname = "one"\nurl = "a"\n[[s]]\nname = "two"\nurl = "b"\n'
+if grep -qxF $'risk\tno old place\t0\turl = "custom"' <<<"$hrep" && ! grep -q 'replaces' <<<"$hrep" \
+   && [ "$(grep -c '^url = "custom"' <<<"$hout")" = 1 ] && grep -qxF 'url = "a"' <<<"$hout"
+then ok "an entry the template's added [[table]] entry shifts is left for the person: no line is put in another entry"
+else bad "helper, a shifted [[table]] entry"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+# A TOML combination that does not parse is said: here the project's `b`
+# has no old place and lands beside the head's own `b` (#1233).
+hc parse d.toml 'a = 2\nb = 1\n' 'a = 3\n' 'a = 2\n' '[x]\nb = 0\n'
+if grep -q $'^invalid\tTOML: ' <<<"$hrep"
+then ok "a TOML combination that does not parse says so"
+else bad "helper, an invalid TOML combination"; printf '%s\n%s\n' "$hout" "$hrep" | sed 's/^/        /'; fi
+
 
 
 # ── the base must be the verified default branch ────────────────────────
@@ -665,7 +725,8 @@ else bad "unverified base (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /';
 cat > "$work/bin/glab" <<'MOCK'
 #!/usr/bin/env bash
 set -u
-printf 'glab %s\n' "$*" >> "$GLAB_LOG"
+# The API host glab was told apart from --hostname (#1152), when there is one.
+printf 'glab %s%s\n' "${GITLAB_API_HOST:+[api-host=$GITLAB_API_HOST] }" "$*" >> "$GLAB_LOG"
 [ "${1:-}" = api ] || { echo "mock glab: unexpected: $*" >&2; exit 1; }
 shift; method=GET; input=""; host=""; path=""
 while [ $# -gt 0 ]; do
@@ -678,6 +739,8 @@ while [ $# -gt 0 ]; do
     *)             path="$1"; shift ;;
   esac
 done
+# As glab 1.122.0 answers a port in --hostname (measured for #1152).
+case "$host" in *:*) echo "Error parsing --hostname: invalid hostname." >&2; exit 1 ;; esac
 [ "$host" = "${MOCK_GL_HOST:-gitlab.com}" ] || { echo "mock glab: no project on host '$host'" >&2; exit 1; }
 case "$method $path" in
   "GET projects/o%2Fr")
@@ -714,8 +777,9 @@ gl_fixture() { # <name> [<tag> <archetype>]
   printf 'include:\n  - remote: %s\n    integrity: %s\n' "$gl_include" "$gl_int" > "$repo/.gitlab-ci.yml"
   mkdir -p "$repo/.gitlab/merge_request_templates"; printf '## What and why\n' > "$repo/.gitlab/merge_request_templates/Default.md"
   git -C "$repo" add -A && git -C "$repo" commit -q -m "on GitLab" && git -C "$repo" push -q origin main
-  git -C "$repo" remote set-url origin "https://${MOCK_GL_HOST:-gitlab.com}/o/r.git"
-  git -C "$repo" config url."$BARE".insteadOf "https://${MOCK_GL_HOST:-gitlab.com}/o/r.git"
+  local url="${MOCK_GL_URL:-https://${MOCK_GL_HOST:-gitlab.com}/o/r.git}"
+  git -C "$repo" remote set-url origin "$url"
+  git -C "$repo" config url."$BARE".insteadOf "$url"
 }
 no_post() { ! grep -qE -- '-X (POST|PUT)' "$work/glab.log"; }
 
@@ -744,6 +808,27 @@ if [ "$rc" = 0 ] && grep -qF "api --hostname gitlab.example.com projects/o%2Fr" 
 then ok "GitLab: on a self-hosted gitlab.* origin, glab is asked that host"
 else bad "GitLab self-hosted (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
 unset MOCK_GL_HOST
+# A self-hosted GitLab on its own HTTPS port (#1152): glab refuses a port in
+# --hostname, so the port goes to it as GITLAB_API_HOST beside the bare host.
+# An ssh:// origin's port is the SSH server's: dropped.
+export MOCK_GL_HOST=gitlab.example.com MOCK_GL_URL=https://gitlab.example.com:8443/o/r.git
+gl_fixture gl-port; reset_logs; run
+if [ "$rc" = 0 ] && grep -qF "glab [api-host=gitlab.example.com:8443] api --hostname gitlab.example.com projects/o%2Fr" "$work/glab.log" \
+   && ! grep -q -- "--hostname [^ ]*:" "$work/glab.log"
+then ok "GitLab on https://<host>:8443: glab is asked --hostname <host> with GITLAB_API_HOST=<host>:8443"
+else bad "GitLab https port (rc=$rc)"; sed 's/^/        /' "$work/glab.log"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+gl_fixture gl-portmove "$target_ref" cli; reset_logs
+out="$(cd "$repo" && MOCK_GL_PIPELINE=off MOCK_GL_PROTECTED=none PATH="$work/bin:$PATH" GH_LOG="$work/gh.log" GLAB_LOG="$work/glab.log" UVX_LOG="$work/uvx.log" "$script" --archetype backend 2>&1)"; rc=$?
+if grep -qF "GITLAB_API_HOST=gitlab.example.com:8443 glab api --hostname gitlab.example.com -X PUT projects/o%2Fr" <<<"$out" \
+   && grep -qF "GITLAB_API_HOST=gitlab.example.com:8443 glab api --hostname gitlab.example.com -X POST projects/o%2Fr/protected_branches" <<<"$out"
+then ok "  and the commands printed for a Maintainer carry the same port"
+else bad "printed Maintainer commands on a port (rc=$rc)"; printf '%s\n' "$out" | grep -i glab | sed 's/^/        /'; fi
+export MOCK_GL_URL=ssh://git@gitlab.example.com:2222/o/r.git
+gl_fixture gl-sshport; reset_logs; run
+if [ "$rc" = 0 ] && grep -qF "glab api --hostname gitlab.example.com projects/o%2Fr" "$work/glab.log" && ! grep -qF "api-host=" "$work/glab.log"
+then ok "GitLab on ssh://<host>:2222: the SSH port is not the API's; glab is asked <host> alone"
+else bad "GitLab ssh port (rc=$rc)"; sed 's/^/        /' "$work/glab.log"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+unset MOCK_GL_URL MOCK_GL_HOST
 
 # The stop that is left: a checkout whose answers say GitLab, with an origin
 # whose URL names no GitLab project.
