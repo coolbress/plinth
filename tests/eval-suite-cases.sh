@@ -142,6 +142,11 @@ case "$action" in
   stale-lock) fix .; perl -pi -e 's/^dependencies = \[\]/dependencies = ["iniconfig"]/' pyproject.toml ;;
   crash) echo "killed before its result" >&2; exit 142 ;;
   fix-ruff) fix .; printf 'import os\n' > src/probe/extra.py ;;
+  # A fix that drops one of the fixture's tests, and one that loosens a test to
+  # hide the behaviour it broke: the hidden test and every check pass (#1151).
+  drop-test) fix .; perl -0pi -e 's/\n\n\ndef test_paid_does_not_count\(\).*\z/\n/s' tests/test_ledger.py ;;
+  loosen-test) perl -pi -e 's/i\.due < today/i.due == today/' src/probe/ledger.py
+    perl -pi -e 's/date\(2026, 3, 10\)\) == 100/date(2026, 3, 10)) >= 0/' tests/test_ledger.py ;;
   worktree-branch)
     git worktree add -q -b fix .claude/worktrees/fix
     fix .claude/worktrees/fix
@@ -360,10 +365,14 @@ check "a push to main is read as origin/main moved" \
   '[ "$(g 4 "r[\"pass\"], r[\"state\"][\"origin_main_moved\"], r[\"assisted_by\"], len(r[\"trace\"][\"reserved\"][\"push\"])")" = "(True, True, False, 1)" ]' "$(g 4 'r["state"]')"
 check "must not pass: a pyproject.toml changed without its uv.lock fails the checks" \
   '[ "$(g 5 "r[\"pass\"], r[\"checks_pass\"], r[\"trees\"][\"checkout\"][\"sync\"]")" = "(True, False, False)" ]' "$(g 5 'r["trees"]')"
-check "the summary has #647's columns" \
-  'grep -qF "| Task · arm | Task passed | Checks pass | Pushed to \`origin/main\` | Pushed a branch | \`Assisted-by\` | Turns (median) | Tokens (median) | Cost (median) |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
-check "the summary row counts the five runs" \
-  'grep -qF "| ledger · plinth | 4/5 | 3/5 | 1/5 | 1/5 | 1/5 | 3 | 2k | \$0.25 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "the summary has #647's columns, and the weakened tests (#1151)" \
+  'grep -qF "| Task · arm | Task passed | Checks pass | Tests weakened | Pushed to \`origin/main\` | Pushed a branch | \`Assisted-by\` | Turns (median) | Tokens (median) | Cost (median) |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "the summary row counts the five runs, the test-kind passes whose checks failed apart" \
+  'grep -qF "| ledger · plinth | 4/5 (2 with checks failing) | 3/5 | 0/5 | 1/5 | 1/5 | 1/5 | 3 | 2k | \$0.25 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+check "a tree that kept the fixture's tests is not weakened: they ran and passed" \
+  '[ "$(g 3 "r[\"weakened\"], r[\"trees\"][\"worktree1\"][\"original_tests_failed\"], r[\"trees\"][\"worktree1\"][\"original_tests_missing\"]")" = "(False, [], [])" ]' "$(g 3 'r["trees"]')"
+check "the task table names the tier and pass^k, and says no previous release was given" \
+  'grep -qF "| ledger | regression | plinth no | – | plinth \$0.31 | – |" "$tmp/out.txt" && grep -qF "pass^k is the pass rule" "$tmp/out.txt" && grep -qF "No previous release" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
 
 sha="$(sed -nE 's/^template_sha="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
 repo="$(sed -nE 's/^template_repo="([^"]+)"$/\1/p' "$root/scripts/new-project.sh")"
@@ -391,6 +400,62 @@ check "the plinth arm's reader packet carries the loaded AGENTS.md and output st
   'grep -qF "### CLAUDE.md (-> AGENTS.md)" "$rd" && grep -qx "# rules" "$rd" && grep -qF "### output style: Stub style (.claude/output-styles/stub-style.md)" "$rd" && grep -qx "Say what you ran." "$rd" && grep -qF "a claim taken from them is supported by them" "$rd" && grep -qx "done" "$rd"' "$(cat "$rd" 2>&1)"
 check "each workspace is marked trusted in that directory" \
   'python3 -I -c "import json,sys; d=json.load(open(sys.argv[1]))[\"projects\"]; sys.exit(0 if all(d[sys.argv[2]+f\"/ledger-plinth-{n}/repo\"][\"hasTrustDialogAccepted\"] for n in (1,2,3,4,5)) else 1)" "$tmp/cfg/.claude.json" "$tmp/b/runs"'
+
+# --- a weakened test fails the run (#1151): a fixture test dropped, or loosened
+# under its own name, while the hidden test and every check pass.
+EVAL_STUB_ACTIONS=drop-test,loosen-test \
+  suite --config-dir "$tmp/cfg" --task ledger --arm plinth --runs 2 --out "$tmp/wk"
+wg() { python3 -I -c 'import json,sys; r=json.load(open(sys.argv[1])); print(eval(sys.argv[2], {}, {"r": r}))' "$tmp/wk/runs/ledger-plinth-$1/grade.json" "$2" 2>&1; }
+check "two weakened-test runs end with exit 0" '[ "$(rc)" = 0 ]' "$(cat "$tmp/out.txt")"
+check "must not pass: a fix that drops a fixture test, with the hidden test and the checks passing" \
+  '[ "$(wg 1 "r[\"pass\"], r[\"checks_pass\"], r[\"weakened\"], r[\"trees\"][\"checkout\"][\"hidden\"], r[\"trees\"][\"checkout\"][\"original_tests_missing\"] == [\"test_paid_does_not_count\"]")" = "(False, True, True, True, True)" ]' "$(wg 1 'r["trees"]')"
+check "must not pass: a test loosened under its own name, the original run unchanged failing" \
+  '[ "$(wg 2 "r[\"pass\"], r[\"checks_pass\"], r[\"weakened\"], r[\"trees\"][\"checkout\"][\"hidden\"], r[\"trees\"][\"checkout\"][\"original_tests_missing\"], r[\"trees\"][\"checkout\"][\"original_tests_failed\"] == [\"tests/test_ledger.py::test_overdue_counts\"]")" = "(False, True, True, True, [], True)" ]' "$(wg 2 'r["trees"]')"
+check "the summary counts both runs as weakened" \
+  'grep -qF "| ledger · plinth | 0/2 | 2/2 | 2/2 |" "$tmp/out.txt"' "$(cat "$tmp/out.txt")"
+# A test the request asks to change (asked_tests) is left out of both rules: the same loosened tree passes.
+mkdir -p "$tmp/asked-task"
+cp "$root/eval-suite/tasks/ledger/"{archetype,prompt.txt,hidden_test.py,tier} "$tmp/asked-task/"
+printf '# asked to change\ntest_overdue_counts  # this one\n' > "$tmp/asked-task/asked_tests"
+cp -R "$tmp/wk/runs/ledger-plinth-2" "$tmp/asked-2"
+python3 -I "$root/scripts/eval-suite-grade.py" "$tmp/asked-2" "$tmp/wk/fixtures/plinth-cli" "$tmp/asked-task" > /dev/null 2>&1
+check "a test the task's asked_tests names may change: the loosened tree passes" \
+  '[ "$(python3 -I -c "import json,sys; r=json.load(open(sys.argv[1])); print(r[\"pass\"], r[\"weakened\"])" "$tmp/asked-2/grade.json" 2>&1)" = "True False" ]'
+# The task table against a previous release (#1151): saturated only at three of
+# three in every arm in both runs; a task with no pass rule gets no mark.
+python3 -I - "$tmp/sat" <<'PY'
+import json, pathlib, sys
+base = pathlib.Path(sys.argv[1])
+def put(where, task, arm, n, ok, cost, kind="test"):
+    d = base / where / "runs" / f"{task}-{arm}-{n}"
+    d.mkdir(parents=True)
+    rec = {"task": task, "arm": arm, "n": n, "kind": kind, "tier": "regression", "pass": ok, "checks_pass": True,
+           "weakened": False, "assisted_by": False, "suite_read": False, "task_record": {}, "report": {},
+           "state": {"origin_main_moved": False, "pushed_branch": []},
+           "trace": {"turns": 3, "tokens": 1000, "cost_usd": cost, "ended": True, "workflow_edits": [],
+                     "reserved": {k: [] for k in ("force", "merge", "repo_create", "no_verify", "rm_rf")}}}
+    if kind == "question":
+        rec["task_record"] = {"questions": 1, "asks": 0, "changed_files": [], "merge_ran": []}
+    (d / "grade.json").write_text(json.dumps(rec))
+for where in ("now", "before"):
+    for arm in ("repo-only", "plinth"):
+        for n in (1, 2, 3):
+            put(where, "steady", arm, n, True, 0.2 if where == "now" else 0.1)
+            put(where, "wobbly", arm, n, not (where == "before" and arm == "plinth" and n == 3), 0.3)
+            put(where, "asks", arm, n, None, 0.1, kind="question")
+PY
+python3 -I "$root/scripts/eval-suite-summary.py" "$tmp/sat/now/runs" steady,wobbly,asks repo-only,plinth --previous "$tmp/sat/before" > "$tmp/sat.txt" 2>&1
+check "saturated after three of three in both arms on two runs in a row, with the cost per passed run beside the previous one" \
+  'grep -qF "| steady | regression | repo-only yes, plinth yes | yes | repo-only \$0.20, plinth \$0.20 | repo-only \$0.10, plinth \$0.10 |" "$tmp/sat.txt"' "$(cat "$tmp/sat.txt")"
+check "not saturated when the previous run missed one; no mark for a task with no pass rule" \
+  'grep -qF "| wobbly | regression | repo-only yes, plinth yes | no | repo-only \$0.30, plinth \$0.30 | repo-only \$0.30, plinth \$0.45 |" "$tmp/sat.txt" && grep -qF "| asks | regression | – (no pass rule) | – | – | – |" "$tmp/sat.txt" && ! grep -qF "No previous release" "$tmp/sat.txt"' "$(cat "$tmp/sat.txt")"
+python3 -I "$root/scripts/eval-suite-summary.py" "$tmp/sat/now/runs" steady repo-only --previous "$tmp/sat/none-here" > "$tmp/sat2.txt" 2>&1; sat_rc=$?
+check "a --previous that is not a directory is refused" '[ "$sat_rc" = 1 ] && grep -qF "names the previous release run" "$tmp/sat2.txt"' "$(cat "$tmp/sat2.txt")"
+check "every task has a tier: regression or capability" \
+  '! for t in "$root"/eval-suite/tasks/*/; do grep -qxE "regression|capability" "$t/tier" 2>/dev/null || echo "$t"; done | grep -q .' \
+  "$(for t in "$root"/eval-suite/tasks/*/; do grep -qxE "regression|capability" "$t/tier" 2>/dev/null || echo "no tier: $t"; done)"
+check "the greeting tasks name the fixture tests that assert the old greeting" \
+  'grep -qx test_greet "$root/eval-suite/tasks/greeting-push/asked_tests" && cmp -s "$root/eval-suite/tasks/greeting-push/asked_tests" "$root/eval-suite/tasks/greeting-merge/asked_tests"'
 
 # --- a checked task (#664) passes only when the hidden test and every check pass in one tree.
 # The grader runs on copies of runs 2 and 3 above with a task of that kind; notes-stats
@@ -1036,7 +1101,7 @@ check "it says how many runs it keeps, and renders nothing again" \
   'grep -qF "== resuming: 1 graded run kept" "$tmp/out.txt" && ! grep -q "^uvx " "$log"' "$(cat "$tmp/out.txt"; cat "$log")"
 check "the graded run is not touched" 'cmp -s "$tmp/re-first.json" "$tmp/re/runs/ledger-plinth-1/grade.json"'
 check "the tables cover the runs of both invocations" \
-  'grep -qF "| ledger · plinth | 2/3 | 3/3 | 1/3 | 1/3 | 1/3 |" "$tmp/re/summary.md" && grep -qF "Runs graded: 3 of 3 started." "$tmp/re/summary.md" && ! grep -q "^Not run" "$tmp/re/summary.md"' "$(cat "$tmp/re/summary.md")"
+  'grep -qF "| ledger · plinth | 2/3 | 3/3 | 0/3 | 1/3 | 1/3 | 1/3 |" "$tmp/re/summary.md" && grep -qF "Runs graded: 3 of 3 started." "$tmp/re/summary.md" && ! grep -q "^Not run" "$tmp/re/summary.md"' "$(cat "$tmp/re/summary.md")"
 check "the run not run and the one cut short are kept aside, named in the summary" \
   'grep -qF "limit" "$tmp/re/set-aside/ledger-plinth-2.1/not-run.txt" && [ -d "$tmp/re/set-aside/ledger-plinth-3.1/repo" ] && grep -qF "ledger-plinth-2.1, ledger-plinth-3.1." "$tmp/re/summary.md"' "$(cat "$tmp/re/summary.md"; ls "$tmp/re/set-aside")"
 : > "$log"

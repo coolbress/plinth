@@ -8,12 +8,14 @@
 #
 #   scripts/eval-suite.sh [--config-dir DIR] [--ceiling USD] [--runs N]
 #                         [--task NAME]... [--arm NAME]... [--model NAME] [--out DIR]
-#                         [--keep-caches] [--smoke | --release]
+#                         [--keep-caches] [--previous DIR] [--smoke | --release]
 #
 # Arms: none (the render without AGENTS.md, CLAUDE.md and .claude/, plugins
 # off), repo-only (the render, plugins off), plinth (the render, plinth on).
 # Tasks: the directories under eval-suite/tasks/, run in the order below. A
-# task's `kind` file names how it is graded (eval-suite-grade.py); a task with
+# task's `kind` file names how it is graded (eval-suite-grade.py), and its `tier`
+# file whether it is a regression task (expected to pass every run, a miss is a
+# regression) or a capability task (a rate plinth should raise) (#1151); a task with
 # a gaps.json gets a fixture of its own, with those paths removed, and so does
 # one with a previous/ folder: its files, committed on top as the squash commit
 # of the merged pull request its issues.json names. A task with an issues.json
@@ -71,6 +73,11 @@
 # 3 when the ceiling or a run that did not really run stopped it, 0 otherwise;
 # the other rows' results are the table's, not the exit's.
 #
+# --previous DIR names the previous release run's --out. The summary's task
+# table then marks a task saturated (three of three in every arm, here and
+# there) and prints its cost per passed run beside that run's (#1151). It changes
+# nothing that runs, and a resume does not need it again.
+#
 # A session that did not really run (eval-suite-grade.py --not-run: the usage
 # limit, or an error on its first turn, or a cost of 0) is not graded: it gets a
 # not-run.txt with the reason it gave, is in no table, and the suite stops there,
@@ -111,7 +118,7 @@ session_timeout=900
 die() { echo "eval-suite: $*" >&2; exit 2; }
 usage() { sed -n '9,11p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
-cfg="" ceiling=10 runs=3 model=sonnet out="" tasks=() arms=() keep_caches="" smoke="" release="" runs_said="" model_said="" ceiling_said=""
+cfg="" ceiling=10 runs=3 model=sonnet out="" tasks=() arms=() keep_caches="" smoke="" release="" runs_said="" model_said="" ceiling_said="" previous=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --config-dir) [ $# -ge 2 ] || usage; cfg="$2"; shift 2 ;;
@@ -122,6 +129,7 @@ while [ $# -gt 0 ]; do
     --model)      [ $# -ge 2 ] || usage; model="$2"; model_said=1; shift 2 ;;
     --out)        [ $# -ge 2 ] || usage; out="$2"; shift 2 ;;
     --keep-caches) keep_caches=1; shift ;;
+    --previous)   [ $# -ge 2 ] || usage; previous="$2"; shift 2 ;;
     --smoke)      smoke=1; shift ;;
     --release)    release=1; shift ;;
     -h|--help)    usage ;;
@@ -150,7 +158,13 @@ for t in "${tasks[@]}"; do
   [ -f "$root/eval-suite/tasks/$t/prompt.txt" ] || die "no task $t (tasks: ${all_tasks[*]})"
   k="test"; [ ! -f "$root/eval-suite/tasks/$t/kind" ] || k="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/kind")"
   case "$k" in test|checked|merge|floor-check|resume|owed|question) ;; *) die "task $t: unknown kind $k" ;; esac
+  tier="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/tier" 2>/dev/null || true)"
+  case "$tier" in regression|capability) ;; *) die "task $t: its tier file says regression or capability (got: ${tier:-no file})" ;; esac
 done
+if [ -n "$previous" ]; then
+  compgen -G "$previous/runs/*/grade.json" > /dev/null \
+    || die "--previous $previous holds no graded runs (runs/*/grade.json): name the previous release run's --out"
+fi
 for a in "${arms[@]}"; do case " ${all_arms[*]} " in *" $a "*) ;; *) die "no arm $a (arms: ${all_arms[*]})" ;; esac; done
 # Whether a task runs in an arm: all of them, unless its `arms` file lists fewer.
 task_in_arm() { # <task> <arm>
@@ -643,9 +657,9 @@ if [ -n "$smoke$release" ]; then
   verdict="${verdict:+$verdict
 }plinth installed from: $(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unread) at $(git -C "$root" rev-parse HEAD 2>/dev/null || echo unread)$dirty."
 fi
-table="$(python3 -I "$root/scripts/eval-suite-summary.py" "$out/runs" "$(IFS=,; echo "${tasks[*]}")" "$(IFS=,; echo "${arms[*]}")")"
+table="$(python3 -I "$root/scripts/eval-suite-summary.py" "$out/runs" "$(IFS=,; echo "${tasks[*]}")" "$(IFS=,; echo "${arms[*]}")" ${previous:+--previous "$previous"})"
 {
-  [ -z "$release" ] || { echo "Release run: every task, the repo-only and plinth arms, three runs each, ceiling \$$ceiling. The none arm is left out: nothing a release changes reaches it (#647's Decision of 2026-11-09)."; echo; }
+  [ -z "$release" ] || { echo "Release run: every task, the repo-only and plinth arms, three runs each, ceiling \$$ceiling. The none arm is left out: nothing a release changes reaches it (#647's Decision of 2026-11-09); it runs again, apart, on a release that changes the template's AGENTS.md or .claude/ (#1151)."; echo; }
   echo "Template $template_repo@$template_ref ($template_sha), model $model, $(claude --version 2>/dev/null | head -1)."
   echo
   echo "$table"
