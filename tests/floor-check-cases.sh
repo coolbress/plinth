@@ -3316,6 +3316,9 @@ if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "no --repo, so whether the owne
 then ok "--print-update-command without --repo prints no line: the owner's answers were not read"
 else bad "--print-update-command without --repo (rc=$rc, stdout '$printed')"; fi
 # The decisions are new-project.sh's own: the checker finds them beside it.
+# copier's version is read from tools/copier one level above the checker
+# (#1220), as in the plugin: these copies under $work get it at $work/tools.
+mkdir -p "$work/tools/copier"; cp "$root/tools/copier/pyproject.toml" "$work/tools/copier/"
 libless="$work/libless"; mkdir -p "$libless"; cp "$checker" "$root/scripts/new-project.sh" "$libless/"
 printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$libless/floor-check.py" --root "$ocopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "lib/shared-github.sh not found beside the checker" "$work/print-err"
@@ -3323,14 +3326,36 @@ then ok "no scripts/lib/shared-github.sh beside the checker: no line, rather tha
 else bad "missing shared-github.sh (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 # `ci / floor-check` downloads the checker into $RUNNER_TEMP/plinth: the
 # layout rebuilt from that step's own curl lines must give the line too.
-cilayout="$work/ci-layout"; mkdir -p "$cilayout/lib"
+# One level deeper, so tools/ above it is there only when the step fetches it.
+cilayout="$work/ci-layout/plinth"; mkdir -p "$cilayout/lib"
 fetch="$(sed -n '/name: Fetch the checker from the same plinth commit/,/name: Floor check/p' "$root/.github/workflows/python-ci.yml")"
 for f in $(sed -nE 's/^ *for f in (.*); do$/\1/p' <<<"$fetch"); do cp "$root/$f" "$cilayout/$(basename "$f")"; done
 grep -q 'curl .*-o "\$d/lib/shared-github.sh"' <<<"$fetch" && cp "$root/scripts/lib/shared-github.sh" "$cilayout/lib/"
+grep -q 'curl .*-o "\$d/../tools/copier/pyproject.toml"' <<<"$fetch" \
+  && mkdir -p "$cilayout/../tools/copier" && cp "$root/tools/copier/pyproject.toml" "$cilayout/../tools/copier/"
 printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$cilayout/floor-check.py" --root "$ocopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
 if [ "$rc" = 0 ] && grep -q -- "$no_shared\$" <<<"$printed"
 then ok "the files ci / floor-check downloads include the shared-template decisions: the update line prints there"
 else bad "ci / floor-check's downloaded layout (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+# The template's monthly reminder fetches only the checker, new-project.sh and
+# lib/shared-github.sh, with no tools/ (review on #1252): copier's version is
+# read at the plinth commit the workflows call, through the API, the commit
+# those three files came from.
+remind="$work/reminder-layout/plinth"; mkdir -p "$remind/lib"
+cp "$checker" "$root/scripts/new-project.sh" "$remind/"; cp "$root/scripts/lib/shared-github.sh" "$remind/lib/"
+remind_api="$work/api-reminder"; rm -rf "$remind_api"; cp -R "$pinned_api" "$remind_api"
+mkdir -p "$remind_api/repos/coolbress/plinth/contents/tools/copier"
+python3 -c 'import base64, json, sys; print(json.dumps({"content": base64.b64encode(open(sys.argv[1], "rb").read()).decode()}))' \
+  "$root/tools/copier/pyproject.toml" > "$remind_api/repos/coolbress/plinth/contents/tools/copier/pyproject.toml?ref=$sha40.json"
+copier_pin="$(sed -n 's/^ *"copier==\([^"]*\)",\{0,1\}$/\1/p' "$root/tools/copier/pyproject.toml")"
+printed="$(FLOOR_CHECK_API_DIR="$remind_api" python3 "$remind/floor-check.py" --root "$ocopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 0 ] && grep -q "^uvx --from copier==$copier_pin copier update " <<<"$printed"
+then ok "the reminder's three files, no tools/: copier's version is read at the called plinth commit, and the update line prints"
+else bad "the reminder's layout (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
+printed="$(FLOOR_CHECK_API_DIR="$pinned_api" python3 "$remind/floor-check.py" --root "$ocopy" --repo o/r --print-update-command 2>"$work/print-err")"; rc=$?
+if [ "$rc" = 1 ] && [ -z "$printed" ] && grep -q "copier's version not read: tools/copier/pyproject.toml at plinth ${sha40:0:12} not found" "$work/print-err"
+then ok "  and when that read finds nothing: no line, with why, never a line without copier's version"
+else bad "the reminder's layout, version not read (rc=$rc, stdout '$printed')"; sed 's/^/        /' "$work/print-err"; fi
 
 # Single-sourced: the target comes from scripts/new-project.sh beside the
 # checker, never a copy inside floor-check.py itself.
