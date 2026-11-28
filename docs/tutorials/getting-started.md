@@ -200,7 +200,10 @@ type an answer instead):
    model card (`data-ml`; on GitHub a `v*` tag publishes the model, its
    metrics and the card as release files); a website people log in to
    (`web`, then where it runs); or a page of tables and charts with no login
-   (`dashboard`, then whether it runs on your computer or on Render). Data processing, collection or a pipeline
+   (`dashboard`, then whether it runs on your computer or on Render). A
+   chatbot, an assistant or AI answers is the kind its interface fits,
+   calling Claude (`--calls-claude`): a terminal is `cli`, a page
+   `dashboard`, a service or a bot `backend`. Data processing, collection or a pipeline
    with no model trained is `cli`. Accept it, pick another kind, or say you
    are not sure (`cli`).
 4. **The name**, when the command gave none: two or three suggestions in
@@ -275,6 +278,12 @@ you can type instead:
   in a public repository GitHub turns the schedule off after 60 days with
   no activity. `--no-scheduled-run`, the default, runs it on your computer
   only.
+- `--calls-claude` (`cli`, `dashboard` or `backend`, GitHub only): the
+  project calls Claude, a chatbot or an assistant among them. It gets the
+  Anthropic SDK, the one place that calls it, tests that use a fake Claude
+  and need no key, and README steps: make the API key later in a workspace
+  of its own, set its spend limit and the organization's, and never paste it
+  into a chat. `--no-calls-claude`, the default, adds none of it.
 - `--third-party-review`: the reviewer's check, for an account with a code
   reviewer connected ([the reviewer](../how-to/configure-the-third-party-reviewer.md));
   `--no-third-party-review` says no without being asked.

@@ -28,7 +28,9 @@ set -u
 printf 'gh %s\n' "$*" >> "$GH_LOG"
 answer_qs() { [ "${MOCK_NO_ANSWER_Q:-0}" = 1 ] || printf 'description:\n  type: str\nrecords_language:\n  type: str\n  default: English\ncustom_user_model:\n  type: bool\n  default: false\n'
   # MOCK_SCHED_Q=1: a template that asks a cli's scheduled run (coolbress/plinth-template#363).
-  [ "${MOCK_SCHED_Q:-0}" != 1 ] || printf 'scheduled_run:\n  type: bool\n  default: false\n'; }
+  [ "${MOCK_SCHED_Q:-0}" != 1 ] || printf 'scheduled_run:\n  type: bool\n  default: false\n'
+  # MOCK_CLAUDE_Q=1: a template that asks whether the project calls Claude (coolbress/plinth-template#371).
+  [ "${MOCK_CLAUDE_Q:-0}" != 1 ] || printf 'calls_claude:\n  type: bool\n  default: false\n'; }
 all="$*"; step=other
 case "$all" in
   "auth status"*)                                step=auth ;;
@@ -311,6 +313,8 @@ for a in "$@"; do case "$a" in
   custom_user_model=true) [ "${MOCK_CUM_NORECORD:-0}" = 1 ] || printf 'custom_user_model: true\n' >> "$dst/.copier-answers.yml" ;;
   # MOCK_SCHED_NORECORD=1 plays a template that took scheduled_run=true and dropped it.
   scheduled_run=true) [ "${MOCK_SCHED_NORECORD:-0}" = 1 ] || printf 'scheduled_run: true\n' >> "$dst/.copier-answers.yml" ;;
+  # MOCK_CLAUDE_NORECORD=1 plays a template that took calls_claude=true and dropped it.
+  calls_claude=true) [ "${MOCK_CLAUDE_NORECORD:-0}" = 1 ] || printf 'calls_claude: true\n' >> "$dst/.copier-answers.yml" ;;
 esac; done
 case " $* " in *" code_of_conduct=true "*)
   if [ "${MOCK_COC_NORENDER:-0}" != 1 ] && [[ " $* " != *" owner_has_code_of_conduct=true "* ]]; then
@@ -1028,6 +1032,35 @@ E="MOCK_SCHED_Q=1 MOCK_SCHED_NORECORD=1" run sched-dropped err no no "did not re
 # copier.yml unread: the answer goes anyway, and the render's answers file decides.
 E="MOCK_CHOICES=garbage" run sched-unread ok yes no "run on GitHub on a schedule" -- probe --scheduled-run
 E="MOCK_CHOICES=garbage MOCK_SCHED_NORECORD=1" run sched-unread-dropped err no no "did not record scheduled_run: true" -- probe --scheduled-run
+
+echo "a project that calls Claude (#1071, coolbress/plinth-template#371)"
+claude_words="calls Claude (the API key later, never in this chat)"
+E="MOCK_CLAUDE_Q=1" run claude-on ok yes no "(public, MIT, cli, $claude_words, as owner)" -- probe --calls-claude
+if grep -qF -- '--data calls_claude=true --vcs-ref' "$work/home-claude-on/calls.log" \
+   && grep -qF 'calls Claude: before the first real call, make the API key in a workspace of its own and set its spend limit and the organization'"'"'s (README.md under "Calls Claude"); put it in .env, never in this chat or a commit' "$work/home-claude-on/out"
+then ok claude-on "--calls-claude reaches copier, and the closing lines say where the key comes from and goes, never this chat"
+else bad claude-on "the answer or the closing line is missing"; grep -E '^uvx' "$work/home-claude-on/calls.log" | cut -c1-400 | sed 's/^/        /'; fi
+E="MOCK_CLAUDE_Q=1" run claude-backend ok yes no "$claude_words" -- probe --archetype=backend --calls-claude
+E="MOCK_CLAUDE_Q=1" run claude-no ok yes no "(public, MIT, cli, as owner)" -- probe --no-calls-claude
+E="MOCK_CLAUDE_Q=1" run claude-default ok yes no "(public, MIT, cli, as owner)" -- probe
+for c in claude-no claude-default; do
+  [ -f "$work/home-$c/calls.log" ] && [ -f "$work/home-$c/out" ] || { bad "claude-off-$c" "the case $c has not run: nothing to read"; continue; }
+  if ! grep -qF -- 'calls_claude' "$work/home-$c/calls.log" && ! grep -qF 'calls Claude' "$work/home-$c/out"
+  then ok "claude-off-$c" "without --calls-claude no answer is passed and nothing is said about a key"
+  else bad "claude-off-$c" "a calls_claude answer or a key line appeared"; fi
+done
+run claude-not-here err no no "--calls-claude and --no-calls-claude are for --archetype=cli, dashboard or backend only" -- probe --archetype=library --calls-claude
+run claude-no-not-here err no no "--calls-claude and --no-calls-claude are for --archetype=cli, dashboard or backend only" -- probe --archetype=web --no-calls-claude
+run claude-both err no no "--calls-claude and --no-calls-claude: choose one" -- probe --calls-claude --no-calls-claude
+# The template refuses these names with the answer on; --check says so first.
+E="MOCK_CLAUDE_Q=1" run claude-name err no no "the template refuses the name 'Claude' with --calls-claude" -- Claude --calls-claude --check
+E="MOCK_CLAUDE_Q=1" run claude-name-sdk err no no "the template refuses the name 'anthropic' with --calls-claude" -- anthropic --calls-claude
+E="MOCK_CLAUDE_Q=1" run claude-name-off ok no no "check: ok (tester/claude, public, cli, folder" -- claude --check
+# The pinned template before coolbress/plinth-template#371 does not ask it.
+run claude-old-template err no no "does not ask calls_claude, so --calls-claude would be dropped; nothing was created" -- probe --calls-claude
+E="MOCK_CLAUDE_Q=1 MOCK_CLAUDE_NORECORD=1" run claude-dropped err no no "did not record calls_claude: true" -- probe --calls-claude
+E="MOCK_CHOICES=garbage" run claude-unread ok yes no "$claude_words" -- probe --calls-claude
+E="MOCK_CHOICES=garbage MOCK_CLAUDE_NORECORD=1" run claude-unread-dropped err no no "did not record calls_claude: true" -- probe --calls-claude
 
 echo "where a web app runs (#677)"
 # A template without the questions (v1.26.0) renders for Render whatever it
@@ -1970,6 +2003,15 @@ else bad gl-no-sched "a scheduled_run answer reached copier on GitLab"; fi
 gl_run gl-no-sched-lib err no no "--no-scheduled-run is for --archetype=cli only" -- probe --host gitlab --archetype=library --no-scheduled-run
 if ! grep -q '^glab ' "$work/home-gl-sched/calls.log" "$work/home-gl-no-sched-lib/calls.log"
 then ok gl-sched-refused "the refusals stop before any glab call"; else bad gl-sched-refused "glab was called before the refusal"; fi
+# Calling Claude is GitHub only for now (#1071): refused before anything is
+# read; saying no to it is what GitLab gets, for the three archetypes only.
+gl_run gl-claude err no no "--calls-claude is for GitHub only for now: nothing was tried on GitLab" -- probe --host gitlab --calls-claude
+gl_run gl-no-claude ok yes no "create gitlab.com/tester/probe (private, MIT, cli, as owner)" -- probe --host gitlab --no-calls-claude
+if ! grep -qF -- 'calls_claude' "$work/home-gl-no-claude/calls.log"; then ok gl-no-claude "--no-calls-claude passes no answer on GitLab"
+else bad gl-no-claude "a calls_claude answer reached copier on GitLab"; fi
+gl_run gl-no-claude-lib err no no "--no-calls-claude is for --archetype=cli, dashboard or backend only" -- probe --host gitlab --archetype=library --no-calls-claude
+if ! grep -q '^glab ' "$work/home-gl-claude/calls.log" "$work/home-gl-no-claude-lib/calls.log"
+then ok gl-claude-refused "the refusals stop before any glab call"; else bad gl-claude-refused "glab was called before the refusal"; fi
 if ! grep -q '^glab ' "$work/home-gl-desc-long/calls.log" "$work/home-gl-lang-code/calls.log" "$work/home-gl-cum/calls.log"
 then ok gl-answers-refused "a refused answer stops before any glab call"; else bad gl-answers-refused "glab was called before the refusal"; fi
 # The pairs the GitHub door refuses, on GitLab (#960). --private with --public
@@ -2323,13 +2365,29 @@ for phrase in 'says the computer is off ("even when my laptop is off", "while I 
               'asks header `Schedule`: "Should it keep running on GitHub while your computer is off?"' \
               'On GitLab.com it is not asked: say it runs on the computer only' \
               'The results are a download under Artifacts on each run'"'"'s page, kept 90 days; in a public repository GitHub turns the schedule off after 60 days with no activity' \
-              '`--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub |' \
+              '`--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub' \
               'When the table'"'"'s check stops with "does not ask scheduled_run", the plinth installed renders a template from before the scheduled run'; do
   if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-schedule "the skill says \"$phrase\""
   else bad skill-schedule "the skill does not say \"$phrase\""; fi
 done
 if grep -qE '^\| cli, on a schedule \| .+ \| .+ \|$' "$questions"; then ok skill-schedule "the makes table has a row for a cli on a schedule"
 else bad skill-schedule "the makes table has no row for a cli on a schedule"; fi
+# Calling Claude (#1071): a chatbot or assistant recommends the kind its
+# interface fits with --calls-claude, the key is never asked, and the
+# prerequisites line says it comes later with a spend limit.
+for phrase in 'A chatbot, an assistant or AI answers calls Claude: in a terminal, `cli`; a page, `dashboard`; a service or a bot, `backend`; each with `--calls-claude`.' \
+              'Never ask for the API key.' \
+              'Not on GitLab.com.' \
+              'A check stopping with "does not ask calls_claude" means an older template: say so, offer `--no-calls-claude`.' \
+              'With `--calls-claude`: an Anthropic API key later, billed per use up to its spend limits; never typed into this chat.' \
+              '"I recommend `ARCHETYPE`, calling Claude: `REASON`"' \
+              '`--calls-claude` or `--no-calls-claude` for `cli`, `dashboard` or `backend` on GitHub |' \
+              'and for `cli`, `dashboard` or `backend`, `--calls-claude` or `--no-calls-claude`.'; do
+  if printf '%s\n' "$flat" | grep -qF -- "$phrase"; then ok skill-claude "the skill says \"$phrase\""
+  else bad skill-claude "the skill does not say \"$phrase\""; fi
+done
+if grep -qE '^\| calls Claude \| .+ \| .+ \|$' "$questions"; then ok skill-claude "the makes table has a row for calling Claude"
+else bad skill-claude "the makes table has no row for calling Claude"; fi
 # The archetype step's makes / does-not-make table names every kind.
 for k in cli library backend data-ml web dashboard; do
   if grep -qE "^\| $k \| .+ \| .+ \|$" "$questions"; then ok skill-order "the makes table has a row for $k"

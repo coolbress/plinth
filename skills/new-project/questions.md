@@ -133,6 +133,11 @@ Ask only what decides between the kinds still open:
   renders a template from before the scheduled run: show the message, say
   so, and offer `--no-scheduled-run` (on the computer only) or waiting for
   a plinth release that has it.
+- A chatbot, an assistant or AI answers calls Claude: in a terminal,
+  `cli`; a page, `dashboard`; a service or a bot, `backend`; each with
+  `--calls-claude`. No interface named asks `Use`. Never ask for the API
+  key. Not on GitLab.com. A check stopping with "does not ask
+  calls_claude" means an older template: say so, offer `--no-calls-claude`.
 
 ## 4. The archetype recommendation
 
@@ -150,7 +155,9 @@ person always picks.
 
 For `cli` with a scheduled run, the recommendation names it: "I recommend
 `cli`, run on GitHub on a schedule (`--scheduled-run`): `REASON`", with
-`MAKES` and `NOT` from the table's `cli, on a schedule` row.
+`MAKES` and `NOT` from the table's `cli, on a schedule` row. With
+`--calls-claude`: "I recommend `ARCHETYPE`, calling Claude: `REASON`", the
+`calls Claude` row's `MAKES` added and its `NOT`.
 
 Until plinth has them, add one sentence for the gap the description falls
 into: `cli` runs only on the person's computer unless it runs on GitHub on
@@ -161,6 +168,7 @@ computer, has no login, and that where it runs is asked next.
 | --- | --- | --- |
 | cli | A command people install and run in a terminal; on GitHub a release only when a tag is pushed. | A server, a web page, or anything that runs by itself away from the person's computer. |
 | cli, on a schedule | The same command, also run on GitHub every day and by hand, even while your computer is off; each run's results are a download on the run's page, kept 90 days, never a commit. GitHub only. | A run at an exact time: a run can start late, or be dropped, when GitHub is busy. |
+| calls Claude | With `cli`, `dashboard` or `backend`: the Anthropic SDK, one module that calls it, tests needing no key, README steps for the key's spend limits. GitHub only. | The API key: you make it later. |
 | library | A package other code imports. | A command, a server or a web page. |
 | backend | A service in a container that keeps running and answers requests. | Web pages with logins, or a place to run it. |
 | data-ml | A model trained here, with a model card; on GitHub a `v*` tag publishes the model, its metrics and the card. | A server that answers with the model, or data collected on a schedule. |
@@ -209,6 +217,8 @@ the month's total, each figure with its link and the date it was read:
   US$27 in all; where it runs is asked next.
 - `backend`: no host cost until its image runs somewhere, which then costs
   what that place charges; US$20 a month until then.
+- With `--calls-claude`: an Anthropic API key later, billed per use up to
+  its spend limits; never typed into this chat.
 
 Nothing else is needed beyond what the preflight checked. On a private
 GitHub repository, CI minutes can add to it (step 7).
@@ -405,7 +415,7 @@ as written:
 | # | Row | Default when not asked | Flag |
 | --- | --- | --- | --- |
 | 1 | Repository and host | `owner/name` on GitHub, or on GitLab.com; a bare name is shown under the login | `--host=github` or `--host=gitlab`, and the name |
-| 2 | Kind | The archetype of step 4, for `web` or `dashboard` where it runs, and for `cli` on GitHub whether it runs on GitHub on a schedule | `--archetype=`, `--hosting=` for `web` or `dashboard`, and `--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub |
+| 2 | Kind | The archetype of step 4, for `web` or `dashboard` where it runs, for `cli` on GitHub whether it runs on GitHub on a schedule, and whether it calls Claude | `--archetype=`, `--hosting=` for `web` or `dashboard`, `--scheduled-run` or `--no-scheduled-run` for `cli` on GitHub, and `--calls-claude` or `--no-calls-claude` for `cli`, `dashboard` or `backend` on GitHub |
 | 3 | Visibility | The answer of step 7 | `--public` or `--private` |
 | 4 | License | MIT for a public project, Proprietary for a private one | `--license=mit`, `--license=apache-2.0` or `--license=proprietary` |
 | 5 | Third-party reviewer | None | `--no-third-party-review` or `--third-party-review` |
@@ -547,7 +557,8 @@ before the run (below) asks nothing when typed again: the host
 `--private`, `--license=`, `--dir=` with the home directory written out
 as an absolute path, the description's, `--records-language=`, and on
 GitHub the reviewer's, the code of conduct's (none when the owner's
-applies) and, for `cli`, `--scheduled-run` or `--no-scheduled-run`. For `web`, add `--custom-user-model` without asking, unless
+applies), for `cli`, `--scheduled-run` or `--no-scheduled-run`, and for
+`cli`, `dashboard` or `backend`, `--calls-claude` or `--no-calls-claude`. For `web`, add `--custom-user-model` without asking, unless
 the arguments give `--no-custom-user-model`: the new
 project starts with its own user model (`accounts.User`), which Django
 sets before the first `migrate` and which is changed later only by hand;

@@ -8,6 +8,7 @@
 #                  [--records-language=<language in English>]
 #                  [--custom-user-model|--no-custom-user-model]   (web only)
 #                  [--scheduled-run|--no-scheduled-run]   (cli only)
+#                  [--calls-claude|--no-calls-claude]   (cli, dashboard, backend)
 #                  [--force-defaults] [--host=github|gitlab]
 #                  [--hosting=render|railway|digitalocean|fly|vps|home]   (web)
 #                  [--hosting=local|render]   (dashboard)
@@ -37,6 +38,10 @@
 # (cli only, #1070) also runs the command on GitHub on a schedule, while the
 # person's computer is off, its results kept as each run's artifact
 # (coolbress/plinth-template#363); the default runs it on the computer only.
+# --calls-claude (cli, dashboard or backend, #1071) adds the Anthropic SDK,
+# the one module that calls it, tests that need no key and the README on the
+# key's spend limits (coolbress/plinth-template#371, #373). The key itself is
+# never asked: the person makes it later and puts it in .env.
 # --code-of-conduct renders the Contributor
 # Covenant 3.0 naming <contact> for reports, unless the owner's `.github`
 # publishes a code of conduct, which then applies instead (#772). --third-party-review renders the caller of the `third-party /
@@ -205,9 +210,9 @@ case "$host" in
   *)      echo "--host is github or gitlab (got: $host)" >&2; exit 2 ;;
 esac
 
-usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--custom-user-model|--no-custom-user-model] [--scheduled-run|--no-scheduled-run] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight] [--check] [--readiness] [--where]"
+usage="usage: new-project.sh [<owner>/]<name> [--license=<spdx>] [--archetype=<a>] [--dir=<path>] [--private|--public] [--third-party-review|--no-third-party-review] [--code-of-conduct=<contact>|--no-code-of-conduct] [--description=<one line>|--no-description] [--records-language=<language>] [--custom-user-model|--no-custom-user-model] [--scheduled-run|--no-scheduled-run] [--calls-claude|--no-calls-claude] [--force-defaults] [--host=github|gitlab] [--hosting=<place>] [--preflight] [--check] [--readiness] [--where]"
 preflight=0; target=""; lic=mit; arch=cli; dir=""; private=0; force_defaults=0; place=""; review=0; review_said=""; said_public=0
-coc=0; coc_contact=""; coc_said=""; desc=""; desc_said=""; lang=""; cum=""; cum_said=""; sched=0; sched_said=""
+coc=0; coc_contact=""; coc_said=""; desc=""; desc_said=""; lang=""; cum=""; cum_said=""; sched=0; sched_said=""; claude=0; claude_said=""
 for a in "$@"; do case "$a" in
   --code-of-conduct=*)  coc=1; coc_contact="${a#*=}"; coc_said="$coc_said+" ;;
   --code-of-conduct)    echo "--code-of-conduct needs the address reports go to: --code-of-conduct=<email or web page>"$'\n'"$usage" >&2; exit 2 ;;
@@ -219,6 +224,8 @@ for a in "$@"; do case "$a" in
   --no-custom-user-model) cum=0; cum_said="$cum_said-" ;;
   --scheduled-run)        sched=1; sched_said="$sched_said+" ;;
   --no-scheduled-run)     sched=0; sched_said="$sched_said-" ;;
+  --calls-claude)         claude=1; claude_said="$claude_said+" ;;
+  --no-calls-claude)      claude=0; claude_said="$claude_said-" ;;
   --private)     private=1 ;;
   --public)      said_public=1 ;;
   --third-party-review)    review=1; review_said="$review_said+" ;;
@@ -241,6 +248,8 @@ case "$cum_said" in *+*-*|*-*+*) echo "--custom-user-model and --no-custom-user-
 [ -z "$cum" ] || [ "$arch" = web ] || { echo "--custom-user-model and --no-custom-user-model are for --archetype=web only"$'\n'"$usage" >&2; exit 2; }
 case "$sched_said" in *+*-*|*-*+*) echo "--scheduled-run and --no-scheduled-run: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
 [ -z "$sched_said" ] || [ "$arch" = cli ] || { echo "--scheduled-run and --no-scheduled-run are for --archetype=cli only"$'\n'"$usage" >&2; exit 2; }
+case "$claude_said" in *+*-*|*-*+*) echo "--calls-claude and --no-calls-claude: choose one"$'\n'"$usage" >&2; exit 2 ;; esac
+case "$arch" in cli|dashboard|backend) ;; *) [ -z "$claude_said" ] || { echo "--calls-claude and --no-calls-claude are for --archetype=cli, dashboard or backend only"$'\n'"$usage" >&2; exit 2; } ;; esac
 # Not given, a web project gets its own user model (#1092).
 [ -n "$cum" ] || { [ "$arch" != web ] || cum=1; }
 # The contact is written into CODE_OF_CONDUCT.md: one line, so it is not
@@ -538,6 +547,15 @@ if [ -n "$copier_yml" ]; then
     esac
   fi
 fi
+# With --calls-claude the template also refuses two package names (#1071):
+# `claude`, whose own test would be the shipped tests/test_claude.py, and
+# `anthropic`, which would hide the SDK's package. The rules above do not
+# know the answer, so a --check says it here.
+if [ "$claude" = 1 ]; then
+  case "$(printf '%s' "$name" | tr '. -' '___' | tr '[:upper:]' '[:lower:]')" in
+    claude|anthropic) stop "the template refuses the name '$name' with --calls-claude: its package would collide with the shipped tests/test_claude.py or the Anthropic SDK's own package; nothing was created" "  fix: choose another name, for example '$name-app'" ;;
+  esac
+fi
 # Where a web app runs (#677): `render`, or a place plinth lists and does not
 # deploy to or check, passed as copier's `hosting` and `hosting_elsewhere`.
 # A template without those questions renders for Render whatever it is given:
@@ -597,23 +615,25 @@ if [ "$review" = 1 ]; then
 fi
 # The description, the records language (coolbress/plinth-template#331), a
 # web project's own user model (coolbress/plinth-template#332, #1092) and a
-# cli's scheduled run (coolbress/plinth-template#363, #1070), each to a
-# template that asks it, as the reviewer above. A template that does not ask
+# cli's scheduled run (coolbress/plinth-template#363, #1070) and a call to
+# Claude (coolbress/plinth-template#371, #1071), each to a template that asks it, as the reviewer above. A template that does not ask
 # would render without the answer, so one given stops here instead; an answer
 # that is the default (none, English, no) changes nothing and goes nowhere.
 answer_data=()
-for q in description records_language custom_user_model scheduled_run; do
+for q in description records_language custom_user_model scheduled_run calls_claude; do
   case "$q" in
     description)       v="$desc"; flag="--description"; [ -n "$v" ] || continue ;;
     records_language)  v="$lang"; flag="--records-language"; [ -n "$v" ] || continue ;;
     custom_user_model) [ "$cum" = 1 ] || continue; v=true; flag="--custom-user-model" ;;
     scheduled_run)     [ "$sched" = 1 ] || continue; v=true; flag="--scheduled-run" ;;
+    calls_claude)      [ "$claude" = 1 ] || continue; v=true; flag="--calls-claude" ;;
   esac
   if ! grep -q "^$q:" <<<"$copier_yml"; then
     [ "$q" != records_language ] || [ "$v" != English ] || continue
-    # Unread, the description, the default user model and a scheduled run are
-    # passed anyway: copier ignores an answer it does not ask, and the render's
-    # answers file is read for the last two below, before the repository exists.
+    # Unread, the description, the default user model, a scheduled run and a
+    # call to Claude are passed anyway: copier ignores an answer it does not
+    # ask, and the render's answers file is read for the last three below,
+    # before the repository exists.
     [ -n "$arch_choices" ] || [ "$q" = records_language ] || { answer_data+=(--data "$q=$v"); continue; }
     [ "$q" != description ] || continue  # not asked, it still goes onto the repository's page, as before
     [ -n "$arch_choices" ] || stop "could not read whether the template asks $q, so $flag cannot be passed safely; nothing was created" \
@@ -766,6 +786,7 @@ case "$arch:${place:-render}" in *:render|dashboard:local) ;; *) arch_words="$ar
 [ "$coc" = 0 ] || arch_words="$arch_words, a code of conduct with reports to $coc_contact"
 [ "$cum" != 1 ] || arch_words="$arch_words, its own user model (accounts.User)"
 [ "$sched" != 1 ] || arch_words="$arch_words, run on GitHub on a schedule"
+[ "$claude" != 1 ] || arch_words="$arch_words, calls Claude (the API key later, never in this chat)"
 [ -z "$lang" ] || [ "$lang" = English ] || arch_words="$arch_words, records in $lang"
 echo "create $repo ($visibility, $spdx, $arch_words, as $role) from $template_repo@$template_ref in $dir; wall: $wall_words; then the first pull request. rollback: $rollback"
 
@@ -834,6 +855,12 @@ fi
 # would run only while the person's computer is on.
 if [ "$sched" = 1 ] && ! grep -qx 'scheduled_run: true' "$dir/.copier-answers.yml" 2>/dev/null; then
   echo "the template did not record scheduled_run: true in $dir/.copier-answers.yml, so the command would not run on GitHub on a schedule" >&2
+  exit 1
+fi
+# So must a call to Claude: without it the project gets no SDK, no guard that
+# keeps its tests off the real API, and no README on the key's spend limits.
+if [ "$claude" = 1 ] && ! grep -qx 'calls_claude: true' "$dir/.copier-answers.yml" 2>/dev/null; then
+  echo "the template did not record calls_claude: true in $dir/.copier-answers.yml, so the project would not get the Anthropic SDK or the tests that keep it off the real API" >&2
   exit 1
 fi
 if [ "$coc" = 1 ] && ! [ -s "$dir/CODE_OF_CONDUCT.md" ]; then
@@ -1413,6 +1440,9 @@ case "$arch:${place:-render}" in
   *:render) ;;
   *) place_line="  where it runs: $place_name. plinth did not deploy the app there and has not checked that place; the steps, and what they leave to you, are in README.md under \"Where it runs\"" ;;
 esac
+# The key is never asked here: where it comes from and where it goes (#1071).
+[ "$claude" != 1 ] || place_line="${place_line:+$place_line
+}  calls Claude: before the first real call, make the API key in a workspace of its own and set its spend limit and the organization's (README.md under \"Calls Claude\"); put it in .env, never in this chat or a commit. The tests need no key"
 private_lines=""
 [ "$private" = 0 ] || private_lines="  private: $private_note"$'\n'
 [ -z "$gaps" ] || private_lines="$private_lines$(printf '%s' "$gaps" | sed -e 's/^Not raised/  not raised/' -e 's/^Not verified/  not verified/')"$'\n'
