@@ -119,6 +119,13 @@ read by tooling. Precision there is not style.
   `scripts/merge-when-green.sh` prints what is left after the merge.
 - **`Closes #N` closes the issue without asking anyone**, so whoever merges
   writes the ending.
+- **The pull request that finishes building a decision removes its marker.**
+  A decision [the decisions page](../reference/decisions-in-force.md) lists
+  as `(decided; not built yet: #N)` loses that marker in the pull request
+  that closes #N, or that merges its last part. `scripts/make-release.sh`
+  stops on a marker whose issue is closed as completed
+  (`scripts/stale-decision-markers.sh`, #1221), and names one closed another
+  way for a person.
 - **A confidence-bearing judgement gets a verdict.** Closing an issue that
   carried one (a `/code-review` CONFIRMED or PLAUSIBLE finding, a
   `ready-for-agent` call judged on what triage knew) says in `## Outcome`, or
