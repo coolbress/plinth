@@ -24,9 +24,9 @@ and decide whether to accept it.
 You decide. The checks answer. The record remembers.
 
 A new project starts with `/plinth:new-project`. Already have a project?
-`/plinth:floor-check` reports what it could verify, suggests a fix for each
-gap it finds, and changes nothing in your project; it keeps one note on this
-machine, so the next run can say what changed. `/plinth:guide` tells you which
+`/plinth:floor-check` reports what it could verify, suggests fixes for the
+gaps it finds, and changes nothing in your project; it can keep one note on
+this machine, so the next run can say what changed. `/plinth:guide` tells you which
 command to type next.
 
 ## Install plinth
@@ -62,8 +62,8 @@ project, some need GitHub Code Security:
 | A scan for exposed passwords and keys | The scan looks through the project's saved history for exposed passwords and keys. When it finds one, the check fails and tells you to revoke it. By then the secret is already on GitHub |
 | A check of new packages | plinth checks newly added or upgraded packages for serious known security problems |
 | Code scanning | GitHub's code scanner holds a change with a serious security finding. On private GitHub projects, it requires GitHub Code Security |
-| A size limit on each change | A change over the line limit (400 by default) turns the check red, and its fix is to split the change. Markdown, lockfiles and the licence are left out of the count |
-| A form for each pull request's title | An automatic check checks the title's format. plinth asks the agent to explain what changed and why, so someone can read the record later |
+| A size limit on each change | A change over the line limit (400 by default) turns the check red, and its fix is to split the change. By default, Markdown, lockfiles and the licence are left out of the count |
+| A form for each pull request's title | An automatic check checks the title's format. plinth also asks the agent to explain what changed and why, so someone can read the record later: that part is guidance, not a check |
 | The documents a project keeps: a README, a changelog, contributing rules, the agent's rules, a security policy and issue forms | Another person, or a later session, can find how the project works; a check turns red when one of them goes missing |
 | A check of the groundwork itself | A check flags some changes that weaken the setup. If a change removes that check altogether, a separate inspection can spot the missing check after the change is accepted |
 
@@ -95,8 +95,8 @@ what you wanted stays yours to judge ([why](docs/explanation/concepts.md#about-t
 ### Checking an existing project
 
 Shortened from a real read-only check of
-[nexusbt](https://github.com/coolbress/nexusbt), a project made with plinth.
-`[…]` marks omitted output.
+[nexusbt](https://github.com/coolbress/nexusbt), a project made with plinth,
+by the checker `/plinth:floor-check` runs. `[…]` marks omitted output.
 
 ```text
 You:     /plinth:floor-check
@@ -115,6 +115,8 @@ Claude:  No check failed in what was read; 2 things to look at.
 
          Next: type `/plinth:guide`; it names in plain words the one
          command to type next.
+
+         […]
 ```
 
 ### Where it comes from
