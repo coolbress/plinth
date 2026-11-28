@@ -1,6 +1,9 @@
 # shellcheck shell=bash disable=SC2154  # $root is set by the script that sources this file
 # The Python tools of `ci / tools` (zizmor, ruff, mypy), installed from
-# tests/lint-tools.txt with every artifact checked against its hash (#264).
+# tools/lint/uv.lock with every artifact checked against its hash (#264).
+# The lock is the one source of their versions, raised by Dependabot (#1220);
+# `uv export` turns it into a requirements file with the hashes, read as it is
+# (--frozen), nothing resolved.
 # Sourced by tests/workflow-lint.sh and tests/python-lint.sh, which set $root.
 #
 # pipx and uvx pin a version but check no hash, so this uses a venv and
@@ -16,8 +19,8 @@
 # tests/lint-wrappers-cases.sh puts stubs there. The wrappers say so, and in CI
 # (GITHUB_ACTIONS) it is a FAIL: there the tools are the hash-checked ones.
 
-lint_tool_version() { # <package> -> its pinned version in tests/lint-tools.txt
-  sed -n "s/^$1==\([^ ;]*\).*/\1/p" "$root/tests/lint-tools.txt"
+lint_tool_version() { # <package> -> its pinned version in tools/lint/pyproject.toml
+  sed -n "s/^ *\"$1==\([^\"]*\)\",\{0,1\}\$/\1/p" "$root/tools/lint/pyproject.toml"
 }
 
 # The key covers the lock file's bytes; the interpreter's version, real path,
@@ -33,23 +36,25 @@ print(hashlib.sha256(open(sys.argv[1], "rb").read() + "\0".join(who).encode()).h
 }
 
 lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL line there, and 1
-  local req="$root/tests/lint-tools.txt" py key cache real dir mark
+  local lock="$root/tools/lint/uv.lock" py key cache real dir mark
   if [ -n "${PLINTH_LINT_TOOLS_BIN:-}" ]; then
     [ -z "${GITHUB_ACTIONS:-}" ] || { echo "  FAIL  PLINTH_LINT_TOOLS_BIN is set in CI, where the tools must be the hash-checked ones"; return 1; }
     printf '%s' "$PLINTH_LINT_TOOLS_BIN"; return 0
   fi
-  py="$(command -v python3)" || { echo "  FAIL  python3 not found: install Python 3.10 or later (https://www.python.org/downloads/)"; return 1; }
-  "$py" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null \
-    || { echo "  FAIL  $("$py" --version 2>&1) is older than 3.10, which the pinned tools need"; return 1; }
+  py="$(command -v python3)" || { echo "  FAIL  python3 not found: install Python 3.11 or later (https://www.python.org/downloads/)"; return 1; }
+  "$py" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null \
+    || { echo "  FAIL  $("$py" --version 2>&1) is older than 3.11, which the pinned tools need (zizmor from 1.31)"; return 1; }
   # Debian and Ubuntu package venv's pip bootstrap separately from python3.
   "$py" -c 'import ensurepip, venv' 2>/dev/null \
     || { echo "  FAIL  python3 cannot make a venv with pip: install python3-venv (Debian, Ubuntu: sudo apt-get install python3-venv)"; return 1; }
+  command -v uv >/dev/null 2>&1 \
+    || { echo "  FAIL  uv not found: it reads tools/lint/uv.lock (https://docs.astral.sh/uv/getting-started/installation/)"; return 1; }
   cache="${XDG_CACHE_HOME:-$HOME/.cache}/plinth/lint-tools"
   # Built and keyed under the resolved path, so the path in the venv's scripts
   # is the one in the key, however the cache was reached.
   real="$(mkdir -p "$cache" && cd -P "$cache" && pwd -P)" || { echo "  FAIL  cannot make $cache"; return 1; }
   cache="$real"
-  key="$(lint_tools_key "$py" "$req" "$cache")" || { echo "  FAIL  cannot read $req"; return 1; }
+  key="$(lint_tools_key "$py" "$lock" "$cache")" || { echo "  FAIL  cannot read $lock"; return 1; }
   # A finished venv for this key; one without the marker
   # (an interrupted run, or one still installing) is never used.
   for mark in "$cache/$key".*/.installed; do
@@ -58,10 +63,12 @@ lint_tools_bin() { # -> the tools' bin directory on stdout; on failure a FAIL li
   # A random name, not the PID: two containers sharing this cache can have the same PID.
   dir="$(mktemp -d "$cache/$key.XXXXXX")" \
     || { echo "  FAIL  cannot make a directory under $cache"; return 1; }
-  if ! { "$py" -m venv "$dir" && "$dir/bin/python" -m pip install --quiet \
-          --disable-pip-version-check --no-input --require-hashes --only-binary=:all: -r "$req"; } >&2; then
+  if ! { uv export --quiet --frozen --no-emit-project --no-header --no-annotate \
+            --project "$root/tools/lint" -o "$dir/requirements.txt" \
+          && "$py" -m venv "$dir" && "$dir/bin/python" -m pip install --quiet \
+          --disable-pip-version-check --no-input --require-hashes --only-binary=:all: -r "$dir/requirements.txt"; } >&2; then
     rm -rf "${dir:?}"
-    echo "  FAIL  installing tests/lint-tools.txt, hash-checked, into a venv (needs network the first time)"; return 1
+    echo "  FAIL  installing tools/lint/uv.lock, hash-checked, into a venv (needs network the first time)"; return 1
   fi
   touch "$dir/.installed"
   printf '%s' "$dir/bin"

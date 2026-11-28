@@ -2829,26 +2829,56 @@ def print_question_help(names: list[str], network: bool) -> int:
     return 0
 
 
-def new_project_pin() -> tuple[str, str, str, str, str] | None:
-    """(template_repo, template_ref, template_sha, copier_version, copier_newer) as
+def new_project_pin() -> tuple[str, str, str, str | None] | None:
+    """(template_repo, template_ref, template_sha, copier_version) as
     scripts/new-project.sh pins them -- read from that file and nowhere else
-    (#219), so a template release only has to move the pin once. Found beside
-    this file: locally, where both live in scripts/; in CI's floor-check job,
-    which downloads both from the same plinth commit into the same directory."""
-    p = Path(__file__).resolve().parent / "new-project.sh"
+    (#219), so a template release only has to move the pin once -- and copier's
+    version from tools/copier/pyproject.toml, its one source (#1220). Found as
+    in this repository: new-project.sh beside this file, tools/ one level up;
+    CI's floor-check job downloads them from the same plinth commit into the
+    same places. A layout without tools/ (the template's monthly reminder
+    fetches only the checker, new-project.sh and lib/shared-github.sh) gives
+    no copier version here: copier_version_at reads it at the plinth commit
+    the project calls (review on #1252)."""
+    here = Path(__file__).resolve().parent
+    p, pins = here / "new-project.sh", here.parent / "tools" / "copier" / "pyproject.toml"
     if not p.is_file():
         return None
     text = read(p)
     fields = {}
-    for name in ("template_repo", "template_ref", "template_sha", "copier_version", "copier_newer"):
+    for name in ("template_repo", "template_ref", "template_sha"):
         m = re.search(rf'^{name}="([^"]+)"$', text, re.MULTILINE)
         if not m:
             return None
         fields[name] = m.group(1)
     if not re.fullmatch(r"[0-9a-f]{40}", fields["template_sha"]):
         return None
-    return (fields["template_repo"], fields["template_ref"], fields["template_sha"],
-            fields["copier_version"], fields["copier_newer"])
+    if not pins.is_file():
+        return (fields["template_repo"], fields["template_ref"], fields["template_sha"], None)
+    copier = re.search(r'^ *"copier==([^"]+)",?$', read(pins), re.MULTILINE)
+    if not copier:
+        return None
+    return (fields["template_repo"], fields["template_ref"], fields["template_sha"], copier.group(1))
+
+
+def copier_version_at(sha: str, network: bool) -> tuple[str | None, str | None]:
+    """(copier's version, why not) from tools/copier/pyproject.toml at plinth
+    commit <sha>, through the API: for a checker downloaded without tools/
+    beside it, the commit is the one the project's workflows call, the same
+    one it was downloaded from."""
+    data = api(f"repos/{PLINTH_REPO}/contents/tools/copier/pyproject.toml?ref={sha}", network)
+    text = None
+    if isinstance(data, dict):
+        try:
+            text = base64.b64decode(data["content"]).decode()
+        except (TypeError, KeyError, ValueError):
+            text = None
+    m = re.search(r'^ *"copier==([^"]+)",?$', text or "", re.MULTILINE)
+    if m:
+        return m.group(1), None
+    where = f"tools/copier/pyproject.toml at plinth {sha[:12]}"
+    return None, (f"copier's version not read: {where} names none" if text is not None
+                  else f"copier's version not read: {where} " + ("not found" if data is ABSENT else "offline or API error"))
 
 
 def copier_answers(root: Path) -> dict[str, str] | None:
@@ -3161,7 +3191,7 @@ def template_drift(root: Path, host: str | None = None, network: bool = False, m
     pin = new_project_pin()
     if pin is None:
         return {"state": "skip", "reason": "scripts/new-project.sh not found beside the checker, or unreadable"}
-    template_repo, target, target_sha, copier_version, copier_newer = pin
+    template_repo, target, target_sha, copier_version = pin
     out: dict = {"template_repo": template_repo, "target": target, "target_sha": target_sha}
 
     answers = copier_answers(root)
@@ -3212,7 +3242,11 @@ def template_drift(root: Path, host: str | None = None, network: bool = False, m
     # --defaults: without a terminal copier update stops at "Interactive
     # session required" (measured, copier 9.18.2), and the skill that runs
     # this line has none. It answers each question with the recorded answer.
-    out.update(copier_version=copier_version, copier_newer=copier_newer)
+    if sha and copier_version is None:
+        copier_version, why_copier = copier_version_at(sha, network)
+        if copier_version is None:
+            sha, why_not = None, why_copier
+    out.update(copier_version=copier_version)
     out["integrity"] = integrity
     out["host"] = host or answers.get("host")
     return {**out, "state": state, "cmd": update_line(out, sha, integrity) if sha else None, "why_not": why_not, "live": sha}
@@ -3223,8 +3257,10 @@ def update_line(d: dict, pin: str, integrity: str | None = None) -> str:
     and on GitLab the include's checksum at that pin: a pin moved without its
     checksum fails every pipeline before a job runs. It fetches the tag's
     pinned commit, not the tag (#519): copier still records the tag as
-    `_commit` (measured, copier 9.18.2)."""
-    return (f"uvx --from copier=={d['copier_version']} --exclude-newer {d['copier_newer']} "
+    `_commit` (measured, copier 9.18.2). copier's dependencies are pinned by
+    tools/copier/uv.lock, which template-update.sh passes as UV_CONSTRAINT when
+    it runs this line (#1220): the line itself names no path on this machine."""
+    return (f"uvx --from copier=={d['copier_version']} "
             f"copier update --defaults --vcs-ref {d['target_sha']} --data plinth_sha={pin}"
             + (f" --data plinth_gitlab_integrity={shlex.quote(integrity)}" if integrity else "")
             + d.get("owner_data", ""))

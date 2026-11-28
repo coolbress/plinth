@@ -56610,7 +56610,7 @@ not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it
 === --root $WORK/drift-line --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/drift --no-network
 --- exit 0
 --- stdout
@@ -58684,7 +58684,7 @@ floor check: root=$WORK/print-cmd project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -58721,7 +58721,7 @@ not yet confirmed: labels not verified (offline, not logged in, or API error); r
 === --root $WORK/print-cmd --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/print-cmd --repo o/r
 --- exit 1
 --- stdout
@@ -59068,7 +59068,7 @@ floor check: root=$WORK/print-cmd project=.
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (offline or API error); the template-update skill checks it before it runs this line:
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    plinth pin: the one v1.52.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.52.0: offline or API error), so whether 0000000000000000000000000000000000000000 is older was not read
   INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
@@ -59116,15 +59116,15 @@ not yet confirmed: labels not verified (offline, not logged in, or API error); r
 === --root $WORK/good --repo o/r --print-update-command --move-archetype cli
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false --data archetype=cli
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false --data archetype=cli
 === --root $WORK/move-cli --repo o/r --print-update-command --move-archetype data-ml
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false --data archetype=data-ml
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false --data archetype=data-ml
 === --root $WORK/move-cli --repo o/r --print-update-command --move-archetype library
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false --data archetype=library
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false --data archetype=library
 === --root $WORK/good --repo o/r --print-update-command --move-archetype backend
 --- exit 1
 --- stdout
@@ -59143,7 +59143,7 @@ uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --
 === --root $WORK/good --repo o/r --print-update-command --move-archetype nope
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false --data archetype=nope
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false --data archetype=nope
 === --root $WORK/move-no-archetype --repo o/r --print-update-command --move-archetype cli
 --- exit 1
 --- stdout
@@ -59176,11 +59176,11 @@ uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --
 === --root $WORK/print-cmd --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/two-pins --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/two-pins --repo o/r
 --- exit 1
 --- stdout
@@ -59228,7 +59228,7 @@ floor check: root=$WORK/two-pins project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    moves: label.yml from 0000000000000000000000000000000000000001 to 0000000000000000000000000000000000000000, the commit the ci job calls (0000000000000000000000000000000000000001 is an ancestor of it)
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
@@ -59354,11 +59354,11 @@ not yet confirmed: no --repo: wall not checked; run /plinth:floor-check where it
 === --root $WORK/two-pins --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/agree-pins --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/two-pins --repo o/r
 --- exit 1
 --- stdout
@@ -59737,7 +59737,7 @@ floor check: root=$WORK/tmpl-drift-404 project=.
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
   INFO    not verified that v1.52.0 still names 8442a9661c170171230bf8c25f1c5fe8f89d83e5, the commit plinth was tested with (the tag was not found); the template-update skill checks it before it runs this line:
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    plinth pin: the one v1.52.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.52.0: offline or API error), so whether 0000000000000000000000000000000000000000 is older was not read
   INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
@@ -59995,7 +59995,7 @@ floor check: root=$WORK/pin-choice project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000, newer than 0000000000000000000000000000000000000003 (v9.0.0) that v1.52.0 was tested with; the update keeps it: https://github.com/coolbress/plinth/compare/0000000000000000000000000000000000000000...0000000000000000000000000000000000000003
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
@@ -60033,7 +60033,7 @@ not yet confirmed: labels not verified (offline, not logged in, or API error); r
 === --root $WORK/pin-choice --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/pin-choice --repo o/r
 --- exit 1
 --- stdout
@@ -60081,7 +60081,7 @@ floor check: root=$WORK/pin-choice project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -60162,7 +60162,7 @@ floor check: root=$WORK/pin-choice project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.52.0 was tested with 0000000000000000000000000000000000000003, but the two were not compared (offline or API error)
   INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
@@ -60248,7 +60248,7 @@ floor check: root=$WORK/pin-choice project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    plinth pin: the workflows call 0000000000000000000000000000000000000000; v1.52.0 was tested with 0000000000000000000000000000000000000003, but the two were not compared (the two commits have diverged)
   INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
@@ -60331,7 +60331,7 @@ floor check: root=$WORK/pin-choice project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    plinth pin: the one v1.52.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.52.0: offline or API error), so whether 0000000000000000000000000000000000000000 is older was not read
   INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
@@ -60417,7 +60417,7 @@ floor check: root=$WORK/pin-choice project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 3 workflow files is pinned to a commit (2 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   INFO    plinth pin: the one v1.52.0 was tested with was not read (coolbress/plinth-template copier.yml at v1.52.0 has no plinth_sha default that is a full commit SHA), so whether 0000000000000000000000000000000000000000 is older was not read
   INFO    the template-update skill stops before it runs this line until the two are compared
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
@@ -60456,7 +60456,7 @@ not yet confirmed: labels not verified (offline, not logged in, or API error); r
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
 === --root $WORK/owner-copy --repo o/r
 --- exit 1
 --- stdout
@@ -60495,7 +60495,7 @@ floor check: root=$WORK/owner-copy project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -60533,38 +60533,38 @@ not yet confirmed: labels not verified (offline, not logged in, or API error); r
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
 === --root $WORK/print-cmd --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=true --data owner_has_issue_forms=true
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=true --data owner_has_issue_forms=true
 === --root $WORK/owner-own-pr --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=true
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 1
 --- stdout
 === --root $WORK/owner-both-own --repo o/r --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
 === --root $WORK/owner-copy --repo o/r --print-update-command
 --- exit 1
 --- stdout
@@ -68191,7 +68191,7 @@ not yet confirmed: SSH keys not verified here: GitLab's Preferences → SSH Keys
 === --root $WORK/glold --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0123456789abcdef0123456789abcdef01234567 --data plinth_gitlab_integrity=L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0123456789abcdef0123456789abcdef01234567 --data plinth_gitlab_integrity=L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
 === --root $WORK/glold --print-update-command
 --- exit 1
 --- stdout
@@ -68201,7 +68201,7 @@ uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --
 === --root $WORK/glold --host gitlab --print-update-command
 --- exit 0
 --- stdout
-uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0123456789abcdef0123456789abcdef01234567 --data plinth_gitlab_integrity=L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
+uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0123456789abcdef0123456789abcdef01234567 --data plinth_gitlab_integrity=L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
 === --root $WORK/glold --host gitlab --no-network
 --- exit 0
 --- stdout
@@ -68240,7 +68240,7 @@ floor check: root=$WORK/glold project=. host=gitlab
   PASS  relative links in 9 markdown files resolve
   PASS  no dotenv file is tracked (20 tracked files read; names only, not contents or history)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0123456789abcdef0123456789abcdef01234567 --data plinth_gitlab_integrity=L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0123456789abcdef0123456789abcdef01234567 --data plinth_gitlab_integrity=L3/GAoKaw0Arw6hDCKeKQlV1QPEgHYxGBHsH4zG1IY8=
   INFO  template: the latest plinth release was not read (not found); going on with the template tag this plinth targets, v1.52.0
   PASS  pyproject.toml present
   PASS  uv.lock committed
@@ -77574,7 +77574,7 @@ floor check: root=$WORK/print-cmd project=.
   PASS  no dotenv file is tracked (21 tracked files read; names only, not contents or history)
   PASS  every action in 2 workflow files is pinned to a commit (1 uses)
   WARN  template: v1.0.0 is behind v1.52.0, the tag plinth is tested with; the changed files could not be read (offline or API error)
-  INFO    uvx --from copier==9.18.2 --exclude-newer 2026-09-09 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
+  INFO    uvx --from copier==9.19.1 copier update --defaults --vcs-ref 8442a9661c170171230bf8c25f1c5fe8f89d83e5 --data plinth_sha=0000000000000000000000000000000000000000 --data owner_has_pr_template=false --data owner_has_issue_forms=false
   WARN  template: this plinth targets template v1.52.0, but v99.0.0 is out (the latest plinth release, v98.0.0): update the plugin first. Type these yourself, in order:
   INFO    claude plugin marketplace update plinth
   INFO    claude plugin update plinth@plinth
