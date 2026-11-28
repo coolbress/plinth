@@ -228,6 +228,7 @@ the move changes what a new project's agent reads, and then asks for
 | The release before is less than 7 days old | Wait, or add `hotfix: <reason>` for a hotfix, or `train exception: <link>` for an early release the owner decided in a comment ([Before you start](#before-you-start)) |
 | Cannot read the comment the `train exception:` line names | Check the link and that `gh` is logged in, then run step 3 again |
 | The why-file has both a `hotfix:` and a `train exception:` line | Keep the one that is true |
+| Since the release before, an installed user's plugins change, and the release does not say how | For a removed entry: add its row to [Retired entries](../reference/dependency-entries.md#retired-entries), map it to `null` under `renames`, and name `claude plugin uninstall <name>@plinth` in the why or a fragment. For a dropped dependency: add a row and name `claude plugin prune`. For an added dependency: name it |
 | The why must say what this release was tested with | Add the exact line it prints; if you tested another template tag, raise the pin first ([How to upgrade the template pin](upgrade-the-template-pin.md)) |
 | The why says nothing but the tested line | Add a sentence on why the release exists |
 | The why has a heading line | Remove every line that starts with `#` |
