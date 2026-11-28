@@ -27,6 +27,8 @@ language and leaves the term itself as it is.
 | **workflow run** | One run of the checks on one commit: GitHub starts it when a change is pushed, and its page in the Actions tab lists each check and its log. On GitLab it is a pipeline. |
 | **job summary** | The short report a check writes at the top of its page in a workflow run: what passed, what failed, and what is not yet confirmed. |
 | **annotation** | A note a check pins to a pull request: on the changed file and line when it names one, and in the list on the workflow run's page. |
+| **pin** | A version written down exactly, such as the plinth release whose checks the project calls: it stays the same until a pull request raises it. |
+| **floor** | What a repository needs before it counts as set up: its documents, its checks and the rules on `main`. `/plinth:floor-check` lists what is missing. |
 
-Words with a plinth-specific meaning (wall, floor, door) are in
+Words with a plinth-specific meaning (wall, door, and floor in full) are in
 [GLOSSARY.md](../../GLOSSARY.md).
