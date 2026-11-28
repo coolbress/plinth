@@ -24,19 +24,21 @@ the tests" follows that rule only while it remembers it, and when it says
 
 ## What plinth does
 
-- **You keep the decisions.** At each decision it asks of you, the agent
-  recommends one option, says why in plain words, and leaves the choice to
-  you. It delegates the work, not the judgement.
+- **You keep the decisions.** At each decision it asks of you, the agent is
+  guided to recommend one option, say why in plain words, and leave the
+  choice to you. It delegates the work, not the judgement.
 - **Done is a merged change, not a claim.** plinth moves the rules a check
   can hold out of the agent's instructions and into the host: GitHub
   **refuses a merge while a required check is red**, so the rule holds when
   the agent forgets it.
 - **The checks say what they confirmed.** A check's red or green is the one
-  verdict the agent did not write. Green means the properties it asserts
-  hold, and nothing more; the limits below say what no check covers.
-- **Someone else can take it over.** Every change lands as a pull request,
-  and the agent is guided to write in it what changed, why, and how it was
-  checked, so another person can read the project's history and pick it up.
+  verdict that does not come from the agent's own report. Green means the
+  properties it asserts hold, and nothing more; the limits below say what no
+  check covers.
+- **Someone else can take it over.** In a repository plinth makes, every
+  change lands as a pull request, and the agent is guided to write in it
+  what changed, why, and how it was checked, so another person can read the
+  project's history and pick it up.
 
 Most of the checks run established tools (ruff, pytest, gitleaks, CodeQL and
 others), a few are plinth's own; the host, not plinth, refuses the merge. In
