@@ -13,7 +13,7 @@ bad() { fail=$((fail+1)); echo "  FAIL  $1"; }
 echo "-- every git call passes the fixed flags"
 # floor-check.py: one helper makes them; no other line starts git.
 if [ "$(grep -cE "[[(][[:space:]]*['\"]git['\"]" "$checker")" = 1 ] && ! grep -q 'shell=True' "$checker" && grep -qE '^GIT_SAFE = \("-c", "core\.fsmonitor=false", "-c", "core\.hooksPath=/dev/null"\)$' "$checker" \
-   && grep -q '"GIT_CONFIG_NOSYSTEM": "1"' "$checker"; then ok "floor-check.py: git runs only through git(), with GIT_SAFE and GIT_CONFIG_NOSYSTEM=1"
+   && grep -q 'env\["GIT_CONFIG_NOSYSTEM"\] = "1"' "$checker" && grep -q '"GIT_NO_LAZY_FETCH": "1"' "$checker"; then ok "floor-check.py: git runs only through git(), with GIT_SAFE and GIT_CONFIG_NOSYSTEM=1"
 else bad "floor-check.py: a git call outside git(), or its flags changed"; grep -nE "[[(][[:space:]]*['\"]git['\"]|shell=True" "$checker" | sed 's/^/        /'; fi
 # The one call that keeps the system level says why, in the helper.
 if [ "$(grep -c 'system_config=True' "$checker")" = 1 ]; then ok "floor-check.py: one call keeps the system config (FC-G07, which reads every level's credential helpers)"
@@ -21,13 +21,13 @@ else bad "floor-check.py: system_config=True is not on exactly one call"; fi
 gs="$root/scripts/guide-state.sh"
 # A git command: at a line's start, after a separator, `$(`, or a keyword.
 bare="$(sed 's/[[:space:]]#.*//' "$gs" | grep -nE '(^|[;&|(]|\$\()[[:space:]]*((!|if|then|elif|while|until|do)[[:space:]]+)*git[[:space:]]' \
-  | grep -v 'git_safe() { GIT_CONFIG_NOSYSTEM=1 git -c core.fsmonitor=false -c core.hooksPath=/dev/null "\$@"; }')"
+  | grep -v 'git_safe() { GIT_CONFIG_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 git -c core.fsmonitor=false -c core.hooksPath=/dev/null "\$@"; }')"
 if [ -z "$bare" ] && [ "$(grep -c 'git_safe -C' "$gs")" -ge 1 ]; then ok "guide-state.sh: git runs only through git_safe, with the flags and GIT_CONFIG_NOSYSTEM=1"
 else bad "guide-state.sh: a git call outside git_safe"; printf '%s\n' "$bare" | sed 's/^/        /'; fi
 # floor-report.py, which the skill pipes the checker into, reads the checkout too.
 rep="$root/scripts/floor-report.py"
 if [ "$(grep -cE "[[(][[:space:]]*['\"]git['\"]" "$rep")" = 1 ] && grep -qF '["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C"' "$rep" \
-   && grep -q '"GIT_CONFIG_NOSYSTEM": "1"' "$rep"; then ok "floor-report.py: git runs only through git(), with the flags and GIT_CONFIG_NOSYSTEM=1"
+   && grep -q '"GIT_CONFIG_NOSYSTEM": "1", "GIT_NO_LAZY_FETCH": "1"' "$rep"; then ok "floor-report.py: git runs only through git(), with the flags and GIT_CONFIG_NOSYSTEM=1"
 else bad "floor-report.py: a git call outside git(), or its flags changed"; grep -nE "[[(][[:space:]]*['\"]git['\"]" "$rep" | sed 's/^/        /'; fi
 if ! grep -qE '\["git"|subprocess\.run\(\["git' "$root/scripts/records-check.py"; then ok "records-check.py: makes no git call"
 else bad "records-check.py: makes a git call without the flags"; fi
@@ -100,7 +100,7 @@ git -C "$frepo" config filter.fb.process "$work/filter"
 printf '[filter "fc"]\n\tclean = %s\n' "$work/filter" > "$work/included.cfg"
 git -C "$frepo" config include.path "$work/included.cfg"
 git -C "$frepo" config 'filter.x=y.clean' "$work/filter"
-touch_all() { for f in a b c d; do echo "${f}Z" > "$frepo/$f"; done; }
+touch_all() { local t; for t in a b c d; do echo "${t}Z" > "$frepo/$t"; done; }
 # Each filter on its own, to show each fixture line runs a program unprotected.
 for f in a b c d; do
   touch_all; rm -f "$work/marker"
@@ -178,6 +178,41 @@ else bad "the skill's pipe crashed (exit $rc_r) or ran the submodule's filter"; 
 # shellcheck disable=SC2016  # the pattern matches the script's literal text
 if [ "$(grep -v '^git_safe()' "$gs" | grep -oE 'git_safe[[:space:]]+(-C[[:space:]]+"[^"]*"[[:space:]]+)?[a-z-]+' | awk '{print $NF}' | sort -u)" = rev-parse ]; then ok "guide-state.sh: every git call is rev-parse, which runs no filter"
 else bad "guide-state.sh makes a git call other than rev-parse: give git_safe the filter protection"; grep -n 'git_safe -C' "$gs" | sed 's/^/        /'; fi
+
+echo "-- a promisor remote the checkout names: status fetches nothing (#1278)"
+# A rename-detecting status needs a deleted blob; the checkout says a promisor
+# remote holds it, and that remote's URL is a program (ext::).
+prepo="$work/prepo"; mkdir -p "$prepo"; git -C "$prepo" init -q
+seq 1 200 > "$prepo/A"; git -C "$prepo" add A; git -C "$prepo" -c user.name=t -c user.email=t@t commit -q -m init
+blob="$(git -C "$prepo" rev-parse HEAD:A)"
+git -C "$prepo" rm -q A; { seq 1 199; echo x; } > "$prepo/B"; git -C "$prepo" add B
+rm -f "$prepo/.git/objects/${blob:0:2}/${blob:2}"
+git -C "$prepo" config core.repositoryformatversion 1; git -C "$prepo" config extensions.partialClone origin
+git -C "$prepo" config remote.origin.promisor true; git -C "$prepo" config protocol.ext.allow always
+git -C "$prepo" config remote.origin.url "ext::sh -c touch% $work/marker"
+rm -f "$work/marker"
+GIT_CONFIG_NOSYSTEM=1 git -c core.fsmonitor=false -c core.hooksPath=/dev/null -C "$prepo" status --porcelain >/dev/null 2>&1
+if [ -e "$work/marker" ]; then ok "the fixture works: with only the #1119 flags, git status runs the promisor remote's program"
+else bad "the promisor fixture runs nothing: the cases below would prove nothing"; fi
+rm -f "$work/marker"
+python3 - "$checker" "$prepo" >/dev/null 2>&1 <<'PY'
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("fc", sys.argv[1]); fc = importlib.util.module_from_spec(spec)
+sys.argv, repo = ["fc"], sys.argv[2]; spec.loader.exec_module(fc)
+fc.git(Path(repo), "status", "--porcelain", capture_output=True)
+PY
+if [ ! -e "$work/marker" ]; then ok "floor-check.py's git() runs that status and no promisor program"
+else bad "floor-check.py's git() ran the promisor remote's program"; fi
+rm -f "$work/marker"
+(cd "$prepo" && python3 "$checker" --root . --repo o/r --no-network --format json 2>/dev/null \
+  | XDG_CACHE_HOME="$work/cache" python3 "$rep" --root . >"$work/report" 2>&1); rc_r=$?
+if [ "$rc_r" -le 1 ] && [ -s "$work/report" ] && [ ! -e "$work/marker" ]; then ok "the skill's pipe ran (exit $rc_r) and no promisor program"
+else bad "the skill's pipe crashed (exit $rc_r) or ran the promisor remote's program"; fi
+rm -f "$work/marker"
+git_safe -C "$prepo" status --porcelain >/dev/null 2>&1
+if [ ! -e "$work/marker" ]; then ok "guide-state.sh's git_safe, on that status, runs no promisor program"
+else bad "guide-state.sh's git_safe ran the promisor remote's program"; fi
 
 echo "-- one repository per run"
 if python3 - "$checker" <<'PY'

@@ -174,9 +174,10 @@ def filters_off(listing: bytes) -> dict[str, str]:
 
 def git(root: str, *args: str, filters: bool = True) -> str | None:
     """A git read that runs no program of the repository it reads (#1119, #1278):
-    no fsmonitor, no hook, no system config and no filter driver the checkout
-    configures, as floor-check.py's git(). None when that config is unread."""
-    env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}
+    no fsmonitor, no hook, no system config, no lazy fetch and no filter driver
+    the checkout configures, as floor-check.py's git(). None when that config
+    is unread, or when status would need a missing object fetched."""
+    env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1", "GIT_NO_LAZY_FETCH": "1"}
     if filters:
         f = git(root, "config", "--show-scope", "--null", "--get-regexp", r"^filter\.", filters=False)
         if f is None:

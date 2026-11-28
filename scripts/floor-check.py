@@ -2094,8 +2094,11 @@ def check_force_push_deny(deny: list) -> None:
 # a WARN, and promoting one to FAIL is a compatibility decision taken later.
 
 # Placeholder dotenv names: committed on purpose, values not real.
-# Every git call (#1119): no fsmonitor program, no hook and no system config,
-# so reading a repository someone else wrote runs none of its programs.
+# Every git call (#1119): no fsmonitor program, no hook, no system config, and
+# no lazy fetch from a promisor remote the checkout names (GIT_NO_LAZY_FETCH,
+# git 2.45 and later; #1278). With `git()`'s filter pairs, reading a
+# repository someone else wrote runs none of the programs it configures for
+# these reads.
 GIT_SAFE = ("-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null")
 # The keys that make a filter driver run a program, emptied (#1278).
 FILTER_OFF = (("clean", ""), ("smudge", ""), ("process", ""), ("required", "false"))
@@ -2123,13 +2126,16 @@ def filters_off(listing: bytes, env: dict[str, str]) -> dict[str, str]:
 
 
 def git(root: Path, *args: str, system_config: bool = False, filters: bool = True, **kw) -> subprocess.CompletedProcess:
-    """`git -C <root> <args>` with GIT_SAFE and GIT_CONFIG_NOSYSTEM=1, and every
+    """`git -C <root> <args>` with GIT_SAFE, GIT_CONFIG_NOSYSTEM=1 and
+    GIT_NO_LAZY_FETCH=1, and every
     filter driver the checkout configures emptied (`filters_off`). When that
     config cannot be read, git is not run: the result is exit 128.
     `system_config` keeps the system level for a read whose subject is every
     level git reads (FC-G07's credential helpers): the system file is the
     machine's, not the repository's, and a `config` read runs no program."""
-    env = {**os.environ} if system_config else {**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}
+    env = {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
+    if not system_config:
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
     if filters:
         f = git(root, "config", "--show-scope", "--null", "--get-regexp", r"^filter\.", filters=False,
                 capture_output=True, timeout=30)

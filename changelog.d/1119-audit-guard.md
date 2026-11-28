@@ -9,8 +9,10 @@
   no fsmonitor program or hook of the repository they read. The checker and
   the reporter also empty every filter driver (`clean`, `smudge`, `process`)
   that the checkout's own config names, and the reporter's `git status` does
-  not enter submodules, so no filter program the repository configures runs
-  either (#1278); the person's global filters, such as Git LFS, stay. The
+  not enter submodules, and no git call fetches a missing object from a
+  promisor remote the checkout names (`GIT_NO_LAZY_FETCH=1`), so no filter or
+  remote program the repository configures runs either (#1278); the person's
+  global filters, such as Git LFS, stay. The
   skill and
   [Run a project](https://github.com/coolbress/plinth/blob/main/docs/how-to/run-a-project.md#1-start)
   say how to run the check headless in a repository someone else wrote

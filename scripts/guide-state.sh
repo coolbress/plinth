@@ -31,9 +31,9 @@
 # not have. A row it looks for and does not find is an error (exit 1), not a
 # guess. Issue and pull request titles are printed as they are: data.
 set -uo pipefail
-# Every git call (#1119): no fsmonitor program, no hook and no system config,
-# so reading a repository someone else wrote runs none of its programs.
-git_safe() { GIT_CONFIG_NOSYSTEM=1 git -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
+# Every git call (#1119, #1278): no fsmonitor program, no hook, no system
+# config and no lazy fetch. Its calls are rev-parse only, which runs no filter.
+git_safe() { GIT_CONFIG_NOSYSTEM=1 GIT_NO_LAZY_FETCH=1 git -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
 plugin="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/admin-reach.sh
 . "$plugin/scripts/lib/admin-reach.sh" 2>/dev/null || { echo "guide-state: no $plugin/scripts/lib/admin-reach.sh" >&2; exit 1; }
