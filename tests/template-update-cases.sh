@@ -95,6 +95,8 @@ cat > "$work/bin/uvx" <<'MOCK'
 #!/usr/bin/env bash
 set -u
 printf '%s\n' "$*" > "$UVX_LOG"
+# What the constraints file copier ran with starts with (#1220): the file is gone after the run.
+{ [ -n "${UV_CONSTRAINT:-}" ] && head -n 1 "$UV_CONSTRAINT"; } > "$UVX_LOG.constraint" 2>/dev/null || true
 ref=""; prev=""
 for a in "$@"; do [ "$prev" = --vcs-ref ] && ref="$a"; prev="$a"; done
 [ "${MOCK_COPIER:-clean}" = fail ] && { echo "copier: something broke" >&2; exit 1; }
@@ -260,7 +262,19 @@ for a in "\$@"; do
 done
 exec "$real_git" "\$@"
 MOCK
-chmod +x "$work/bin/gh" "$work/bin/uvx" "$work/bin/git"
+# uv: `uv export -o <file>` (scripts/lib/copier-pin.sh, #1220) writes a hashed
+# copier line there, as tools/copier/uv.lock would, so no real uv is needed;
+# anything else fails, since nothing else here runs uv.
+cat > "$work/bin/uv" <<'MOCK'
+#!/usr/bin/env bash
+[ "${1:-}" = export ] || exit 1
+while [ $# -gt 0 ]; do
+  [ "$1" = -o ] && { printf 'copier==0.0.0 \\\n    --hash=sha256:%064d\n' 0 > "$2"; exit 0; }
+  shift
+done
+exit 1
+MOCK
+chmod +x "$work/bin/gh" "$work/bin/uvx" "$work/bin/git" "$work/bin/uv"
 
 # ── the description against the form (#856) ─────────────────────────────
 # Every line of the form outside its comments is a field: a heading, or a
@@ -926,6 +940,8 @@ run --apply "$base" --assisted-by "Claude:claude-test-1"
 wt="$(wt_of clean)"
 if [ "$rc" = 0 ] && [ "$(cat "$work/uvx.log" 2>/dev/null)" = "${want#uvx }" ]; then ok "copier runs with exactly the words the checker prints"
 else bad "clean apply (rc=$rc), uvx got '$(cat "$work/uvx.log" 2>/dev/null)', checker printed '$want'"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+if [ "$(cat "$work/uvx.log.constraint" 2>/dev/null)" = "copier==0.0.0 \\" ]; then ok "and with copier's lock as uv's constraints (UV_CONSTRAINT), which the line does not name"
+else bad "copier ran without the lock in UV_CONSTRAINT: its first line was '$(cat "$work/uvx.log.constraint" 2>/dev/null)'"; fi
 if [ "$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "chore/template-$target_ref" ] \
    && [ "$(git -C "$wt" rev-parse HEAD~1 2>/dev/null)" = "$base" ]; then ok "the update is one commit on its own branch in a worktree beside the repository, on the verified base"
 else bad "worktree/branch/base"; fi
