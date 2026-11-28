@@ -22,6 +22,7 @@ fixture() {
   mkdir -p "$d/skills/one"
   printf -- '---\nname: one\ndescription: x\n---\nbody\n' > "$d/skills/one/SKILL.md"
   cp "$root/tests/size_caps.py" "$d/tests/size_caps.py"
+  printf 'READS_ONE_MAX_BYTES = 30000\nDESCRIPTION_ONE_MAX_BYTES = 100\n' >> "$d/tests/size_caps.py"
   if [ -n "$1" ]; then
     python3 - "$d/AGENTS.md" "$1" "$2" <<'PY'
 import sys
@@ -68,7 +69,7 @@ arsenal_of() { # <dir> <lines> <bytes>: skills/arsenal/SKILL.md of that size
   mkdir -p "$1/skills/arsenal"
   python3 -c 'import sys
 path, lines, size = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
-body = "---\nname: arsenal\n---\n" + "x\n" * (lines - 4)
+body = "---\nname: arsenal\ndescription: x\n---\n" + "x\n" * (lines - 5)
 open(path, "w").write(body + "y" * (size - len(body) - 1) + "\n")' "$1/skills/arsenal/SKILL.md" "$2" "$3"
 }
 d="$(fixture 50 2000 arsenal-at)"; arsenal_of "$d" 250 12000
@@ -80,6 +81,32 @@ expect fail "the arsenal one line over (251)" "$d" "the limits are 250 lines and
 d="$(fixture 50 2000 other-size)"
 python3 -c 'import sys; open(sys.argv[1], "w").write("---\nname: one\n---\n" + "x\n" * 300 + "y" * 15000 + "\n")' "$d/skills/one/SKILL.md"
 expect pass "another skill of 300 lines and 15,000 bytes: the arsenal's caps are its own" "$d" "skills/one/SKILL.md: 304 lines"
+
+# What one invocation reads (#1181): SKILL.md and the files its body says to
+# read before acting, against READS_ONE_MAX_BYTES (30,000 here).
+pad() { python3 -c 'import sys; open(sys.argv[1], "w").write("y" * int(sys.argv[2]) + "\n")' "$1" "$2"; }
+d="$(fixture 50 2000 reads-over)"
+printf -- '---\nname: one\ndescription: x\n---\nThe steps are in `${CLAUDE_PLUGIN_ROOT}/skills/one/steps.md`: read it before the first step.\n' > "$d/skills/one/SKILL.md"
+pad "$d/skills/one/steps.md" 30000
+expect fail "a file read before acting counts: SKILL.md and steps.md over the cap" "$d" "one reads"
+pad "$d/skills/one/steps.md" 20000
+expect pass "  and under it, named in the line" "$d" "(SKILL.md + steps.md), the cap 30000"
+d="$(fixture 50 2000 reads-optional)"
+printf -- '---\nname: one\ndescription: x\n---\nWhy each item says what it says is in [reference.md](reference.md); read it only when asked.\n\nThe [notes](notes.md) are for maintainers.\n' > "$d/skills/one/SKILL.md"
+pad "$d/skills/one/reference.md" 40000; pad "$d/skills/one/notes.md" 40000
+expect pass "a file to read only when asked, or only named, is not counted" "$d" "named, not read before acting: skills/one/reference.md skills/one/notes.md"
+d="$(fixture 50 2000 reads-numbers)"
+printf -- '---\nname: one\ndescription: x\n---\nThe steps are in [steps.md](steps.md): read it before the first step.\n' > "$d/skills/one/SKILL.md"
+printf '1. [The host](#1-the-host)\n\n## 1. The host\n\nAs #812 decided.\n' > "$d/skills/one/steps.md"
+expect fail "a file read before acting carries no issue number" "$d" "skills/one/steps.md, read with one: 1 lines carry an issue number"
+printf '1. [The host](#1-the-host)\n\n## 1. The host\n' > "$d/skills/one/steps.md"
+expect pass "  and a link to a heading that starts with a digit is not one" "$d" "skills/one/steps.md, read with one: no issue numbers"
+d="$(fixture 50 2000 desc-over)"
+printf -- '---\nname: one\ndescription: %s\n---\nbody\n' "$(printf 'w%.0s' $(seq 1 101))" > "$d/skills/one/SKILL.md"
+expect fail "a description over its cap (101 bytes, the cap 100)" "$d" "one: description 101 bytes; the cap is 100"
+d="$(fixture 50 2000 reads-cap-missing)"
+grep -v '^READS_ONE_MAX_BYTES' "$d/tests/size_caps.py" > "$d/caps" && mv "$d/caps" "$d/tests/size_caps.py"
+expect fail "a skill with no reads cap: not read as no limit" "$d" "READS_ONE_MAX_BYTES"
 
 echo "-- $pass passed, $fail failed"
 [ "$fail" = 0 ]
