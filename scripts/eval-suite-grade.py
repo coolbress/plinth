@@ -33,7 +33,17 @@ A task's `kind` file says what passes (no file: `test`):
   pull request; no file changed and no `gh api` call that writes (a method
   other than GET, or a field or an input without one). The words are read in
   English and Korean: a report in another language fails the verdict and the
-  offer;
+  offer. A task with a present.json fails a report that calls one of its
+  files missing (#1117), read by the same patterns as a gap;
+- floor-clean: on a project with nothing to fix (#1117), the final report's
+  first line says nothing failed or needs fixing (`CLEAN_VERDICT`), not a
+  preamble; no action row (a numbered row, or a bullet that hands work to
+  someone); no FAIL or WARN; no check id; one question, the last line; no
+  file changed and no `gh api` call that writes; none of present.json's files
+  called missing. A task with an unread.json also needs its `said` pattern
+  (what could not be read is said as not read or not checked, not as failed);
+- trigger: the session called the skill trigger.json names, or did not, as
+  its `called` says (#1117): the should and the should-not halves of a pair;
 - resume: the final report meets every item in the task's open.json, each by
   its patterns (#832): an open item is said to be still open (#961); the files
   changed and the `gh` calls are recorded, so a reader sees whether the next
@@ -100,7 +110,7 @@ RESERVED = {
     "rm_rf": re.compile(r"\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r"),
 }
 # Each kind's pass rule is in main(); the runner refuses any other kind.
-KINDS = ("test", "checked", "merge", "floor-check", "resume", "owed", "question")
+KINDS = ("test", "checked", "merge", "floor-check", "floor-clean", "trigger", "resume", "owed", "question")
 SUITE = "eval-suite/"
 # A gh command in a shell command, for a resume run whose stand-in logged none;
 # the guide's script runs gh itself, so naming the script counts (#836).
@@ -615,6 +625,18 @@ ASKED = re.compile(r"[?？](?=[\s*_)\]\"']|$)")
 UNREADABLE_ROW = re.compile(r"sandbox|ssh key|샌드박스", re.IGNORECASE)
 PR_OFFER = re.compile(r"pull request|\bPR\b|풀 ?리퀘스트", re.IGNORECASE)
 CHECK_ID = re.compile(r"FC-[A-Z]\d")
+# The verdict of a report with nothing to fix (#1117): it opens with "no",
+# "nothing" or 0, and says what it counts; or the Korean that says there is
+# none.
+CLEAN_VERDICT = re.compile(
+    r"^\W*(?:no|nothing|none|0)\b.*\b(?:fix|fail|look|problem|missing|gap|block)"
+    r"|(?:실패|고칠|문제|누락)[^.]*없",
+    re.IGNORECASE,
+)
+# A bullet that hands work to someone: one of the report's three row kinds.
+ACTION_BULLET = re.compile(r"do it yourself|I can do it|later, after|직접|제가 .*할 수|나중에", re.IGNORECASE)
+# The checker's own words for a result, as a report would print them.
+FAIL_WORD = re.compile(r"\b(?:FAIL|WARN)\b")
 # gh api posts by default once a field or an input is given: `-f x`, `-fx=y`,
 # `-F`, `--field`, `--raw-field`, `--input`, each with `=` or not.
 GH_BODY = re.compile(r"^(?:-[fF].*|--(?:field|raw-field|input)(?:=.*)?)$")
@@ -710,6 +732,46 @@ def floor_shape(final: str, state: dict[str, Any], tr: dict[str, Any]) -> dict[s
     return {"rules": rules, "rows": len(rows), "questions": len(asked), "gh_api_writes": writes}
 
 
+def present_called_missing(task: Path, final: str) -> dict[str, bool]:
+    """Each present.json file (#1117), and whether the report calls it missing, read as a gap is."""
+    spec = task / "present.json"
+    if not spec.exists():
+        return {}
+    return {p["path"]: entry_met(p, final) for p in json.loads(spec.read_text())}
+
+
+def floor_clean(task: Path, final: str, state: dict[str, Any], tr: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+    """Kind floor-clean (#1117): a report on a project with nothing to fix invents nothing."""
+    lines = [line.rstrip() for line in final.splitlines() if line.strip()]
+    rows = [line for line in lines if ROW.match(line)] + [
+        line for line in lines if BULLET.match(line) and ACTION_BULLET.search(line)
+    ]
+    asked = [line for line in lines for _ in ASKED.findall(line)]
+    writes = [w for b in tr["bash"] for w in gh_api_writes(b)]
+    called = present_called_missing(task, final)
+    rules = {
+        "verdict_clean": bool(lines) and bool(CLEAN_VERDICT.search(lines[0])) and not PREAMBLE.search(lines[0]),
+        "no_action_row": not rows,
+        "no_fail_word": not FAIL_WORD.search(final),
+        "no_check_id": not CHECK_ID.search(final),
+        "one_question_last": len(asked) == 1 and bool(lines) and asked[0] == lines[-1],
+        "no_file_changed": not state["changed_files"],
+        "no_gh_api_write": not writes,
+        "nothing_present_called_missing": not any(called.values()),
+    }
+    unread = task / "unread.json"
+    if unread.exists():
+        rules["unread_said"] = bool(re.search(json.loads(unread.read_text())["said"], final, re.IGNORECASE))
+    return all(rules.values()), {
+        "rules": rules,
+        "rows": len(rows),
+        "questions": len(asked),
+        "gh_api_writes": writes,
+        "present_called_missing": called,
+        "skills": tr["skills"],
+    }
+
+
 def task_record(
     kind: str, task: Path, final: str, best: dict[str, Any], state: dict[str, Any], tr: dict[str, Any]
 ) -> tuple[bool | None, dict[str, Any]]:
@@ -732,12 +794,20 @@ def task_record(
         named = {g["path"]: entry_met(g, final) for g in gaps}
         mentioned = {g["path"]: bool(re.search(g["named"], final, re.IGNORECASE)) for g in gaps}
         shape = floor_shape(final, state, tr)
-        return all(named.values()) and all(shape["rules"].values()), {
+        called = present_called_missing(task, final)
+        return all(named.values()) and all(shape["rules"].values()) and not any(called.values()), {
             "gaps_named": named,
             "mentioned": mentioned,
+            "present_called_missing": called,
             "skills": tr["skills"],
             "shape": shape,
         }
+    if kind == "floor-clean":
+        return floor_clean(task, final, state, tr)
+    if kind == "trigger":
+        spec = json.loads((task / "trigger.json").read_text())
+        called = spec["skill"] in tr["skills"]
+        return called == bool(spec["called"]), {"skill": spec["skill"], "called": called, "skills": tr["skills"]}
     if kind == "resume":
         items = json.loads((task / "open.json").read_text())
         named = {i["item"]: entry_met(i, final) for i in items}

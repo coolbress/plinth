@@ -28,7 +28,12 @@
 # its final report besides the pass: the tool use of the step it is at, and,
 # for the busy one, the failing check and the pin behind. A task with a
 # plinth_pin runs on a fixture of its own whose workflows call plinth at that
-# commit, not at the template's default.
+# commit, not at the template's default. A task's present.json names files
+# its fixture must have (a report that calls one missing fails, #1117); the
+# fixtures are checked for them. A task with an `offline` file runs with
+# GitHub refused (floor-unreadable, #1117): HTTPS_PROXY and HTTP_PROXY point
+# at a port nothing listens on, and NO_PROXY keeps Anthropic's hosts, so the
+# session itself still reaches its model.
 #
 # The configuration directory is a temporary one, never the person's own: with
 # no --config-dir one is made, plinth is installed into it from this checkout,
@@ -103,7 +108,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 args=("$@")  # for the queue below, which runs this script again with them
-all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps next-day owed-item guide guide-fresh guide-busy guide-reminder guide-plain guide-reminder-plain friend-311 late-fee skip-mypy)
+all_tasks=(cli-name ledger about greeting-push notes-stats greeting-merge floor-gaps floor-clean floor-unreadable floor-trigger-setup floor-trigger-code next-day owed-item guide guide-fresh guide-busy guide-reminder guide-plain guide-reminder-plain friend-311 late-fee skip-mypy)
 all_arms=(none repo-only plinth)
 per_run_cap=2
 session_timeout=900
@@ -149,7 +154,7 @@ fi
 for t in "${tasks[@]}"; do
   [ -f "$root/eval-suite/tasks/$t/prompt.txt" ] || die "no task $t (tasks: ${all_tasks[*]})"
   k="test"; [ ! -f "$root/eval-suite/tasks/$t/kind" ] || k="$(tr -d '[:space:]' < "$root/eval-suite/tasks/$t/kind")"
-  case "$k" in test|checked|merge|floor-check|resume|owed|question) ;; *) die "task $t: unknown kind $k" ;; esac
+  case "$k" in test|checked|merge|floor-check|floor-clean|trigger|resume|owed|question) ;; *) die "task $t: unknown kind $k" ;; esac
 done
 for a in "${arms[@]}"; do case " ${all_arms[*]} " in *" $a "*) ;; *) die "no arm $a (arms: ${all_arms[*]})" ;; esac; done
 # Whether a task runs in an arm: all of them, unless its `arms` file lists fewer.
@@ -417,6 +422,14 @@ make_fixtures() {
   for a in "${needed[@]}"; do
     for kind in plinth none; do commit_fixture "$out/fixtures/$kind-$a"; done
   done
+  for t in "${tasks[@]}"; do
+    [ -f "$root/eval-suite/tasks/$t/present.json" ] || continue
+    for arm in plinth none; do
+      while IFS= read -r p; do
+        [ -e "$(fixture_of "$t" "$arm")/$p" ] || die "task $t: present.json names $p, which its fixture does not have"
+      done < <(python3 -I -c 'import json, sys; print("\n".join(p["path"] for p in json.load(open(sys.argv[1]))))' "$root/eval-suite/tasks/$t/present.json")
+    done
+  done
 }
 graded_runs() { find "$out/runs" -mindepth 2 -maxdepth 2 -name grade.json | wc -l | tr -d ' '; }
 # Every run folder is a run that started, in this invocation or an earlier one.
@@ -480,8 +493,10 @@ run_one() { # <task> <arm> <n> <budget>
   [ ! -f "$r/repo/uv.lock" ] || (cd "$r/repo" && env -u VIRTUAL_ENV uv sync --quiet --frozen)
   git -C "$r/repo" rev-parse HEAD > "$r/start-sha.txt"
   trust "$r/repo"
-  local settings=()
+  local settings=() offline=()
   [ "$arm" = plinth ] || settings=(--settings "$plugins_off")
+  [ ! -f "$root/eval-suite/tasks/$task/offline" ] || offline=(HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9
+    https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 "NO_PROXY=anthropic.com,.anthropic.com" "no_proxy=anthropic.com,.anthropic.com")
   printf '%s %s %s model=%s template=%s claude=%s\n' "$task" "$arm" "$n" "$model" "$template_sha" \
     "$(claude --version 2>/dev/null | head -1)" > "$r/cond.txt"
   start=$(date +%s)
@@ -491,6 +506,7 @@ run_one() { # <task> <arm> <n> <budget>
     | env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u GH_HOST \
         -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u VIRTUAL_ENV -u PLINTH_HEAVY_HELD \
         TMPDIR="$r/tmp" PLINTH_HEAVY_DIR="$r/tmp" GH_CONFIG_DIR="$r/gh" CLAUDE_CONFIG_DIR="$cfg" DISABLE_AUTOUPDATER=1 PATH="$path" \
+        ${offline[@]+"${offline[@]}"} \
         perl -e 'alarm shift; exec @ARGV or die "exec: $!"' "$session_timeout" \
         claude -p --model "$model" --permission-mode auto --output-format stream-json --verbose \
         --max-budget-usd "$budget" ${settings[@]+"${settings[@]}"}) > "$r/stream.jsonl" 2> "$r/stderr.txt"

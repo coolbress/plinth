@@ -62,6 +62,25 @@ def records(rs: list[Run]) -> str:
     return f"{line}; {more}" if line and more else line or more
 
 
+def skill_calls(k: list[dict[str, Any]]) -> str:
+    """Each Skill the runs called, with how many times."""
+    calls: dict[str, int] = defaultdict(int)
+    for x in k:
+        for s in x["skills"]:
+            calls[s] += 1
+    return ", ".join(f"`{s}` ×{c}" for s, c in sorted(calls.items())) or "none"
+
+
+def present_said(k: list[dict[str, Any]], n: int) -> str:
+    """The files a task's present.json names (#1117), each with how many reports called it missing."""
+    files = list(k[0].get("present_called_missing") or {})
+    if not files:
+        return ""
+    return "; present files called missing: " + ", ".join(
+        f"`{f}` {sum(1 for x in k if x['present_called_missing'][f])}/{n}" for f in files
+    )
+
+
 def kind_records(rs: list[Run]) -> str:
     """What the runs' kind records, in words."""
     kind = rs[0].get("kind", "test")
@@ -87,7 +106,18 @@ def kind_records(rs: list[Run]) -> str:
                 if not met:
                     broke[rule] += 1
         shape = ", ".join(f"`{r}` {c}/{n}" for r, c in sorted(broke.items())) or "none"
-        return f"gaps the final report says are missing: {named}; Skill calls: {used}; report rules broken: {shape}"
+        line = f"gaps the final report says are missing: {named}; Skill calls: {used}; report rules broken: {shape}"
+        return line + present_said(k, n)
+    if kind == "floor-clean":
+        broke = defaultdict(int)
+        for x in k:
+            for rule, met in x["rules"].items():
+                if not met:
+                    broke[rule] += 1
+        shape = ", ".join(f"`{r}` {c}/{n}" for r, c in sorted(broke.items())) or "none"
+        return f"Skill calls: {skill_calls(k)}; report rules broken: {shape}" + present_said(k, n)
+    if kind == "trigger":
+        return f"called `{k[0]['skill']}` {sum(1 for x in k if x['called'])}/{n}"
     if kind == "resume":
         items = list(k[0]["named"])
         named = ", ".join(f"`{i}` {sum(1 for x in k if x['named'][i])}/{n}" for i in items)

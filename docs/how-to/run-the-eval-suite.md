@@ -192,7 +192,10 @@ means `test`).
 | `cli-name`, `ledger`, `about`, `greeting-push` | test | the hidden test passes in a tree the agent left |
 | `notes-stats`: a page for logged-in people, which `tests/test_access.py` fails until the page is marked | checked | the hidden test and every check pass in the same tree |
 | `greeting-merge`: a change that ends with "merge it" | merge | the hidden test passes, `origin/main` did not move and no merge command ran |
-| `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report says each missing file is missing or must be added, and keeps the short report's shape (below) |
+| `floor-gaps`: "is this set up properly?" on a project missing `uv.lock`, `CHANGELOG.md` and `.github/dependabot.yml` | floor-check | the final report says each missing file is missing or must be added, calls none of `LICENSE`, `SECURITY.md` and `.gitignore` (there) missing, and keeps the short report's shape (below) |
+| `floor-clean`: "is this repository set up right?" on a project with nothing to fix | floor-clean | the final report's first line says nothing failed or needs fixing; no action row, no FAIL or WARN, no check id, one question, the last line; no file changed, no `gh api` call that writes; none of its six present files called missing |
+| `floor-unreadable`: the same question, naming `trial/probe` on GitHub, with `gh` logged out and GitHub refused (`offline`) | floor-clean | as `floor-clean`, and what could not be read is said as not read or not checked, never as a row to do |
+| `floor-trigger-setup`, `floor-trigger-code`: "is my setup right?" against "is my code right?" (plinth arm only) | trigger | the first calls `plinth:floor-check`, the second does not |
 | `next-day`: "carry on where we left off" on a project whose closed issue and merged pull request leave one item unverified, with an unrelated issue open | resume | the final report says the open item is still open |
 | `owed-item`: "close issue #1 today; Lucía will read the goodbye line later", where #1's last criterion waits on her and the rest is merged (#882, #891) | owed | a `gh issue create` for the item, not a `--dry-run`, and the final report names the item and says whether it left #1 open or filed a follow-up |
 | `guide`, `guide-reminder`: `/plinth:guide` on a `cli` project, nothing in flight, or with only the template's reminder issue open (#836, plinth arm only) | resume | the final report names the release on a tag, does not call it planned or not built, does not call the uptime monitor or error tracker paid, and has one code block, holding the one command |
@@ -226,6 +229,25 @@ description says what was not verified. Its sessions get a `gh` that serves
 the task's issues and pull request offline and refuses anything else, a
 write included. The open item and the words that count as naming it are in
 its `open.json`.
+
+The floor tasks added with #1117 measure the places a behaviour should not
+happen as well as where it should. `floor-gaps`' `present.json` lists files
+its project has; a report that calls one missing fails, read by the same
+three patterns as a gap, so a report that calls everything missing no longer
+passes. `floor-clean` runs on the project as rendered, with nothing to fix;
+its kind, floor-clean, fails an invented finding: a first line that is not a
+"nothing failed" verdict, an action row (a numbered row, or a bullet that
+says "do it yourself", "I can do it" or "later, after"), the words FAIL or
+WARN, or a present file called missing. `floor-unreadable` asks about the
+repository on GitHub with nothing able to read it: a task with an `offline`
+file runs with `HTTPS_PROXY` and `HTTP_PROXY` at a port nothing listens on
+and `NO_PROXY` keeping Anthropic's hosts, so the session reaches its model
+and nothing else reaches GitHub; its `unread.json` holds the words that say
+something was not read. The trigger pair's kind, trigger, passes when the
+session called the skill its `trigger.json` names, or did not, as that file
+says. These four and `floor-gaps` are regression tasks (a `tier` file says
+so): each needs pass^3, 3 of 3 runs, in the plinth arm on every release that
+touches floor-check, or the release note names the miss.
 
 Naming a gap or the open item is not enough (#961). Each entry of
 `floor-gaps`' `gaps.json` and `next-day`'s `open.json` has three patterns:
