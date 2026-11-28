@@ -990,6 +990,8 @@ tok "a token for another registry than the one OIDC publishes to is not named" "
   '{"secrets":[{"name":"DOCKER_REGISTRY_TOKEN"},{"name":"NPM_TOKEN"}]}'
 tok "a list longer than the page read is a SKIP, not a pass" "FC-E34 unknown" \
   '{"total_count":120,"secrets":[{"name":"SLACK_WEBHOOK"}]}'
+tok "more environments than the page read is a SKIP, not a pass" "FC-E34 unknown" \
+  '{"secrets":[]}' '{"total_count":101,"environments":[{"name":"pypi"}]}'
 tok "secret names not listed are a SKIP naming the permission" "FC-E34 unknown" 'x'
 tok "an environment's secrets not listed are a SKIP" "FC-E34 unknown" '{"secrets":[]}' '{"environments":[{"name":"pypi"}]}' 'x'
 tok "--actions-token: secret names not listed are left to the skill" "FC-E34 review" 'x' "" "" --actions-token
@@ -1324,6 +1326,25 @@ out_204="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r -
 printf '{}' > "$api/repos/o/r/vulnerability-alerts.json"
 if is "$out_204" FC-E31 pass; then ok "through gh, a 204 with no body reads Dependabot alerts as on"
 else bad "through gh, a 204 with no body"; grep -i dependabot <<<"$out_204" | sed 's/^/        /'; fi
+# `gh api --paginate` prints one JSON array per page, one after another
+# (#1247 review): every page is read, not taken for an error.
+python3 - "$api/repos/o/r" <<'PYEOF'
+import json, sys
+d = sys.argv[1]
+page = lambda n, sev: json.dumps([{"state": "open", "security_advisory": {"severity": sev}}] * n)
+open(f"{d}/dependabot/alerts.json", "w").write(page(100, "high") + "\n" + page(1, "critical") + "\n")
+alerts = [{"number": 7, "state": "open", "secret_type": "slack_api_token"}]
+open(f"{d}/secret-scanning/alerts.json", "w").write(json.dumps(alerts * 100) + json.dumps(alerts))
+PYEOF
+mkdir -p "$api/repos/o/r/secret-scanning/alerts/7"; printf '[{"type":"commit","details":{"path":"a.py"}}]' > "$api/repos/o/r/secret-scanning/alerts/7/locations.json"
+out_pages="$(PATH="$work/bin:$PATH" python3 "$checker" --root "$good" --repo o/r --ruleset "$root/ruleset.json" --expect-checks "ci / a, ci / b" 2>&1)"
+printf '[]' > "$api/repos/o/r/dependabot/alerts.json"; printf '[]' > "$api/repos/o/r/secret-scanning/alerts.json"
+if is "$out_pages" FC-E31 warn && grep -qF "101 open Dependabot alert(s) (1 critical, 100 high)" <<<"$out_pages"
+then ok "through gh, two pages of Dependabot alerts are both counted"
+else bad "through gh, two pages of Dependabot alerts"; grep -i dependabot <<<"$out_pages" | sed 's/^/        /'; fi
+if is "$out_pages" FC-E33 warn && grep -qF "101 open secret scanning alert(s)" <<<"$out_pages"
+then ok "through gh, two pages of secret scanning alerts are both counted"
+else bad "through gh, two pages of secret scanning alerts"; grep -i "secret scanning" <<<"$out_pages" | sed 's/^/        /'; fi
 if grep -q -- "--paginate" "$work/gh-calls.log"; then ok "the label read is paginated (30 per page would report labels missing that are there)"
 else bad "the label read is not paginated"; sed 's/^/        /' "$work/gh-calls.log"; fi
 # The exit code is the property that keeps consumers merging; lock it.

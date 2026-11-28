@@ -1582,6 +1582,30 @@ ABSENT = object()   # 404: the resource does not exist
 ERROR = object()    # anything else went wrong: do not conclude
 
 
+def json_pages(text: str):
+    """The answer `gh api --paginate` prints: one JSON value per page, one
+    after another ("Each page is a separate JSON array or object", gh api
+    --help). One value is returned as it is; several arrays are one list. A
+    value that is not an array among several pages is a ValueError: no page
+    of it is guessed at."""
+    dec, i, pages = json.JSONDecoder(), 0, []
+    while True:
+        while i < len(text) and text[i].isspace():
+            i += 1
+        if i == len(text):
+            break
+        value, i = dec.raw_decode(text, i)
+        pages.append(value)
+    if len(pages) == 1:
+        return pages[0]
+    if pages and all(isinstance(p, list) for p in pages):
+        return [x for p in pages for x in p]
+    raise ValueError(f"{len(pages)} pages, not all of them arrays")
+
+
+NEXT_LINK = re.compile(r'<([^>]+)>;\s*rel="next"')
+
+
 def api(path: str, network: bool, paginate: bool = False):
     """GET api.github.com/<path>. Returns the JSON, ABSENT on 404, ERROR when
     offline or on any other failure. FLOOR_CHECK_API_DIR serves fixtures.
@@ -1618,20 +1642,33 @@ def api(path: str, network: bool, paginate: bool = False):
             if not r.stdout.strip():
                 return {}
             try:
-                return json.loads(r.stdout)
+                return json_pages(r.stdout) if paginate else json.loads(r.stdout)
             except ValueError:
                 return ERROR
         if r is not None and "HTTP 404" in r.stderr:
             return ABSENT
-    req = urllib.request.Request(f"https://api.github.com/{path}")
-    req.add_header("Accept", "application/vnd.github+json")
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
+    url: str | None = f"https://api.github.com/{path}"
+    pages: list = []
     try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            body = resp.read().decode()
-            return json.loads(body) if body.strip() else {}
+        # With paginate, each page's `Link: <…>; rel="next"` is followed, as
+        # gh does; a page that is not an array ends it as an ERROR.
+        while url is not None and len(pages) < 100:
+            req = urllib.request.Request(url)
+            req.add_header("Accept", "application/vnd.github+json")
+            if token:
+                req.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                body = resp.read().decode()
+                link = NEXT_LINK.search(resp.headers.get("Link") or "") if paginate else None
+            value = json.loads(body) if body.strip() else {}
+            if not paginate or (link is None and not pages):
+                return value
+            if not isinstance(value, list):
+                return ERROR
+            pages.append(value)
+            url = link.group(1) if link else None
+        return ERROR if url is not None else [x for p in pages for x in p]
     except urllib.error.HTTPError as e:
         return ABSENT if e.code == 404 else ERROR
     except (urllib.error.URLError, TimeoutError, ValueError):
@@ -5251,7 +5288,8 @@ def check_registry_secrets(root: Path, repo: str, network: bool, actions_token: 
     envs = api(f"repos/{repo}/environments?per_page=100", network)
     if envs is ABSENT:
         envs = {"environments": []}
-    if not isinstance(envs, dict) or not isinstance(envs.get("environments"), list):
+    if not isinstance(envs, dict) or not isinstance(envs.get("environments"), list) or (
+            isinstance(envs.get("total_count"), int) and envs["total_count"] > len(envs["environments"])):
         unread("FC-E34", actions_token, {"what": "the environments were not listed", "permission": "Actions"},
                "the environments not read")
         return
