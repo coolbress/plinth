@@ -1,13 +1,14 @@
 <!-- markdownlint-disable-next-line MD041 -->
-<p align="center"><img src="docs/assets/plinth-mark.svg" alt="plinth" width="294"></p>
+<p align="center"><img src="docs/assets/plinth-mark.svg" alt="plinth" width="420"></p>
 
-# Build software with an AI agent, on a base that holds
+# Run your project through an AI agent, and stay the one who decides
 
-plinth sets up your repository so that an AI agent's work has to pass real
-checks before it lands, and so that the agent explains each step in plain
-words. It is for a beginner engineer or a non-engineer who runs a software
-project through an agent. Today the agent it supports is Claude Code: plinth
-installs as a Claude Code plugin.
+plinth is for a beginner engineer or a non-engineer who runs a software
+project through an AI agent. The purpose and the decisions stay yours, the
+agent does the work, and each change has to pass real checks and leave a
+record. The aim: what you build is something a senior engineer can review and
+take over. Today the agent plinth supports is Claude Code: plinth installs as
+a Claude Code plugin.
 
 Gated where a check can. Guided where it can't.
 The path comes from how experienced engineers run projects; whether the
@@ -18,16 +19,29 @@ result is what you wanted stays yours to judge ([why](docs/explanation/concepts.
 You can ask an agent for a feature and get one. What you cannot easily see is
 whether it is safe to keep: did the tests run, did anything break, would
 another person understand the change next month? An agent told "always run
-the tests" follows that rule only while it remembers it.
+the tests" follows that rule only while it remembers it, and when it says
+"the tests pass", that verdict comes from the one being checked.
 
 ## What plinth does
 
-plinth moves the rules a check can hold out of the agent's instructions and
-into the host. It configures GitHub to **refuse a merge while a required
-check is red**, so the rule holds when the agent forgets it. Most of the checks run established
-tools (ruff, pytest, gitleaks, CodeQL and others), a few are plinth's own; the
-host, not plinth, refuses the merge. In 2026's terms, plinth is a harness
-template: guides for the agent, and checks the host requires, not the agent.
+- **You keep the decisions.** At each decision it asks of you, the agent
+  recommends one option, says why in plain words, and leaves the choice to
+  you. It delegates the work, not the judgement.
+- **Done is a merged change, not a claim.** plinth moves the rules a check
+  can hold out of the agent's instructions and into the host: GitHub
+  **refuses a merge while a required check is red**, so the rule holds when
+  the agent forgets it.
+- **The checks say what they confirmed.** A check's red or green is the one
+  verdict the agent did not write. Green means the properties it asserts
+  hold, and nothing more; the limits below say what no check covers.
+- **Someone else can take it over.** Every change lands as a pull request,
+  and the agent is guided to write in it what changed, why, and how it was
+  checked, so another person can read the project's history and pick it up.
+
+Most of the checks run established tools (ruff, pytest, gitleaks, CodeQL and
+others), a few are plinth's own; the host, not plinth, refuses the merge. In
+2026's terms, plinth is a harness template: guides for the agent, and checks
+the host requires, not the agent.
 
 ```mermaid
 flowchart LR
