@@ -1,16 +1,16 @@
 <!-- markdownlint-disable-next-line MD041 -->
 <p align="center"><img src="docs/assets/plinth-mark.svg" alt="plinth" width="420"></p>
 
-# What experienced engineers set up by habit, set up for you and checked on every change
+# What experienced engineers set up by habit, in your new repository and checked on every change
 
-Experienced engineers start every project with the same safety net: tests
+Experienced engineers usually start a project with the same safety net: tests
 that must pass before a change merges, a main branch nobody can overwrite,
 every change proposed as a pull request, a scan for a password or key pushed
-by mistake, and a record of why each change was made. If you are new to
+by mistake, and a record of each change another person can read. If you are new to
 code, you may not know these exist, let alone whether your project has them.
 
-You do not need to know. plinth puts them in your repository and checks them
-on every change, while an AI agent does the work and you make the decisions.
+You do not need to know. In a new repository, plinth puts them in place and
+checks them on every change, while an AI agent does the work and you make the decisions.
 It is for a beginner engineer or a non-engineer. Today the agent plinth
 supports is Claude Code: plinth installs as a Claude Code plugin.
 
@@ -125,12 +125,12 @@ of it:
 | What is set up | What it means for you |
 | --- | --- |
 | Tests, type checks, a linter and a build on every pull request | Merges wait until the tests pass and the code builds |
-| A protected main branch | Every change arrives as a pull request; nobody can force-push over the main branch or delete it |
+| A protected main branch | While its rules stand, every change arrives as a pull request, and the main branch cannot be force-pushed over or deleted |
 | A secret scan over the whole history | A password or key committed by mistake turns a check red, so the change cannot merge, and the check says to revoke it |
-| A dependency review and code scanning | A dependency with a known vulnerability, or a serious security finding in the code, holds the merge |
+| A dependency review and code scanning | A dependency the change adds with a serious known vulnerability, or a serious security finding in the code, holds the merge; on a private repository, only where GitHub Code Security is enabled |
 | A size limit on each change | A change too large to review is sent back to be split |
-| A form for each pull request's title and description | The history says what changed and why, in a shape another person can read later |
-| A check of the safety net itself | A ruleset or CI call that no longer requires these checks turns a check red |
+| A form for each pull request's title and description | The title's form is checked, and the agent is guided to say in the description what changed, why and how it was checked, so another person can read the history later |
+| A check of the safety net itself | A ruleset or CI call that no longer requires these checks turns a check red on the next run; a pull request that removes that check's own call is seen only after it merges |
 | Instructions and skills for the agent | The agent is guided to work in small steps and explain them in plain words; `/plinth:guide` names the next step |
 
 They come from three parts: a plugin for the agent (six skills, listed
