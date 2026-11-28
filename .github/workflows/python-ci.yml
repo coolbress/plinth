@@ -3439,7 +3439,16 @@ jobs:
                   # The gate (#1149): critical and serious fail the job; moderate and minor are listed.
                   hard = [x for x in v if x.get("impact") in ("critical", "serious")]
                   soft = [x for x in v if x not in hard]
-                  if hard:
+                  # A logged-in page whose session did not hold read the log-in page, whose
+                  # own row carries what it found: said below, not failed here under this label.
+                  gate_at = urlsplit(p.get("login") or "").path
+                  sent_to_login = (p["who"] == "logged in" and gate_at and gate_at != urlsplit(p["url"]).path
+                                   and urlsplit(ax.get("url") or p["url"]).path == gate_at)
+                  if hard and sent_to_login:
+                      lines.append(f"not yet confirmed: {GATE_STD} on {label}. Why: the page read was {p['login']}, "
+                                   f"whose own row fails on what axe-core found there, {listed(hard)}. "
+                                   "What confirms it: a run where the session holds.")
+                  elif hard:
                       lines.append(f"fail: {GATE_STD} on {label}: axe-core found {len(hard)}, {listed(hard)}")
                       blocked.append(label)
                   else:

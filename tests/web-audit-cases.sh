@@ -279,7 +279,8 @@ if has "$d/summary" "not yet confirmed: / as a logged-in person. Why: the audit'
    && has "$d/summary" "after a redirect to http://localhost:8000/accounts/login/?next=/" \
    && has "$d/summary" "(serious: \`<html>\` element must have a lang attribute)" \
    && has "$d/summary" "| \`<html>\` element must have a lang attribute |" \
-   && ! has "$d/summary" "/accounts/login/ (not logged in), the audit's session"; then
+   && ! has "$d/summary" "/accounts/login/ (not logged in), the audit's session" \
+   && ! grep -q "^- fail: .* on / (logged in)" "$d/summary"; then
   ok "a session that did not hold: the logged-in page's results are said to be the log-in page's; markup in a rule's help is quoted"
 else bad "session did not hold" "$(cat "$d/summary" "$d/stdout")"; fi
 
