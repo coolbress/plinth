@@ -1127,7 +1127,20 @@ fi
 # and said as not read if it is still UNKNOWN. What it cannot know is a line
 # of its own.
 merge_next=""; merge_n=""
+# The revert's own Blocked by (#1257 review): a number still open in the
+# issues and pull requests read waits, and one past those reads is not known
+# to be closed, so it waits too; the revert is not merged before either.
+revert_waits=""
 if [ -n "$open_revert" ]; then
+  revert_open_nums="$( { field 1 <<<"$issues"; field 1 <<<"$prs"; } | grep . || true)"
+  for b in $(awk -F '\t' -v n="$open_revert" '$1 == n { print $12; exit }' <<<"$prs" | tr ',' ' '); do
+    if grep -qxF "$b" <<<"$revert_open_nums"; then revert_waits="${revert_waits:+$revert_waits, }#$b, still open"
+    else revert_waits="${revert_waits:+$revert_waits, }#$b, not read"; fi
+  done
+fi
+if [ -n "$open_revert" ] && [ -n "$revert_waits" ]; then
+  merge_next="merge next: none: #$open_revert, the revert of #$open_reverts, comes first, and it waits on its Blocked by ($revert_waits)"
+elif [ -n "$open_revert" ]; then
   # An open revert of the merge that broke main (#1203) is merged before any
   # other: main stays broken until it does, so no other is ranked first.
   merge_next="merge next: #$open_revert, the revert of #$open_reverts: main stays broken until it merges, so it comes before any other"
@@ -1267,6 +1280,9 @@ elif [ -n "$open_revert" ]; then
   elif [ "$draft" = draft ]; then
     note="$note; it is a draft: mark it ready for review on its page, then merge it once its checks are green"
     say "A pull request with checks running" "/run"
+  elif [ -n "$revert_waits" ]; then
+    note="$note; it waits on what its Blocked by names ($revert_waits): that is done first, then it is merged"
+    say "A pull request with checks running" "none: pull request #$open_revert waits on its Blocked by ($revert_waits)"
   elif [ "$checks" = pass ]; then
     note="$note; its checks are green, so saying merge #$open_revert is the person's word for it"
     say "Green, and seen working" "merge #$open_revert"

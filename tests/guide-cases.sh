@@ -1999,6 +1999,17 @@ state "  a draft revert, green: marked ready first, not merged" "$d" "command: /
   "note: pull request #12 reverts #9, whose merge failed main's latest CI run (run 31); it comes before any other pull request; it is a draft: mark it ready for review on its page, then merge it once its checks are green"
 put "$d/open.json" "$(pr 12 'revert: take back the totals of #9' false run)"
 state "  a revert in the type form that names #9: the route, no second undo" "$d" "command: /run" "!undo pull request"
+# The second review: the revert's own Blocked by holds it, in the route and in
+# merge next, an open #14 or a number past the reads alike.
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS | jq -c '. + {body: "## Blocked by\n\n#14"}')"
+put "$d/issues.json" "$(issue 14 'Migrate the totals first' '')"
+state "  a green revert whose Blocked by #14 is open: not merged, merge next says it waits" "$d" \
+  "command: none: pull request #12 waits on its Blocked by (#14, still open)" \
+  "merge next: none: #12, the revert of #9, comes first, and it waits on its Blocked by (#14, still open)" "!command: merge #12"
+printf '[]' > "$d/issues.json"
+state "  and a Blocked by number past the reads waits too" "$d" "command: none: pull request #12 waits on its Blocked by (#14, not read)" "!command: merge #12"
+put "$d/open.json" "$(pr 12 'Revert \"feat: totals\"' false SUCCESS)"
+state "  with no Blocked by, the green revert is merged" "$d" "command: merge #12"
 # One list (#1203): the revert forms the guide reads are ci / pr-title's.
 # The title check's pattern is read from python-ci.yml with its types as the
 # one type revert; the guide's from guide-state.sh. Each title is read by
