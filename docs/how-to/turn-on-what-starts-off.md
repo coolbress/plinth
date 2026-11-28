@@ -64,6 +64,11 @@ It asks; it does not require: the ruleset `/plinth:new-project` raises does
 not require code owners' approval, and a project of one person gains
 nothing from the file.
 
+At two people it changes: the file is how the two of you review each
+other's changes and not only the agent's, and the merge ruleset has to let
+both of you merge. [Add a second person](add-a-second-person.md) has the
+steps, with the command that turns the two-person rules on.
+
 ## Topics
 
 Add topics when you want people to find the project in GitHub's search and
