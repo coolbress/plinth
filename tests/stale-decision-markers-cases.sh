@@ -83,6 +83,15 @@ out="$(STATES="$all_open" "$script" "$tmp/empty-ref.md" 2>&1)"; rc=$?
 [ "$rc" = 2 ] && grep -q "^not read: line 1: .*names no reference" <<<"$out" \
   && ok "a page whose only marker names no reference fails (exit 2), not 0 references read" || bad "an empty marker alone (rc=$rc)" "$out"
 
+# A page that exists but cannot be read (as root every file reads: not checked there).
+if [ "$(id -u)" != 0 ]; then
+  cp "$page" "$tmp/locked.md"; chmod 000 "$tmp/locked.md"
+  out="$(STATES="$all_open" "$script" "$tmp/locked.md" 2>&1)"; rc=$?
+  chmod 600 "$tmp/locked.md"
+  [ "$rc" = 2 ] && grep -q "could not be read" <<<"$out" && ! grep -q "0 marker reference" <<<"$out" \
+    && ok "a page that cannot be read fails (exit 2), not 0 references read" || bad "an unreadable page (rc=$rc)" "$out"
+fi
+
 out="$("$script" "$tmp/none.md" 2>&1)"; rc=$?
 [ "$rc" = 2 ] && ok "no page: exit 2, not a pass" || bad "no page (rc=$rc)" "$out"
 

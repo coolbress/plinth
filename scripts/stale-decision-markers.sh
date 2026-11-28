@@ -44,7 +44,10 @@ refs="$(awk '{
     }
   }
   if (c > ok) print NR "\t?\t" "decided; not built yet, not followed by: <refs>)"
-}' "$page")"
+}' "$page")" || {
+  # A page that exists but cannot be read is not an empty page (review on #1253).
+  echo "stale-decision-markers: $page could not be read (awk's error is above); the markers are not passed" >&2; exit 2
+}
 
 stale=0; unread=0; person=0; read_n=0; seen=""
 while IFS=$'\t' read -r line ref what; do
