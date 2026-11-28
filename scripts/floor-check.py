@@ -1665,6 +1665,156 @@ def guard_repository(path: str, prefix: str = "repos/") -> None:
     if slug is not None and slug.lower() not in allowed_repositories():
         raise ForeignRepository(f"a request for {slug} ({path.split('?')[0]}), which this run does not audit "
                                 f"(--repo {audited or 'not given'})")
+    if slug is not None:
+        repositories_read.add(slug.lower())
+
+
+# ── the public write gate (#1119) ───────────────────────────────────────
+# Every public write (a pull-request body, an issue append) goes through
+# public_write(). The text is the checker's own values in fixed templates; the
+# gate refuses it when it holds what a record, an injected instruction or this
+# machine could have put there, and says which rule and on which line, never
+# the match. It reads the whole text, not line by line: Markdown and HTML
+# both span lines. Links are allowed only as plain URLs into the audited
+# repository; every other link form is refused, whatever it points at.
+repositories_read: set[str] = set()   # every slug a request named, lowercased (guard_repository)
+
+
+class WriteRefused(Exception):
+    def __init__(self, kind: str, reasons: list[str]):
+        super().__init__(f"{kind} not written: " + "; ".join(reasons))
+        self.kind, self.reasons = kind, reasons
+
+
+OUTSIDE = "a link outside the audited repository"
+WRITE_RULES = (
+    ("an image", re.compile(r"!\[", re.IGNORECASE)),
+    ("an HTML comment", re.compile(r"<!--")),
+    # Any `<`: a tag, a tag split across lines, or an autolink. A `<` in code is refused too.
+    ("HTML or an autolink", re.compile(r"<")),
+    ("a Markdown link", re.compile(r"\]\s*[(\[]|^[ \t]{0,3}\[[^\]\n]+\]:", re.MULTILINE)),
+    (OUTSIDE, re.compile(r"\b(?:mailto|xmpp|javascript|data|vbscript|file|ftp|tel|irc):(?=\S)|www\.", re.IGNORECASE)),
+    ("an email address", re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]*[A-Za-z]")),
+    ("a token prefix", re.compile(r"(?<![A-Za-z0-9])(?:ghp_|github_pat_|gho_|ghu_|ghs_|ghr_|sk-ant-|glpat-)")),
+    ("a home path", re.compile(r"(?<![\w.\-])(?:/Users/|/home/|[A-Za-z]:[\\/]Users[\\/]|~/)[^\s/\\`'\"<>()\[\]]")),
+)
+WRITE_URL = re.compile(r"[A-Za-z][\w+.-]*://[^\s<>()\[\]`'\"]*|(?<![:/\w])//[^\s<>()\[\]`'\"]+")
+# Another repository named the way GitHub or GitLab links it: owner/name (or a
+# GitLab group path) before #N, !N or @<sha>, or after github.com/.
+WRITE_SLUG = re.compile(r"(?<![\w.\-/])((?:[A-Za-z0-9][\w.-]*/)+[\w.-]+?)(?=[#!]\d|@[0-9a-f]{7})"
+                        r"|github\.com/([A-Za-z0-9][\w-]*/[\w.-]+)", re.IGNORECASE)
+WRITE_WORD = re.compile(r"[^\s,;:()\[\]{}'\"`/]+")
+LOCAL_NAMES_SKIPPED = {"root", "runner"}
+
+
+def local_names() -> set[str]:
+    """This machine's user and host names, which no public write holds."""
+    import getpass
+    import socket
+    names = set()
+    for get in (getpass.getuser, socket.gethostname):
+        try:
+            n = get()
+        except (OSError, KeyError):
+            continue
+        names |= {n, n.split(".", 1)[0]}
+    return {n for n in names if len(n) >= 3 and n.lower() not in LOCAL_NAMES_SKIPPED}
+
+
+def template_words() -> set[str]:
+    """Every word of the checker's fixed message text, lowercased."""
+    return {w.lower().strip(".") for e in REGISTRY.values() for t in e["messages"].values()
+            for w in WRITE_WORD.findall(re.sub(r"\{[^{}]*\}", " ", t))}
+
+
+def machine_values(rs: list[dict]) -> set[str]:
+    """The words a machine-area result filled into its message that the
+    checker's fixed text does not hold: a login, a path's parts, a variable.
+    The values are what lies between its entry's template's fixed words;
+    when the message does not match the template, every word of it counts."""
+    fixed = template_words()
+    out: set[str] = set()
+    for r in rs:
+        e = REGISTRY.get(r["id"])
+        if e is None or e["area"] != "G":
+            continue
+        msg = r["msg"]
+        prefix = f"kept by choice ({r['kept']['reason']}): " if r.get("kept") else ""
+        if prefix and msg.startswith(prefix):
+            msg = msg[len(prefix):]
+        tpl = e["messages"].get(r.get("key") or "", "")
+        m = re.fullmatch("(.*?)".join(re.escape(p) for p in re.split(r"\{[^{}]*\}", tpl)), msg, re.DOTALL) if tpl else None
+        for v in (m.groups() if m and m.groups() else (msg,)):
+            out |= {w for w in (x.lower().strip(".") for x in WRITE_WORD.findall(v))
+                    if len(w) >= 3 and w not in fixed and not w.isdigit()}
+    return out
+
+
+def write_refusals(text: str, repo: str, machine: frozenset[str] | set[str] = frozenset(),
+                   names: set[str] | None = None) -> list[str]:
+    """Why `text` may not be written in `repo`'s records: one reason per rule
+    and line, naming neither the match nor the value."""
+    repo_l = repo.lower()
+    own = f"https://github.com/{repo_l}"
+    names = local_names() if names is None else names
+    found: list[tuple[int, str]] = []
+
+    def at(i: int, why: str) -> None:
+        found.append((text.count("\n", 0, i) + 1, why))
+
+    for why, rx in WRITE_RULES:
+        for m in rx.finditer(text):
+            at(m.start(), why)
+    for m in WRITE_URL.finditer(text):
+        u = m.group(0).lower()
+        rest = u[len(own):]
+        if not (u.startswith(own) and (rest == "" or rest[0] in "/?#")) \
+                or re.search(r"/\.\.?(?:[/?#]|$)|%2e", rest):
+            at(m.start(), OUTSIDE)
+    for m in WRITE_SLUG.finditer(text):
+        if (m.group(1) or m.group(2)).lower() != repo_l:
+            at(m.start(), "another repository's slug")
+    # The audited repository's own name is public: its owner may be this
+    # machine's user or the gh login, and a link to it is not a leak.
+    def blank(m: re.Match) -> str:
+        return " " * len(m.group(0))   # same length: offsets still name the line
+
+    plain = re.sub(re.escape(repo), blank, text, flags=re.IGNORECASE)
+    plain = re.sub(rf"(?<![\w-]){re.escape(repo.split('/', 1)[0])}(?![\w-])", blank, plain, flags=re.IGNORECASE)
+    for x in names:
+        for m in re.finditer(rf"(?<![\w-]){re.escape(x)}(?![\w-])", plain, re.IGNORECASE):
+            at(m.start(), "this machine's user or host name")
+    words = {w.lower().strip(".") for w in WRITE_WORD.findall(plain)}
+    for v in sorted(machine & words):
+        for m in re.finditer(rf"(?<![\w-]){re.escape(v)}(?![\w-])", plain, re.IGNORECASE):
+            at(m.start(), "a value from the machine area")
+    return [f"line {n}: {w}" for n, w in dict.fromkeys(sorted(found))]
+
+
+def public_write(kind: str, text: str, *, plan: bytes, repo: str, public: bool, send,
+                 visibility=None, rs: list[dict] | None = None, names: set[str] | None = None):
+    """Send `text` (`send(text)`) as `kind` in `repo`, or raise WriteRefused.
+    Refused: bytes other than the approved `plan`'s; a public `repo` in a run
+    that read a repository not known to be public (`visibility(slug)` is
+    True for private, None for unknown); and what write_refusals names."""
+    reasons = []
+    if text.encode("utf-8") != plan:
+        reasons.append("its bytes differ from the approved plan")
+    if public:
+        look = visibility or repository_is_private
+        if any(look(s) is not False for s in sorted(repositories_read - {repo.lower()})):
+            reasons.append("this run read a repository that is private or not known to be public, and "
+                           f"{repo} is public")
+    reasons += write_refusals(text, repo, machine_values(results if rs is None else rs), names)
+    if reasons:
+        raise WriteRefused(kind, reasons)
+    return send(text)
+
+
+def repository_is_private(slug: str) -> bool | None:
+    """True or False from GitHub's `private`, None when not read."""
+    got = api(f"repos/{slug}", True)
+    return got["private"] if isinstance(got, dict) and isinstance(got.get("private"), bool) else None
 
 
 ABSENT = object()   # 404: the resource does not exist

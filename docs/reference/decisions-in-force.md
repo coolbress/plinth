@@ -70,6 +70,7 @@ Collected on 2026-11-25 from the `## Decisions` and `## Decision` sections, and 
 - A default branch whose `ci` job no longer calls plinth's workflow is a FAIL, as an after-merge backstop. 2026-09-28, #325
 - Settings the Actions token cannot read are INFO in CI and counted as left to `/plinth:floor-check`, never turned back into SKIPs. 2026-10-08, #436
 - A production database URL within the agent's reach is a WARN. 2026-10-24, #648
+- The audit's guards against injected instructions live in the scripts: one function makes every `gh` call and stops on a repository the run does not audit, one function makes every public write, built from the checker's values in fixed templates, its bytes equal to the approved plan's, and every git call runs with fixed flags. 2026-11-25, #1119 (decided; not built yet: #1119)
 - Every check has a stable id and result state, with CI's output unchanged. 2026-11-25, #1103
 - The records check is absorbed into floor-check, and `/plinth:records-check` is removed in the merging release with no pointer skill. 2026-11-25, #1108 (decided; not built yet: #1108)
 - Records checks that need judgement (a reversal, a parent to close, no tags) are questions for the person, never failures; nothing is written before the person approves that record's drafted line, one record at a time. 2026-11-25, #1109 (decided; not built yet: #1109)
